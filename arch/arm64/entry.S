@@ -11,6 +11,8 @@ _entry:
         add x2, x2, #1
         mul x1, x1, x2
         add sp, x0, x1
+        cmp x2, #1
+        b.ne _start
         // Clear BSS section
         ldr x0, =__bss_start
         ldr x1, =__bss_end
@@ -22,5 +24,6 @@ _entry:
             b clear_loop
         clear_done:
         # jump to start() in start.c
-        bl start
-        b .
+        _start:
+            bl start
+            b .
