@@ -64,7 +64,7 @@ ifndef CPUS
 CPUS := 3
 endif
 
-QEMUOPTS = -machine virt -bios none -kernel kernel.elf -m 128M -smp $(CPUS) -nographic
+QEMUOPTS = -machine virt -kernel kernel.elf -m 128M -smp $(CPUS) -nographic -cpu cortex-a57
 
 qemu: kernel.elf
 	$(QEMU) $(QEMUOPTS)
