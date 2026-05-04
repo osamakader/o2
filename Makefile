@@ -58,7 +58,7 @@ kernel.elf: $(OBJS) arch/$(ARCH)/kernel.ld
 clean: 
 	rm -rf *.log *.sym *.asm *.o \
 	*/*.o */*.d */*.asm */*.sym \
-	arch/*/*.o kernel.elf
+	arch/*/*.o arch/*/*.d kernel.elf
 
 ifndef CPUS
 CPUS := 3
