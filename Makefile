@@ -56,7 +56,7 @@ kernel.elf: $(OBJS) arch/$(ARCH)/kernel.ld
 -include kernel/*.d
 
 clean: 
-	rm -f *.log *.sym *.asm *.o\
+	rm -rf *.log *.sym *.asm *.o \
 	*/*.o */*.d */*.asm */*.sym \
 	arch/*/*.o kernel.elf
 
