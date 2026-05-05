@@ -95,7 +95,7 @@ int pl011_setup(struct pl011 *dev, uint64_t base_address, uint64_t base_clock)
     return pl011_reset(dev);
 }
 
-int pl011_send(const struct pl011 *dev, const char *data)
+int pl011_send(struct pl011 *dev, const char *data)
 {
     wait_tx_ready(dev);
 

@@ -18,4 +18,4 @@ static const uint32_t IMSC_OFFSET = 0x038;
 static const uint32_t DMACR_OFFSET = 0x048;
 
 int pl011_setup(struct pl011 *dev, uint64_t base_address, uint64_t base_clock);
-int pl011_send(const struct pl011 *dev, const char *data);
+int pl011_send(struct pl011 *dev, const char *data);
