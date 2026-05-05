@@ -48,5 +48,10 @@ SECTIONS
     __bss_end = .;
   }
 
+  . = ALIGN(2048);
+  .vectors : {
+    KEEP(*(.vectors .vectors.*))
+  }
+
   PROVIDE(end = .);
 }

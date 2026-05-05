@@ -25,8 +25,4 @@ void start(void) {
     else {
         pl011_send(&serial, "Hello, World from other CPU!\n");
     }
-
-    while (1) {
-        asm volatile("wfi");
-    }
 }

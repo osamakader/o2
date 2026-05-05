@@ -2,6 +2,7 @@ ARCH ?= arm64
 
 OBJS = \
   arch/$(ARCH)/entry.o \
+  arch/$(ARCH)/exceptions.o \
   kernel/start.o \
   kernel/console.o \
   kernel/uart.o \

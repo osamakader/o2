@@ -23,7 +23,13 @@ _entry:
             str x2, [x0], #8
             b clear_loop
         clear_done:
+        # set up the vector table
+        ldr x0, =_vectors
+        msr vbar_el1, x0
         # jump to start() in start.c
         _start:
             bl start
+            // jump to main() in main.c
+            bl main
             b .
+
