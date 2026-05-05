@@ -7,7 +7,7 @@ OBJS = \
   kernel/uart.o \
   kernel/main.o \
 
-CFLAGS = -Wall -Werror -Wno-unknown-attributes -O -fno-omit-frame-pointer -ggdb -gdwarf-2
+CFLAGS = -Wall -Werror -O -fno-omit-frame-pointer -ggdb -gdwarf-2
 
 ifeq ($(ARCH), riscv64)
 	QEMU = qemu-system-riscv64
