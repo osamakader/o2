@@ -44,7 +44,7 @@ _vectors:
 sync_addr:
     b sync_handler
 irq_addr:
-    b irq_handler
+    b handle_irq
 fiq_addr:
     b fiq_handler
 serr_addr:

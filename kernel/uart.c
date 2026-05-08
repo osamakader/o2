@@ -8,8 +8,9 @@ static const uint32_t LCR_STP2 = (1 << 3);
 
 static const uint32_t FR_TXFF = (1 << 5);
 
+static struct pl011 sdev;
 
-volatile uint32_t *reg(const struct pl011 *dev, uint32_t offset)
+static volatile uint32_t *reg(const struct pl011 *dev, uint32_t offset)
 {
     const uint64_t addr = dev->base_address + offset;
 
@@ -95,8 +96,9 @@ int pl011_setup(struct pl011 *dev, uint64_t base_address, uint64_t base_clock)
     return pl011_reset(dev);
 }
 
-int pl011_send(struct pl011 *dev, const char *data)
+int pl011_send(const char *data)
 {
+    struct pl011 *dev = &sdev;
     wait_tx_ready(dev);
 
     for (uint32_t i = 0; data[i] != '\0'; ++i) {
@@ -109,4 +111,8 @@ int pl011_send(struct pl011 *dev, const char *data)
     }
 
     return 0;
+}
+
+void pl011_init(uint64_t base_address, uint64_t base_clock) {
+    pl011_setup(&sdev, base_address, base_clock);
 }

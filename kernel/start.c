@@ -1,5 +1,5 @@
 #include <stdint.h>
-#include "uart.h"
+#include "console.h"
 
 #define NCPU 8
 __attribute__((aligned(16), section(".stack"))) char stack0[4096 * NCPU];
@@ -10,19 +10,19 @@ static uint32_t get_cpu_id() {
     return x & 0xff;
 }
 
+static void setup_serial() {
+    pl011_init(0x9000000, 24000000);
+}
+
 void start(void) {
     uint32_t cpu_id = get_cpu_id();
-    struct pl011 serial;
 
     if (cpu_id == 0) {
-        pl011_setup(
-            &serial, 
-            /* base_address = */0x9000000, 
-            /* base_clock = */24000000);
+        setup_serial();
 
-        pl011_send(&serial, "Hello, World from CPU 0!\n");
+        log_msg("CPU 0 is up!\n");
     }
     else {
-        pl011_send(&serial, "Hello, World from other CPU!\n");
+        log_msg("Secondary CPU is up!\n");
     }
 }

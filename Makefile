@@ -3,9 +3,12 @@ ARCH ?= arm64
 OBJS = \
   arch/$(ARCH)/entry.o \
   arch/$(ARCH)/exceptions.o \
+  kernel/isr.o \
   kernel/start.o \
   kernel/console.o \
   kernel/uart.o \
+  kernel/gicv3.o \
+  kernel/timer.o \
   kernel/main.o \
 
 CFLAGS = -Wall -Werror -O -fno-omit-frame-pointer -ggdb -gdwarf-2
@@ -65,7 +68,7 @@ ifndef CPUS
 CPUS := 3
 endif
 
-QEMUOPTS = -machine virt -kernel kernel.elf -m 128M -smp $(CPUS) -nographic -cpu cortex-a57
+QEMUOPTS = -machine virt,gic-version=3 -kernel kernel.elf -m 128M -smp $(CPUS) -nographic -cpu cortex-a57
 
 qemu: kernel.elf
 	$(QEMU) $(QEMUOPTS)
