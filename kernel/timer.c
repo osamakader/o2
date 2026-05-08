@@ -9,15 +9,6 @@ void init_timer() {
     uint64_t ctl = 1;
     asm volatile("msr CNTV_CTL_EL0, %0" : : "r" (ctl));
     asm volatile("isb");
-    // for (int i = 0; i < 1000000; i++) {
-    //     asm volatile("nop");
-    // }
-    // asm volatile("mrs %0, CNTV_CTL_EL0" : "=r" (ctl));
-    // if (ctl & 4) {
-    //     log_msg("Timer is running\n");
-    // } else {
-    //     log_msg("Timer is not running\n");
-    // }
 }
 
 void disable_timer() {
