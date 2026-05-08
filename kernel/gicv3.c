@@ -23,12 +23,9 @@
 #define GICR_WAKER_ChildrenAsleep    (1U << 2)
 #define GICR_TIMER_IRQ               (1U << 27)
 
-
 struct gicv3 {
     uint64_t base_address;
 };
-
-
 
 static volatile uint32_t *reg(const struct gicv3 *dev, uint32_t offset)
 {
