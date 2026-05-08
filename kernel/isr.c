@@ -5,7 +5,7 @@
 void timer_irq()
 {
   log_msg("timer interrupt\n");
-  // disable_timer();
+  disable_timer();
 }
 
 // interrupts handler
