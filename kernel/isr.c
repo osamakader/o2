@@ -23,5 +23,5 @@ void handle_irq()
    log_msg("Unknown interrupt\n");
 
   asm volatile("msr ICC_EOIR1_EL1, %0" : : "r" (id));
-  halt();
+  // halt();
 }
