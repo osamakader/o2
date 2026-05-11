@@ -3,9 +3,11 @@
 
 #include <stdint.h>
 #include "console.h"
+#include "defs.h"
 
 void init_timer();
 void disable_timer();
 void halt();
+void rearm_timer();
 
 #endif

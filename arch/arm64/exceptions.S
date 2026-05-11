@@ -44,7 +44,17 @@ _vectors:
 sync_addr:
     b sync_handler
 irq_addr:
-    b handle_irq
+    # save registers
+    stp x0, x1, [sp, #-16]!
+    stp x2, x3, [sp, #-16]!
+    stp x4, x5, [sp, #-16]!
+    stp x6, x7, [sp, #-16]!
+    bl handle_irq
+    ldp x6, x7, [sp], #16
+    ldp x4, x5, [sp], #16
+    ldp x2, x3, [sp], #16
+    ldp x0, x1, [sp], #16
+    eret
 fiq_addr:
     b fiq_handler
 serr_addr:

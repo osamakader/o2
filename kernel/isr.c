@@ -1,11 +1,15 @@
 #include "console.h"
 #include "isr.h"
 #include "timer.h"
+#include "defs.h"
+
+uint64_t ticks;
 
 void timer_irq()
 {
   log_msg("timer interrupt\n");
-  disable_timer();
+  ticks++;
+  rearm_timer();
 }
 
 // interrupts handler
