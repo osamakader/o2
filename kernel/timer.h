@@ -3,7 +3,8 @@
 
 #include <stdint.h>
 #include "console.h"
-#include "defs.h"
+
+extern uint64_t ticks;
 
 void init_timer();
 void disable_timer();

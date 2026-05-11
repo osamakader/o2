@@ -1,7 +1,6 @@
 #include "console.h"
 #include "isr.h"
 #include "timer.h"
-#include "defs.h"
 
 uint64_t ticks;
 
