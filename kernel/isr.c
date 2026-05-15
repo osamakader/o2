@@ -12,7 +12,7 @@ void timer_irq()
 }
 
 // interrupts handler
-void handle_irq()
+void handle_irq(struct trapframe *tf)
 {
   log_msg("handling interrupt\n");
 
