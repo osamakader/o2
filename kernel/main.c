@@ -8,12 +8,6 @@ static void setup_serial() {
     pl011_init(0x9000000, 24000000);
 }
 
-void irq_handler(struct trapframe *tf) {
-    setup_serial();
-    log_msg("IRQ handler\n");
-    halt();
-}
-
 void fiq_handler(struct trapframe *tf) {
     setup_serial();
     log_msg("FIQ handler\n");
