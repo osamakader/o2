@@ -2,30 +2,33 @@
 #include "console.h"
 #include "gicv3.h"
 #include "timer.h"
-
+#include "trap.h"
 static void setup_serial() {
     pl011_init(0x9000000, 24000000);
 }
 
-void irq_handler() {
+void irq_handler(struct trapframe *tf) {
     setup_serial();
     log_msg("IRQ handler\n");
     halt();
 }
 
-void fiq_handler() {
+void fiq_handler(struct trapframe *tf) {
     setup_serial();
     log_msg("FIQ handler\n");
     halt();
 }
 
-void sync_handler() {
+void sync_handler(struct trapframe *tf) {
     setup_serial();
     log_msg("Synchronous handler\n");
+    // log_msg("ESR: %lx\n", tf->esr);
+    // log_msg("ELR: %lx\n", tf->elr);
+    // log_msg("FAR: %lx\n", tf->far);
     halt();
 }
 
-void serr_handler() {
+void serr_handler(struct trapframe *tf) {
     setup_serial();
     log_msg("SError handler\n");
     halt();
