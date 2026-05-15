@@ -3,6 +3,7 @@
 #include "gicv3.h"
 #include "timer.h"
 #include "trap.h"
+
 static void setup_serial() {
     pl011_init(0x9000000, 24000000);
 }
