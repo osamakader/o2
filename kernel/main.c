@@ -67,6 +67,12 @@ int main() {
     enable_irqs();
     log_msg("IRQs are enabled\n");
     kinit();
+
+    void *p = kalloc();
+    log_msg("Allocated page at: ");
+    log_hex((uint64)p);
+    log_msg("\n");
+
     halt();
     return 0;
 }
