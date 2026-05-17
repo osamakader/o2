@@ -15,7 +15,7 @@ void log_hex(uint64_t x)
     log_msg("\n");
 }
 
-void log_uint(uint64_t x, int base)
+void log_uint(uint64_t x)
 {
     char buf[32];
     int i = 0;
@@ -24,10 +24,13 @@ void log_uint(uint64_t x, int base)
         return;
     }
     while (x > 0) {
-        int digit = x % base;
-        buf[i++] = digit < 10 ? '0' + digit : 'a' + digit - 10;
-        x /= base;
+        int digit = x % 10;
+        buf[i++] = '0' + digit;
+        x /= 10;
     }
-    while (i > 0)
-        log_msg(&buf[--i]);
+    buf[i] = '\0';
+    while (i > 0) {
+        char s[2] = { buf[--i], '\0' };
+        log_msg(s);
+    }
 }

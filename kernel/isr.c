@@ -6,9 +6,11 @@ uint64_t ticks;
 
 void timer_irq()
 {
-  log_msg("timer interrupt\n");
+  log_msg("ticks: ");
   ticks++;
-  log_hex(ticks);
+  log_uint(ticks);
+  log_msg("\n");
+
   rearm_timer();
 }
 

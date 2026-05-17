@@ -5,6 +5,6 @@
 
 void log_msg(const char *msg);
 void log_hex(uint64_t x);
-void log_uint(uint64_t x, int base);
+void log_uint(uint64_t x);
 
 #endif
