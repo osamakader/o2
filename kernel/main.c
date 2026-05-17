@@ -17,9 +17,15 @@ void fiq_handler(struct trapframe *tf) {
 void sync_handler(struct trapframe *tf) {
     setup_serial();
     log_msg("Synchronous handler\n");
-    // log_msg("ESR: %lx\n", tf->esr);
-    // log_msg("ELR: %lx\n", tf->elr);
-    // log_msg("FAR: %lx\n", tf->far);
+    log_msg("ESR: ");
+    log_hex(tf->esr);
+    log_msg("\n");
+    log_msg("ELR: ");
+    log_hex(tf->elr);
+    log_msg("\n");
+    log_msg("FAR: ");
+    log_hex(tf->far);
+    log_msg("\n");
     halt();
 }
 

@@ -8,6 +8,7 @@ void timer_irq()
 {
   log_msg("timer interrupt\n");
   ticks++;
+  log_hex(ticks);
   rearm_timer();
 }
 
