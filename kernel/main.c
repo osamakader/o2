@@ -3,6 +3,7 @@
 #include "gicv3.h"
 #include "timer.h"
 #include "trap.h"
+#include "defs.h"
 
 static void setup_serial() {
     pl011_init(0x9000000, 24000000);
@@ -65,7 +66,7 @@ int main() {
     init_timer();
     enable_irqs();
     log_msg("IRQs are enabled\n");
-
+    kinit();
     halt();
     return 0;
 }
