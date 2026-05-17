@@ -1,28 +1,28 @@
 #include "uart.h"
 
-static const uint32_t CR_TXEN = (1 << 8);
-static const uint32_t CR_UARTEN = (1 << 0);
+static const uint32 CR_TXEN = (1 << 8);
+static const uint32 CR_UARTEN = (1 << 0);
 
-static const uint32_t LCR_FEN = (1 << 4);
-static const uint32_t LCR_STP2 = (1 << 3);
+static const uint32 LCR_FEN = (1 << 4);
+static const uint32 LCR_STP2 = (1 << 3);
 
-static const uint32_t FR_TXFF = (1 << 5);
+static const uint32 FR_TXFF = (1 << 5);
 
 static struct pl011 sdev;
 
-static volatile uint32_t *reg(const struct pl011 *dev, uint32_t offset)
+static volatile uint32 *reg(const struct pl011 *dev, uint32 offset)
 {
-    const uint64_t addr = dev->base_address + offset;
+    const uint64 addr = dev->base_address + offset;
 
-    return (volatile uint32_t *)((void *)addr);
+    return (volatile uint32 *)((void *)addr);
 }
 
-static void write_reg(const struct pl011 *dev, uint32_t offset, uint32_t value)
+static void write_reg(const struct pl011 *dev, uint32 offset, uint32 value)
 {
     *reg(dev, offset) = value;
 }
 
-static uint32_t read_reg(const struct pl011 *dev, uint32_t offset)
+static uint32 read_reg(const struct pl011 *dev, uint32 offset)
 {
     return *reg(dev, offset);
 }
@@ -34,10 +34,10 @@ static void wait_tx_ready(const struct pl011 *dev)
 }
 
 static void calculate_divisors(
-    const struct pl011 *dev, uint32_t *integer, uint32_t *fractional)
+    const struct pl011 *dev, uint32 *integer, uint32 *fractional)
 {
     // 64 * F_UARTCLK / (16 * B) = 4 * F_UARTCLK / B
-    const uint32_t div = 4 * dev->base_clock / dev->baudrate;
+    const uint32 div = 4 * dev->base_clock / dev->baudrate;
 
     *fractional = div & 0x3f;
     *integer = (div >> 6) & 0xffff;
@@ -45,8 +45,8 @@ static void calculate_divisors(
 
 int pl011_reset(const struct pl011 *dev)
 {
-    uint32_t lcr = read_reg(dev, LCR_OFFSET);
-    uint32_t ibrd, fbrd;
+    uint32 lcr = read_reg(dev, LCR_OFFSET);
+    uint32 ibrd, fbrd;
 
     // disable UART
     write_reg(dev, CR_OFFSET, 0);
@@ -85,7 +85,7 @@ int pl011_reset(const struct pl011 *dev)
     return 0;
 }
 
-int pl011_setup(struct pl011 *dev, uint64_t base_address, uint64_t base_clock)
+int pl011_setup(struct pl011 *dev, uint64 base_address, uint64 base_clock)
 {
     dev->base_address = base_address;
     dev->base_clock = base_clock;
@@ -101,7 +101,7 @@ int pl011_send(const char *data)
     struct pl011 *dev = &sdev;
     wait_tx_ready(dev);
 
-    for (uint32_t i = 0; data[i] != '\0'; ++i) {
+    for (uint32 i = 0; data[i] != '\0'; ++i) {
         if (data[i] == '\n') {
             write_reg(dev, DR_OFFSET, '\r');
             wait_tx_ready(dev);
@@ -113,6 +113,6 @@ int pl011_send(const char *data)
     return 0;
 }
 
-void pl011_init(uint64_t base_address, uint64_t base_clock) {
+void pl011_init(uint64 base_address, uint64 base_clock) {
     pl011_setup(&sdev, base_address, base_clock);
 }

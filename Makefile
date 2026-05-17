@@ -10,6 +10,8 @@ OBJS = \
   kernel/gicv3.o \
   kernel/timer.o \
   kernel/main.o \
+  kernel/string.o \
+  kernel/kalloc.o \
 
 CFLAGS = -Wall -Werror -O -fno-omit-frame-pointer -ggdb -gdwarf-2
 

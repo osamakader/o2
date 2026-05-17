@@ -1,4 +1,4 @@
-#include <stdint.h>
+#include "types.h"
 #include "console.h"
 #include "gicv3.h"
 #include "timer.h"
@@ -36,7 +36,7 @@ void serr_handler(struct trapframe *tf) {
 }
 
 void check_level() {
-    uint64_t el;
+    uint64 el;
     asm volatile("mrs %0, CurrentEL" : "=r"(el));
     el = (el >> 2) & 3;
     switch (el) {

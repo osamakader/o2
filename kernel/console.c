@@ -4,7 +4,7 @@ void log_msg(const char *msg) {
     pl011_send(msg);
 }
 
-void log_hex(uint64_t x)
+void log_hex(uint64 x)
 {
     log_msg("0x");
     for (int i = 60; i >= 0; i -= 4) {
@@ -15,7 +15,7 @@ void log_hex(uint64_t x)
     log_msg("\n");
 }
 
-void log_uint(uint64_t x)
+void log_uint(uint64 x)
 {
     char buf[32];
     int i = 0;
@@ -33,4 +33,12 @@ void log_uint(uint64_t x)
         char s[2] = { buf[--i], '\0' };
         log_msg(s);
     }
+}
+
+void panic(const char *s)
+{
+  log_msg("panic: ");
+  log_msg(s);
+  log_msg("\n");
+  for(;;);
 }

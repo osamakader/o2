@@ -2,7 +2,7 @@
 #include "isr.h"
 #include "timer.h"
 
-uint64_t ticks;
+uint64 ticks;
 
 void timer_irq()
 {
@@ -19,7 +19,7 @@ void handle_irq(struct trapframe *tf)
 {
   log_msg("handling interrupt\n");
 
-  uint32_t id = 0;
+  uint32 id = 0;
   asm volatile("mrs %0, ICC_IAR1_EL1" : "=r" (id));
 
   // timer interrupt

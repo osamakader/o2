@@ -1,10 +1,10 @@
 #ifndef TIMER_H
 #define TIMER_H
 
-#include <stdint.h>
+#include "types.h"
 #include "console.h"
 
-extern uint64_t ticks;
+extern uint64 ticks;
 
 void init_timer();
 void disable_timer();
