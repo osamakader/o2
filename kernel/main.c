@@ -67,11 +67,14 @@ int main() {
     enable_irqs();
     log_msg("IRQs are enabled\n");
     kinit();
-
+    
     void *p = kalloc();
     log_msg("Allocated page at: ");
     log_hex((uint64)p);
     log_msg("\n");
+
+    kfree(p);
+    log_msg("Freed page\n");
 
     halt();
     return 0;
