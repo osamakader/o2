@@ -62,10 +62,7 @@ void check_level() {
 int main() {
     log_msg("Starting kernel ...\n");
     check_level();
-    init_gicv3();
-    init_timer();
-    enable_irqs();
-    log_msg("IRQs are enabled\n");
+
     kinit();
     
     void *p = kalloc();
@@ -75,6 +72,11 @@ int main() {
 
     kfree(p);
     log_msg("Freed page\n");
+
+    init_gicv3();
+    init_timer();
+    enable_irqs();
+    log_msg("IRQs are enabled\n");
 
     halt();
     return 0;
