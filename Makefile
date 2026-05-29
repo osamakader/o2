@@ -6,7 +6,7 @@ OBJS = \
   kernel/isr.o \
   kernel/start.o \
   kernel/console.o \
-  kernel/uart.o \
+  arch/$(ARCH)/uart.o \
   kernel/gicv3.o \
   kernel/timer.o \
   kernel/main.o \
