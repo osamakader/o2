@@ -34,7 +34,7 @@ OBJDUMP = $(TOOLPREFIX)objdump
 CFLAGS += -MD
 CFLAGS += -ffreestanding
 CFLAGS += -fno-common -nostdlib
-CFLAGS += -I.
+CFLAGS += -I. -I kernel/include -I arch/$(ARCH)/include
 CFLAGS += $(shell $(CC) -fno-stack-protector -E -x c /dev/null >/dev/null 2>&1 && echo -fno-stack-protector)
 
 # Disable PIE when possible (for Ubuntu 16.10 toolchain)
