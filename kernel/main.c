@@ -1,9 +1,14 @@
 #include "types.h"
+#include "memlayout.h"
+#include "proc.h"
 #include "console.h"
 #include "gicv3.h"
 #include "timer.h"
 #include "trap.h"
 #include "defs.h"
+
+struct context sched_ctx;
+struct proc proc0, proc1;
 
 static void setup_serial() {
     pl011_init(0x9000000, 24000000);
@@ -59,6 +64,15 @@ void check_level() {
     }
 }
 
+void proc0_main() {
+    log_msg("Proc0 main\n");
+}
+
+void proc1_main() {
+    log_msg("Proc1 main\n");
+    swtch(&proc1.ctx, &sched_ctx);
+}
+
 int main() {
     log_msg("Starting kernel ...\n");
     check_level();
@@ -74,6 +88,18 @@ int main() {
     log_msg("Freed page\n");
 
     init_gicv3();
+
+    log_msg("Testing context switching\n");
+
+    proc1.state = RUNNABLE;
+    proc1.kstack = kalloc();
+    memset(&proc1.ctx, 0, sizeof(proc1.ctx));
+    proc1.ctx.ra = (uint64)proc1_main;
+    proc1.ctx.sp = (uint64)proc1.kstack + PGSIZE;
+
+    swtch(&sched_ctx, &proc1.ctx);
+    log_msg("Context switching test completed\n");
+
     init_timer();
     enable_irqs();
     log_msg("IRQs are enabled\n");
