@@ -3,6 +3,7 @@ ARCH ?= arm64
 OBJS = \
   arch/$(ARCH)/entry.o \
   arch/$(ARCH)/exceptions.o \
+  arch/$(ARCH)/swtch.o \
   kernel/isr.o \
   kernel/start.o \
   kernel/console.o \
@@ -12,6 +13,7 @@ OBJS = \
   kernel/main.o \
   kernel/string.o \
   kernel/kalloc.o \
+  kernel/proc.o \
 
 CFLAGS = -Wall -Werror -O -fno-omit-frame-pointer -ggdb -gdwarf-2
 
