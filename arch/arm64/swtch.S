@@ -1,5 +1,6 @@
 
 .global swtch
+.global kthread_trampoline
 
 swtch:
     mov x9, sp
@@ -20,3 +21,10 @@ swtch:
     ldr x29,[x1, #96]
     mov sp, x9
     ret
+
+// Entry point for a brand-new kernel thread. swtch() lands here via ctx.ra
+// with x19/x20 restored from the context we set up in kthread_create():
+// x19 holds the thread's arg, x20 holds the thread's fn.
+kthread_trampoline:
+    mov x0, x19
+    br x20

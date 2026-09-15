@@ -29,4 +29,12 @@ struct proc {
 
 void swtch(struct context *old, struct context *new);
 
+void procinit(struct proc *p);
+void kthread_create(void (*fn)(void *), void *arg);
+void yield(void);
+void sched(void);
+
+extern struct context sched_ctx;
+extern struct proc proc0;
+
 #endif
