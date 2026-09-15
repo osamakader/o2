@@ -7,37 +7,60 @@
 // stashes arg/fn there to hand them off once the thread starts running.
 extern void kthread_trampoline(void);
 
+#define NPROC 8
+
+// Fixed-size process table. BSS is zeroed at boot (arch/arm64/entry.S),
+// and UNUSED == 0, so every slot starts out free with no extra init.
+static struct proc ptable[NPROC];
+
+// The proc currently running on this core, i.e. the one that owns the
+// stack sched() last swtch()'d into. yield() uses this instead of a
+// hardcoded proc so any thread made via kthread_create() can call it.
+static struct proc *current;
+
 void procinit(struct proc *p) {
     memset(&p->ctx, 0, sizeof(p->ctx));
     p->state = UNUSED;
     p->kstack = 0;
 }
 
-void kthread_create(void (*fn)(void *), void *arg) {
-    struct proc *p = kalloc();
+static struct proc *allocproc(void) {
+    for (int i = 0; i < NPROC; i++) {
+        if (ptable[i].state == UNUSED) {
+            procinit(&ptable[i]);
+            return &ptable[i];
+        }
+    }
+    return 0;
+}
+
+struct proc *kthread_create(void (*fn)(void *), void *arg) {
+    struct proc *p = allocproc();
     if (!p)
-        return;
-    procinit(p);
+        return 0;
 
     p->kstack = kalloc();
     if (!p->kstack)
-        return;
+        return 0;
 
     p->ctx.ra = (uint64)kthread_trampoline;
     p->ctx.sp = (uint64)p->kstack + PGSIZE;
     p->ctx.x19 = (uint64)arg;
     p->ctx.x20 = (uint64)fn;
     p->state = RUNNABLE;
+    return p;
 }
 
+// Called by the currently running thread to give up the CPU.
 void yield() {
-    struct proc *p = &proc0;
+    struct proc *p = current;
     p->state = RUNNABLE;
-    swtch(&proc0.ctx, &sched_ctx);
+    swtch(&p->ctx, &sched_ctx);
 }
 
-void sched() {
-    struct proc *p = &proc0;
+// Called by the scheduler to dispatch p.
+void sched(struct proc *p) {
     p->state = RUNNING;
-    swtch(&proc0.ctx, &sched_ctx);
+    current = p;
+    swtch(&sched_ctx, &p->ctx);
 }
