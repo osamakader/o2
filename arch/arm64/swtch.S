@@ -27,4 +27,8 @@ swtch:
 // x19 holds the thread's arg, x20 holds the thread's fn.
 kthread_trampoline:
     mov x0, x19
-    br x20
+    blr x20
+    // fn returned; there is no thread-exit path yet, so park the thread
+    // here instead of falling off into whatever ra happens to be.
+1:  wfi
+    b 1b
