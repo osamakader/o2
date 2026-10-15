@@ -28,7 +28,5 @@ swtch:
 kthread_trampoline:
     mov x0, x19
     blr x20
-    // fn returned; there is no thread-exit path yet, so park the thread
-    // here instead of falling off into whatever ra happens to be.
-1:  wfi
-    b 1b
+    // fn returned: tear the thread down. kthread_exit() never returns.
+    bl kthread_exit

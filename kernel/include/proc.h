@@ -3,7 +3,7 @@
 
 #include "types.h"
 
-enum procstate { UNUSED, USED, RUNNABLE, RUNNING };
+enum procstate { UNUSED, USED, RUNNABLE, RUNNING, ZOMBIE };
 
 struct context {
     uint64 ra;   // x30
@@ -32,6 +32,7 @@ void swtch(struct context *old, struct context *new);
 void procinit(struct proc *p);
 struct proc *kthread_create(void (*fn)(void *), void *arg);
 void yield(void);
+void kthread_exit(void) __attribute__((noreturn));
 void sched(struct proc *p);
 struct proc *myproc(void);
 

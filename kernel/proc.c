@@ -1,6 +1,7 @@
 #include "defs.h"
 #include "memlayout.h"
 #include "proc.h"
+#include "console.h"
 
 // Entry point for a freshly created kernel thread (arch/arm64/swtch.S).
 // swtch() restores x19/x20 as callee-saved registers, so kthread_create()
@@ -69,10 +70,26 @@ void yield() {
     swtch(&p->ctx, &sched_ctx);
 }
 
+// Called by the currently running thread to terminate itself. The
+// thread is still on its own kstack here, so it can't free it; mark it
+// ZOMBIE and let sched() reclaim the slot once we are off that stack.
+void kthread_exit(void) {
+    struct proc *p = current;
+    p->state = ZOMBIE;
+    swtch(&p->ctx, &sched_ctx);
+    panic("zombie thread resumed");
+}
+
 // Called by the scheduler to dispatch p.
 void sched(struct proc *p) {
     p->state = RUNNING;
     current = p;
     swtch(&sched_ctx, &p->ctx);
     current = 0;
+
+    if (p->state == ZOMBIE) {
+        kfree(p->kstack);
+        p->kstack = 0;
+        p->state = UNUSED;
+    }
 }

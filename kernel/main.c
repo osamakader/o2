@@ -68,6 +68,7 @@ void proc0_main() {
 void proc1_main(void *arg) {
     log_msg("Proc1 main\n");
     yield();
+    log_msg("Proc1 resumed, exiting\n");
 }
 
 int main() {
@@ -90,6 +91,9 @@ int main() {
 
     struct proc *proc1 = kthread_create(proc1_main, 0);
     sched(proc1);
+    sched(proc1);
+    if (proc1->state != UNUSED)
+        panic("proc1 not reaped");
     log_msg("Context switching test completed\n");
 
     init_timer();
