@@ -2,6 +2,7 @@
 #include "memlayout.h"
 #include "proc.h"
 #include "console.h"
+#include "cpu.h"
 
 // Entry point for a freshly created kernel thread (arch/arm64/swtch.S).
 // swtch() restores x19/x20 as callee-saved registers, so kthread_create()
@@ -64,10 +65,18 @@ struct proc *kthread_create(void (*fn)(void *), void *arg) {
 }
 
 // Called by the currently running thread to give up the CPU.
+// swtch() runs with IRQs masked so an interrupt can't re-enter the
+// scheduler half way through; the caller's IRQ state is restored when
+// this thread is resumed.
 void yield() {
     struct proc *p = current;
+    int intena = intr_get();
+
+    intr_off();
     p->state = RUNNABLE;
     swtch(&p->ctx, &sched_ctx);
+    if (intena)
+        intr_on();
 }
 
 // Called by the currently running thread to terminate itself. The
@@ -75,6 +84,7 @@ void yield() {
 // ZOMBIE and let scheduler() reclaim the slot once we are off that stack.
 void kthread_exit(void) {
     struct proc *p = current;
+    intr_off();
     p->state = ZOMBIE;
     swtch(&p->ctx, &sched_ctx);
     panic("zombie thread resumed");
@@ -86,6 +96,11 @@ void kthread_exit(void) {
 void scheduler(void) {
     for (;;) {
         int ran = 0;
+
+        // Let pending interrupts (e.g. timer ticks) in, then walk the
+        // table and switch with IRQs masked.
+        intr_on();
+        intr_off();
 
         for (int i = 0; i < NPROC; i++) {
             struct proc *p = &ptable[i];
@@ -105,7 +120,8 @@ void scheduler(void) {
             }
         }
 
-        // nothing to run: sleep until the next interrupt.
+        // nothing to run: sleep until the next interrupt. wfi wakes on a
+        // pending IRQ even while masked; intr_on() above then takes it.
         if (!ran)
             asm volatile("wfi");
     }
