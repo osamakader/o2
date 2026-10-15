@@ -15,11 +15,11 @@ extern void kthread_trampoline(void);
 static struct proc ptable[NPROC];
 
 // The proc currently running on this core, i.e. the one that owns the
-// stack sched() last swtch()'d into. yield() uses this instead of a
+// stack scheduler() last swtch()'d into. yield() uses this instead of a
 // hardcoded proc so any thread made via kthread_create() can call it.
 static struct proc *current;
 
-// Context of the scheduler side of sched(): yield() swtch()es back here.
+// Context of scheduler(): yield() swtch()es back here.
 // Becomes per-CPU once secondary cores run threads.
 static struct context sched_ctx;
 
@@ -72,7 +72,7 @@ void yield() {
 
 // Called by the currently running thread to terminate itself. The
 // thread is still on its own kstack here, so it can't free it; mark it
-// ZOMBIE and let sched() reclaim the slot once we are off that stack.
+// ZOMBIE and let scheduler() reclaim the slot once we are off that stack.
 void kthread_exit(void) {
     struct proc *p = current;
     p->state = ZOMBIE;
@@ -80,16 +80,33 @@ void kthread_exit(void) {
     panic("zombie thread resumed");
 }
 
-// Called by the scheduler to dispatch p.
-void sched(struct proc *p) {
-    p->state = RUNNING;
-    current = p;
-    swtch(&sched_ctx, &p->ctx);
-    current = 0;
+// Per-CPU scheduler loop, never returns. Round-robins over ptable,
+// switching to each RUNNABLE thread until it yields or exits, and
+// reclaims exited threads once it is back on its own stack.
+void scheduler(void) {
+    for (;;) {
+        int ran = 0;
 
-    if (p->state == ZOMBIE) {
-        kfree(p->kstack);
-        p->kstack = 0;
-        p->state = UNUSED;
+        for (int i = 0; i < NPROC; i++) {
+            struct proc *p = &ptable[i];
+            if (p->state != RUNNABLE)
+                continue;
+
+            p->state = RUNNING;
+            current = p;
+            swtch(&sched_ctx, &p->ctx);
+            current = 0;
+            ran = 1;
+
+            if (p->state == ZOMBIE) {
+                kfree(p->kstack);
+                p->kstack = 0;
+                p->state = UNUSED;
+            }
+        }
+
+        // nothing to run: sleep until the next interrupt.
+        if (!ran)
+            asm volatile("wfi");
     }
 }

@@ -33,7 +33,7 @@ void procinit(struct proc *p);
 struct proc *kthread_create(void (*fn)(void *), void *arg);
 void yield(void);
 void kthread_exit(void) __attribute__((noreturn));
-void sched(struct proc *p);
+void scheduler(void) __attribute__((noreturn));
 struct proc *myproc(void);
 
 #endif

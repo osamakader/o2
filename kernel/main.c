@@ -61,14 +61,18 @@ void check_level() {
     }
 }
 
-void proc0_main() {
-    log_msg("Proc0 main\n");
-}
-
-void proc1_main(void *arg) {
-    log_msg("Proc1 main\n");
-    yield();
-    log_msg("Proc1 resumed, exiting\n");
+// Two threads that take turns via yield() to exercise the scheduler.
+static void kthread_test(void *arg) {
+    const char *name = arg;
+    for (int i = 0; i < 3; i++) {
+        log_msg(name);
+        log_msg(" iteration ");
+        log_uint(i);
+        log_msg("\n");
+        yield();
+    }
+    log_msg(name);
+    log_msg(" exiting\n");
 }
 
 int main() {
@@ -87,19 +91,12 @@ int main() {
 
     init_gicv3();
 
-    log_msg("Testing context switching\n");
-
-    struct proc *proc1 = kthread_create(proc1_main, 0);
-    sched(proc1);
-    sched(proc1);
-    if (proc1->state != UNUSED)
-        panic("proc1 not reaped");
-    log_msg("Context switching test completed\n");
+    kthread_create(kthread_test, "A");
+    kthread_create(kthread_test, "B");
 
     init_timer();
     enable_irqs();
     log_msg("IRQs are enabled\n");
 
-    halt();
-    return 0;
+    scheduler();
 }
