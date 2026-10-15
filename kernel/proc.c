@@ -18,6 +18,14 @@ static struct proc ptable[NPROC];
 // hardcoded proc so any thread made via kthread_create() can call it.
 static struct proc *current;
 
+// Context of the scheduler side of sched(): yield() swtch()es back here.
+// Becomes per-CPU once secondary cores run threads.
+static struct context sched_ctx;
+
+struct proc *myproc(void) {
+    return current;
+}
+
 void procinit(struct proc *p) {
     memset(&p->ctx, 0, sizeof(p->ctx));
     p->state = UNUSED;
@@ -66,4 +74,5 @@ void sched(struct proc *p) {
     p->state = RUNNING;
     current = p;
     swtch(&sched_ctx, &p->ctx);
+    current = 0;
 }

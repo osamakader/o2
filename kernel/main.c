@@ -7,8 +7,6 @@
 #include "trap.h"
 #include "defs.h"
 
-struct context sched_ctx;
-
 static void setup_serial() {
     pl011_init(0x9000000, 24000000);
 }

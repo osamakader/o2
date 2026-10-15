@@ -33,7 +33,6 @@ void procinit(struct proc *p);
 struct proc *kthread_create(void (*fn)(void *), void *arg);
 void yield(void);
 void sched(struct proc *p);
-
-extern struct context sched_ctx;
+struct proc *myproc(void);
 
 #endif
