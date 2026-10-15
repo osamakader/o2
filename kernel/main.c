@@ -75,6 +75,21 @@ static void kthread_test(void *arg) {
     log_msg(" exiting\n");
 }
 
+// Busy-waits without ever calling yield(), so it only makes progress
+// alongside another spinner if the timer preempts it.
+static void kthread_spin(void *arg) {
+    const char *name = arg;
+    for (int i = 0; i < 3; i++) {
+        uint64 until = *(volatile uint64 *)&ticks + 10;
+        while (*(volatile uint64 *)&ticks < until)
+            ;
+        log_msg(name);
+        log_msg(" spin ");
+        log_uint(i);
+        log_msg("\n");
+    }
+}
+
 int main() {
     log_msg("Starting kernel ...\n");
     check_level();
@@ -93,6 +108,8 @@ int main() {
 
     kthread_create(kthread_test, "A");
     kthread_create(kthread_test, "B");
+    kthread_create(kthread_spin, "C");
+    kthread_create(kthread_spin, "D");
 
     init_timer();
     enable_irqs();

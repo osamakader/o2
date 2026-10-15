@@ -1,6 +1,7 @@
 #include "console.h"
 #include "isr.h"
 #include "timer.h"
+#include "proc.h"
 
 uint64 ticks;
 
@@ -27,4 +28,11 @@ void handle_irq(struct trapframe *tf)
    log_msg("Unknown interrupt\n");
 
   asm volatile("msr ICC_EOIR1_EL1, %0" : : "r" (id));
+
+  // Preempt the running thread on each tick. This runs on the thread's
+  // kstack, after EOI so the GIC keeps delivering ticks while it is
+  // switched out; eret later restores its IRQ state from SPSR.
+  struct proc *p = myproc();
+  if (id == TIMER_IRQ && p && p->state == RUNNING)
+    yield();
 }
