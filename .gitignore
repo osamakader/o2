@@ -55,3 +55,7 @@ dkms.conf
 *.dwo
 compile_commands.json
 .cache/
+
+# kernel build listings
+kernel.asm
+kernel.sym
