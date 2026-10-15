@@ -3,7 +3,7 @@
 
 #include "types.h"
 
-enum procstate { UNUSED, RUNNABLE, RUNNING };
+enum procstate { UNUSED, USED, RUNNABLE, RUNNING };
 
 struct context {
     uint64 ra;   // x30

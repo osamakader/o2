@@ -28,6 +28,7 @@ static struct proc *allocproc(void) {
     for (int i = 0; i < NPROC; i++) {
         if (ptable[i].state == UNUSED) {
             procinit(&ptable[i]);
+            ptable[i].state = USED;
             return &ptable[i];
         }
     }
@@ -40,8 +41,10 @@ struct proc *kthread_create(void (*fn)(void *), void *arg) {
         return 0;
 
     p->kstack = kalloc();
-    if (!p->kstack)
+    if (!p->kstack) {
+        p->state = UNUSED;
         return 0;
+    }
 
     p->ctx.ra = (uint64)kthread_trampoline;
     p->ctx.sp = (uint64)p->kstack + PGSIZE;
