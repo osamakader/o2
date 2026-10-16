@@ -12,7 +12,6 @@ struct trapframe {
     uint64 pad;
 };
 
-void irq_handler(struct trapframe *tf);
 void fiq_handler(struct trapframe *tf);
 void serr_handler(struct trapframe *tf);
 void sync_handler(struct trapframe *tf);
