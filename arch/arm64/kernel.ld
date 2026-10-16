@@ -12,6 +12,10 @@ SECTIONS
   .text : {
     KEEP(*(.text.boot))
     *(.text .text.*)
+    /* VBAR_EL1 requires 2KB alignment; keep the vectors with the
+     * rest of the code so everything below etext can be mapped RX. */
+    . = ALIGN(2048);
+    KEEP(*(.vectors .vectors.*))
     . = ALIGN(0x1000);
     PROVIDE(etext = .);
   }
@@ -46,11 +50,6 @@ SECTIONS
     *(COMMON)
     . = ALIGN(16);
     __bss_end = .;
-  }
-
-  . = ALIGN(2048);
-  .vectors : {
-    KEEP(*(.vectors .vectors.*))
   }
 
   PROVIDE(end = .);
