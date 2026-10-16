@@ -11,37 +11,6 @@
 #include "param.h"
 #include "cpu.h"
 
-static void setup_serial() {
-    pl011_init(P2V(UART0), 24000000);
-}
-
-void fiq_handler(struct trapframe *tf) {
-    setup_serial();
-    log_msg("FIQ handler\n");
-    halt();
-}
-
-void sync_handler(struct trapframe *tf) {
-    setup_serial();
-    log_msg("Synchronous handler\n");
-    log_msg("ESR: ");
-    log_hex(tf->esr);
-    log_msg("\n");
-    log_msg("ELR: ");
-    log_hex(tf->elr);
-    log_msg("\n");
-    log_msg("FAR: ");
-    log_hex(tf->far);
-    log_msg("\n");
-    halt();
-}
-
-void serr_handler(struct trapframe *tf) {
-    setup_serial();
-    log_msg("SError handler\n");
-    halt();
-}
-
 void check_level() {
     uint64 el;
     asm volatile("mrs %0, CurrentEL" : "=r"(el));

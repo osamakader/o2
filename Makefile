@@ -11,6 +11,7 @@ OBJS = \
   arch/$(ARCH)/gicv3.o \
   arch/$(ARCH)/mmu.o \
   arch/$(ARCH)/psci.o \
+  arch/$(ARCH)/trap.o \
   kernel/timer.o \
   kernel/main.o \
   kernel/string.o \
