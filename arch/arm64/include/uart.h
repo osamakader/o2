@@ -1,3 +1,6 @@
+#ifndef UART_H
+#define UART_H
+
 #include <types.h>
 
 struct pl011 {
@@ -15,8 +18,14 @@ static const uint32 FBRD_OFFSET = 0x028;
 static const uint32 LCR_OFFSET = 0x02c;
 static const uint32 CR_OFFSET = 0x030;
 static const uint32 IMSC_OFFSET = 0x038;
+static const uint32 ICR_OFFSET = 0x044;
 static const uint32 DMACR_OFFSET = 0x048;
 
 int pl011_setup(struct pl011 *dev, uint64 base_address, uint64 base_clock);
 int pl011_send(const char *data);
 void pl011_init(uint64 base_address, uint64 base_clock);
+int pl011_getc(void);
+void pl011_enable_rx_irq(void);
+void uartintr(void);
+
+#endif

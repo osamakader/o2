@@ -70,6 +70,10 @@ int main() {
         gic_init();
         gic_inithart();
 
+        // console input: UART receive interrupts, handled on CPU 0
+        pl011_enable_rx_irq();
+        gic_enable_spi(UART0_IRQ, 0);
+
         selftest();
 
         init_timer();

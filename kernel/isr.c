@@ -4,6 +4,7 @@
 #include "proc.h"
 #include "cpu.h"
 #include "spinlock.h"
+#include "memlayout.h"
 
 // Timer interrupts seen by CPU 0. Every CPU has its own timer, so
 // counting on all of them would advance ticks ncpu times per tick.
@@ -42,11 +43,17 @@ void handle_irq(struct trapframe *tf)
   if (id >= 1020)
     return;
 
-  // timer interrupt
-  if (id == TIMER_IRQ) 
+  switch (id) {
+  case TIMER_IRQ:
     timer_irq();
-  else
-   log_msg("Unknown interrupt\n");
+    break;
+  case UART0_IRQ:
+    uartintr();
+    break;
+  default:
+    printf("unexpected interrupt %d on cpu %d\n", id, cpuid());
+    break;
+  }
 
   asm volatile("msr ICC_EOIR1_EL1, %0" : : "r" (id));
 

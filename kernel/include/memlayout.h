@@ -5,6 +5,7 @@
 
 // qemu puts UART registers here in physical memory.
 #define UART0 0x9000000
+#define UART0_IRQ 33     // SPI 1
 
 // qemu puts interrupt controller (GICv3) here.
 #define GICv3 0x08000000
