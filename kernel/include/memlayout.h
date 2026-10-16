@@ -1,4 +1,5 @@
-// Physical memory layout
+// Physical memory layout. Kept free of C-only syntax in the plain
+// constants so assembly can include it.
 
 #include "param.h"
 
@@ -19,7 +20,7 @@
 // the kernel expects there to be RAM
 // for use by the kernel and user pages
 // from physical address 0x40000000 to PHYSTOP.
-#define KERNBASE 0x40000000L
+#define KERNBASE 0x40000000
 #define PHYSTOP (KERNBASE + 128*1024*1024)
 
 
