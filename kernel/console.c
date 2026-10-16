@@ -1,3 +1,5 @@
+#include <stdarg.h>
+
 #include "console.h"
 #include "spinlock.h"
 #include "cpu.h"
@@ -17,6 +19,100 @@ void log_msg(const char *msg) {
     acquire(&cons_lock);
     pl011_send(msg);
     release(&cons_lock);
+}
+
+static void cons_putc(char c) {
+    char s[2] = { c, '\0' };
+    pl011_send(s);
+}
+
+static void printint(uint64 x, int base, int sign) {
+    static const char digits[] = "0123456789abcdef";
+    char buf[24];
+    int i = 0;
+
+    if (sign && (long)x < 0)
+        x = -(long)x;
+    else
+        sign = 0;
+
+    do {
+        buf[i++] = digits[x % base];
+    } while ((x /= base) != 0);
+
+    if (sign)
+        buf[i++] = '-';
+
+    while (--i >= 0)
+        cons_putc(buf[i]);
+}
+
+// Minimal kernel printf: %d %u %x %ld %lu %lx %p %s %c %%. The whole
+// call holds cons_lock, so lines from different CPUs don't interleave.
+void printf(const char *fmt, ...) {
+    va_list ap;
+    int locking = !panicking;
+
+    if (locking)
+        acquire(&cons_lock);
+
+    va_start(ap, fmt);
+    for (int i = 0; fmt[i]; i++) {
+        char c = fmt[i];
+        if (c != '%') {
+            if (c == '\n')
+                cons_putc('\r');
+            cons_putc(c);
+            continue;
+        }
+
+        int lng = 0;
+        c = fmt[++i];
+        if (c == 'l') {
+            lng = 1;
+            c = fmt[++i];
+        }
+
+        switch (c) {
+        case 'd':
+            printint(lng ? va_arg(ap, long) : va_arg(ap, int), 10, 1);
+            break;
+        case 'u':
+            printint(lng ? va_arg(ap, uint64) : va_arg(ap, uint32), 10, 0);
+            break;
+        case 'x':
+            printint(lng ? va_arg(ap, uint64) : va_arg(ap, uint32), 16, 0);
+            break;
+        case 'p':
+            cons_putc('0');
+            cons_putc('x');
+            printint(va_arg(ap, uint64), 16, 0);
+            break;
+        case 's': {
+            const char *s = va_arg(ap, const char *);
+            pl011_send(s ? s : "(null)");
+            break;
+        }
+        case 'c':
+            cons_putc(va_arg(ap, int));
+            break;
+        case '%':
+            cons_putc('%');
+            break;
+        case 0:
+            i--;   // trailing '%': stop at the terminator
+            break;
+        default:
+            // unknown conversion: print it as is
+            cons_putc('%');
+            cons_putc(c);
+            break;
+        }
+    }
+    va_end(ap);
+
+    if (locking)
+        release(&cons_lock);
 }
 
 void log_hex(uint64 x)

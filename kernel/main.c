@@ -66,14 +66,10 @@ void check_level() {
 static void kthread_test(void *arg) {
     const char *name = arg;
     for (int i = 0; i < 3; i++) {
-        log_msg(name);
-        log_msg(" iteration ");
-        log_uint(i);
-        log_msg("\n");
+        printf("%s iteration %d\n", name, i);
         yield();
     }
-    log_msg(name);
-    log_msg(" exiting\n");
+    printf("%s exiting\n", name);
 }
 
 // Busy-waits without ever calling yield(), so it only makes progress
@@ -84,10 +80,7 @@ static void kthread_spin(void *arg) {
         uint64 until = *(volatile uint64 *)&ticks + 10;
         while (*(volatile uint64 *)&ticks < until)
             ;
-        log_msg(name);
-        log_msg(" spin ");
-        log_uint(i);
-        log_msg("\n");
+        printf("%s spin %d\n", name, i);
     }
 }
 
@@ -98,9 +91,7 @@ int main() {
     kinit();
     
     void *p = kalloc();
-    log_msg("Allocated page at: ");
-    log_hex((uint64)p);
-    log_msg("\n");
+    printf("Allocated page at: %p\n", p);
 
     kfree(p);
     log_msg("Freed page\n");
