@@ -4,21 +4,43 @@
 #include "spinlock.h"
 #include "cpu.h"
 
-// Serializes output from different CPUs, one log_msg() at a time.
+// Serializes output from different CPUs, one log_msg()/printf() at a
+// time.
 static struct spinlock cons_lock = { .name = "cons" };
 
-// Set by panic(); from then on output bypasses cons_lock, which the
-// panicking CPU may hold.
-static volatile int panicking;
+// -1 until panic(); then the id of the panicking CPU. That CPU prints
+// without cons_lock (it may hold it); any other CPU that tries to print
+// parks instead, so the panic message comes out intact.
+static int panic_cpu = -1;
+
+static void __attribute__((noreturn)) park(void) {
+    for (;;)
+        asm volatile("wfi");
+}
+
+// Start a piece of console output. Returns whether cons_lock was taken.
+static int cons_begin(void) {
+    int pc = __atomic_load_n(&panic_cpu, __ATOMIC_ACQUIRE);
+
+    if (pc < 0) {
+        acquire(&cons_lock);
+        return 1;
+    }
+    intr_off();
+    if (pc != cpuid())
+        park();
+    return 0;
+}
+
+static void cons_end(int locked) {
+    if (locked)
+        release(&cons_lock);
+}
 
 void log_msg(const char *msg) {
-    if (panicking) {
-        pl011_send(msg);
-        return;
-    }
-    acquire(&cons_lock);
+    int locked = cons_begin();
     pl011_send(msg);
-    release(&cons_lock);
+    cons_end(locked);
 }
 
 static void cons_putc(char c) {
@@ -47,16 +69,7 @@ static void printint(uint64 x, int base, int sign) {
         cons_putc(buf[i]);
 }
 
-// Minimal kernel printf: %d %u %x %ld %lu %lx %p %s %c %%. The whole
-// call holds cons_lock, so lines from different CPUs don't interleave.
-void printf(const char *fmt, ...) {
-    va_list ap;
-    int locking = !panicking;
-
-    if (locking)
-        acquire(&cons_lock);
-
-    va_start(ap, fmt);
+static void vprintf(const char *fmt, va_list ap) {
     for (int i = 0; fmt[i]; i++) {
         char c = fmt[i];
         if (c != '%') {
@@ -109,10 +122,19 @@ void printf(const char *fmt, ...) {
             break;
         }
     }
+}
+
+// Minimal kernel printf: %d %u %x %ld %lu %lx %p %s %c %%. The whole
+// call holds cons_lock, so lines from different CPUs don't interleave.
+void printf(const char *fmt, ...) {
+    va_list ap;
+    int locked = cons_begin();
+
+    va_start(ap, fmt);
+    vprintf(fmt, ap);
     va_end(ap);
 
-    if (locking)
-        release(&cons_lock);
+    cons_end(locked);
 }
 
 void log_hex(uint64 x)
@@ -146,13 +168,35 @@ void log_uint(uint64 x)
     }
 }
 
-void panic(const char *s)
+// Print a printf-style message and stop this CPU. The first CPU to
+// panic owns the console from then on; a second CPU panicking at the
+// same time parks silently. A nested panic on the owning CPU still
+// prints.
+void panic(const char *fmt, ...)
 {
+  va_list ap;
+  int expected = -1;
+
   intr_off();
-  panicking = 1;
-  log_msg("panic: ");
-  log_msg(s);
-  log_msg("\n");
-  for(;;)
-    asm volatile("wfi");
+  if (!__atomic_compare_exchange_n(&panic_cpu, &expected, cpuid(), 0,
+                                   __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE) &&
+      expected != cpuid())
+    park();
+
+  // Take cons_lock for good, so a printf() already running on another
+  // CPU finishes its line first and a racing one that slipped past
+  // cons_begin() spins in acquire() instead of interleaving. Bounded,
+  // in case that CPU is stuck with the lock held. Skipped if this CPU
+  // panicked while printing.
+  if (!holding(&cons_lock))
+    for (long n = 0; n < 100000000; n++)
+      if (__atomic_exchange_n(&cons_lock.locked, 1, __ATOMIC_ACQUIRE) == 0)
+        break;
+
+  printf("panic: cpu %d: ", cpuid());
+  va_start(ap, fmt);
+  vprintf(fmt, ap);
+  va_end(ap);
+  printf("\n");
+  park();
 }
