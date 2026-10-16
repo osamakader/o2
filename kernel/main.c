@@ -6,6 +6,7 @@
 #include "timer.h"
 #include "trap.h"
 #include "defs.h"
+#include "vm.h"
 
 static void setup_serial() {
     pl011_init(0x9000000, 24000000);
@@ -103,6 +104,8 @@ int main() {
 
     kfree(p);
     log_msg("Freed page\n");
+
+    kvminit();
 
     init_gicv3();
 

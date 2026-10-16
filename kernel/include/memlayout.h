@@ -1,10 +1,19 @@
 // Physical memory layout
 
+#include "param.h"
+
 // qemu puts UART registers here in physical memory.
 #define UART0 0x9000000
 
 // qemu puts interrupt controller (GICv3) here.
 #define GICv3 0x08000000
+
+// GICv3 distributor, and one 128KB redistributor (RD + SGI frames)
+// per CPU starting at GICR.
+#define GICD      GICv3
+#define GICD_SIZE 0x10000
+#define GICR      (GICv3 + 0xA0000)
+#define GICR_SIZE (NCPU * 0x20000)
 
 
 // the kernel expects there to be RAM
