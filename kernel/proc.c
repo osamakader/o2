@@ -119,6 +119,49 @@ void yield() {
     release(&p->lock);
 }
 
+// Atomically release lk and sleep on chan. Reacquires lk when
+// awakened. Callers re-check their condition in a loop: a wakeup only
+// means it may have changed.
+void sleep(void *chan, struct spinlock *lk) {
+    struct proc *p = myproc();
+
+    // Must acquire p->lock in order to change p->state and then call
+    // sched(). Once we hold p->lock, we can be guaranteed that we won't
+    // miss any wakeup (wakeup locks p->lock), so it's okay to release
+    // lk.
+    acquire(&p->lock);
+    release(lk);
+
+    p->chan = chan;
+    p->state = SLEEPING;
+
+    sched();
+
+    // Tidy up.
+    p->chan = 0;
+
+    // Reacquire original lock.
+    release(&p->lock);
+    acquire(lk);
+}
+
+// Wake up all threads sleeping on chan. Must be called without any
+// p->lock; callers normally hold the lock that sleepers on chan pass to
+// sleep().
+void wakeup(void *chan) {
+    struct proc *me = myproc();
+
+    for (int i = 0; i < NPROC; i++) {
+        struct proc *p = &ptable[i];
+        if (p == me)
+            continue;
+        acquire(&p->lock);
+        if (p->state == SLEEPING && p->chan == chan)
+            p->state = RUNNABLE;
+        release(&p->lock);
+    }
+}
+
 // Called by the currently running thread to terminate itself. The
 // thread is still on its own kstack here, so the slot can't be reused
 // yet; mark it ZOMBIE and let scheduler() reclaim it once we are off

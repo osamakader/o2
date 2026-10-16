@@ -6,7 +6,7 @@
 #include "param.h"
 #include "spinlock.h"
 
-enum procstate { UNUSED, USED, RUNNABLE, RUNNING, ZOMBIE };
+enum procstate { UNUSED, USED, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 
 struct context {
     uint64 ra;   // x30
@@ -29,6 +29,7 @@ struct proc {
 
     // p->lock must be held when using these:
     enum procstate state;
+    void *chan;      // if non-zero, sleeping on chan
     struct context ctx;
     uint64 kstack;   // VA of the kernel stack, KSTACK(slot)
 };
@@ -51,6 +52,8 @@ void procinit(void);
 void proc_mapstacks(pagetable_t pagetable);
 struct proc *kthread_create(void (*fn)(void *), void *arg);
 void yield(void);
+void sleep(void *chan, struct spinlock *lk);
+void wakeup(void *chan);
 void kthread_exit(void) __attribute__((noreturn));
 void scheduler(void) __attribute__((noreturn));
 struct proc *myproc(void);
