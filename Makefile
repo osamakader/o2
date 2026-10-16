@@ -10,6 +10,7 @@ OBJS = \
   arch/$(ARCH)/uart.o \
   arch/$(ARCH)/gicv3.o \
   arch/$(ARCH)/mmu.o \
+  arch/$(ARCH)/psci.o \
   kernel/timer.o \
   kernel/main.o \
   kernel/string.o \
