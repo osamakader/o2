@@ -5,6 +5,7 @@
 #include "console.h"
 #include "timer.h"
 #include "cpu.h"
+#include "spinlock.h"
 
 // Two threads that take turns via yield() to exercise the scheduler.
 static void kthread_test(void *arg) {
@@ -28,6 +29,67 @@ static void kthread_spin(void *arg) {
     }
 }
 
+// Checks that sleep_ticks() blocks for at least as long as asked.
+static void kthread_sleeper(void *arg) {
+    const char *name = arg;
+    for (int i = 0; i < 3; i++) {
+        uint64 t0 = *(volatile uint64 *)&ticks;
+        sleep_ticks(20);
+        uint64 dt = *(volatile uint64 *)&ticks - t0;
+        if (dt < 20)
+            panic("%s: sleep_ticks(20) returned after %lu ticks", name, dt);
+        printf("%s slept %lu ticks on cpu %d\n", name, dt, cpuid());
+    }
+}
+
+// Bounded buffer with a single slot, guarded by a spinlock. Producers
+// sleep while it is full and the consumer sleeps while it is empty, so
+// nearly every handoff goes through sleep()/wakeup(). A lost wakeup
+// leaves both sides asleep and "pc done" never shows.
+#define PC_PRODUCERS 3
+#define PC_ITEMS     10000
+#define PC_SLOTS     1
+
+static struct {
+    struct spinlock lock;
+    int avail;
+    int psleeps;   // times a producer slept on a full buffer
+} pc = { .lock = { .name = "pc" } };
+
+static void kthread_producer(void *arg) {
+    for (int i = 0; i < PC_ITEMS; i++) {
+        acquire(&pc.lock);
+        while (pc.avail == PC_SLOTS) {
+            pc.psleeps++;
+            sleep(&pc.avail, &pc.lock);
+        }
+        pc.avail++;
+        wakeup(&pc.avail);
+        release(&pc.lock);
+    }
+}
+
+static void kthread_consumer(void *arg) {
+    int sleeps = 0;
+
+    for (int got = 0; got < PC_PRODUCERS * PC_ITEMS; got++) {
+        acquire(&pc.lock);
+        while (pc.avail == 0) {
+            sleeps++;
+            sleep(&pc.avail, &pc.lock);
+        }
+        pc.avail--;
+        wakeup(&pc.avail);
+        release(&pc.lock);
+    }
+
+    acquire(&pc.lock);
+    int psleeps = pc.psleeps;
+    release(&pc.lock);
+    printf("pc done: %d items, consumer slept %d times, producers %d times\n",
+           PC_PRODUCERS * PC_ITEMS, sleeps, psleeps);
+}
+
 static void spawn(void (*fn)(void *), void *arg) {
     if (kthread_create(fn, arg) == 0)
         panic("selftest: kthread_create");
@@ -39,4 +101,9 @@ void selftest(void) {
     spawn(kthread_test, "B");
     spawn(kthread_spin, "C");
     spawn(kthread_spin, "D");
+    spawn(kthread_sleeper, "E");
+    spawn(kthread_sleeper, "F");
+    spawn(kthread_consumer, 0);
+    for (int i = 0; i < PC_PRODUCERS; i++)
+        spawn(kthread_producer, 0);
 }
