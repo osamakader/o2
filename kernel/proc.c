@@ -1,5 +1,6 @@
 #include "defs.h"
 #include "memlayout.h"
+#include "param.h"
 #include "proc.h"
 #include "console.h"
 #include "cpu.h"
@@ -8,8 +9,6 @@
 // swtch() restores x19/x20 as callee-saved registers, so kthread_create()
 // stashes arg/fn there to hand them off once the thread starts running.
 extern void kthread_trampoline(void);
-
-#define NPROC 8
 
 // Fixed-size process table. BSS is zeroed at boot (arch/arm64/entry.S),
 // and UNUSED == 0, so every slot starts out free with no extra init.
