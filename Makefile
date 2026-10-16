@@ -26,7 +26,7 @@ ifeq ($(ARCH), riscv64)
 else
 	QEMU = qemu-system-aarch64
 	TOOLPREFIX = aarch64-linux-gnu-
-	CFLAGS += -march=armv8-a -mgeneral-regs-only
+	CFLAGS += -march=armv8-a -mgeneral-regs-only -mno-outline-atomics
 endif
 
 CC = $(TOOLPREFIX)gcc
