@@ -8,6 +8,9 @@
 // the kernel's page table, an identity map of RAM and devices.
 pagetable_t kernel_pagetable;
 
+extern char stext[];  // kernel.ld: start of kernel text
+extern char etext[];  // kernel.ld: first page after kernel text
+
 // Return the address of the leaf PTE for va, allocating the
 // intermediate tables if alloc is set. Returns 0 if a table is
 // missing and alloc is clear, or if allocation fails.
@@ -68,8 +71,14 @@ static pagetable_t kvmmake(void) {
     kvmmap(pagetable, GICD, GICD, GICD_SIZE, PTE_KERN_DEVICE);
     kvmmap(pagetable, GICR, GICR, GICR_SIZE, PTE_KERN_DEVICE);
 
-    // all of RAM, including the kernel image
-    kvmmap(pagetable, KERNBASE, KERNBASE, PHYSTOP - KERNBASE, PTE_KERN_RWX);
+    // RAM below the kernel image (qemu puts the DTB here)
+    kvmmap(pagetable, KERNBASE, KERNBASE, (uint64)stext - KERNBASE, PTE_KERN_DATA);
+
+    // kernel text: read-only, executable
+    kvmmap(pagetable, (uint64)stext, (uint64)stext, (uint64)etext - (uint64)stext, PTE_KERN_TEXT);
+
+    // kernel data and the rest of RAM: read/write, never executable
+    kvmmap(pagetable, (uint64)etext, (uint64)etext, PHYSTOP - (uint64)etext, PTE_KERN_DATA);
 
     return pagetable;
 }

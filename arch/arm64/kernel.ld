@@ -10,6 +10,7 @@ SECTIONS
   . = 0x40080000;
 
   .text : {
+    PROVIDE(stext = .);
     KEEP(*(.text.boot))
     *(.text .text.*)
     /* VBAR_EL1 requires 2KB alignment; keep the vectors with the

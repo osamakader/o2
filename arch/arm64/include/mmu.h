@@ -53,7 +53,8 @@
 #define MKPAGE(pa, attrs) (PA2PTE(pa) | (attrs) | PTE_AF | PTE_TABLE | PTE_VALID)
 
 // mapping attributes for kernel mappings
-#define PTE_KERN_RWX    (PTE_ATTRIDX(MT_NORMAL) | PTE_SH_INNER | PTE_AP_RW | PTE_UXN)
+#define PTE_KERN_TEXT   (PTE_ATTRIDX(MT_NORMAL) | PTE_SH_INNER | PTE_AP_RO | PTE_UXN)
+#define PTE_KERN_DATA   (PTE_ATTRIDX(MT_NORMAL) | PTE_SH_INNER | PTE_AP_RW | PTE_PXN | PTE_UXN)
 #define PTE_KERN_DEVICE (PTE_ATTRIDX(MT_DEVICE_nGnRE) | PTE_AP_RW | PTE_PXN | PTE_UXN)
 
 #endif
