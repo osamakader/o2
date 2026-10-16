@@ -33,6 +33,8 @@ struct proc {
 struct cpu {
     struct proc *proc;        // thread running on this cpu, or 0
     struct context context;   // swtch() here to enter scheduler()
+    int noff;                 // depth of push_off() nesting
+    int intena;               // were interrupts enabled before push_off()?
 };
 
 extern struct cpu cpus[NCPU];

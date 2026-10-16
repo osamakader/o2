@@ -6,6 +6,7 @@
 #include "cpu.h"
 #include "vm.h"
 #include "mmu.h"
+#include "spinlock.h"
 
 // Entry point for a freshly created kernel thread (arch/arm64/swtch.S).
 // swtch() restores x19/x20 as callee-saved registers, so kthread_create()
@@ -25,7 +26,10 @@ struct cpu *mycpu(void) {
 
 // The thread running on this core, or 0 in the scheduler.
 struct proc *myproc(void) {
-    return mycpu()->proc;
+    push_off();
+    struct proc *p = mycpu()->proc;
+    pop_off();
+    return p;
 }
 
 // Allocate a page for each ptable slot's kernel stack and map it at
