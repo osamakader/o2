@@ -2,12 +2,17 @@
 #include "isr.h"
 #include "timer.h"
 #include "proc.h"
+#include "cpu.h"
 
+// Timer interrupts seen by CPU 0. Every CPU has its own timer, so
+// counting on all of them would advance ticks ncpu times per tick.
+// Single writer; readers on other CPUs see each aligned store whole.
 uint64 ticks;
 
 void timer_irq()
 {
-  ticks++;
+  if (cpuid() == 0)
+    ticks++;
   rearm_timer();
 }
 
