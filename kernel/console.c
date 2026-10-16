@@ -3,6 +3,7 @@
 #include "console.h"
 #include "spinlock.h"
 #include "cpu.h"
+#include "proc.h"
 
 // Serializes output from different CPUs, one log_msg()/printf() at a
 // time.
@@ -168,4 +169,117 @@ void panic(const char *fmt, ...)
   va_end(ap);
   printf("\n");
   park();
+}
+//
+// Console input, fed one character at a time by the UART interrupt
+// handler. Line discipline as in xv6:
+//   backspace / DEL: erase a character
+//   ^U: kill the line
+//   ^D: end of file
+// Characters are echoed; consoleread() returns whole lines.
+//
+
+#define C(x)  ((x) - '@')  // control-x
+#define BACKSPACE 0x100
+#define INPUT_BUF_SIZE 128
+
+static struct {
+    struct spinlock lock;
+    char buf[INPUT_BUF_SIZE];
+    uint r;  // read index
+    uint w;  // write index: end of the last completed line
+    uint e;  // edit index
+} cons_in = { .lock = { .name = "cons_in" } };
+
+// Echo one input character, erasing it from the screen for BACKSPACE.
+static void echo(int c) {
+    int locked = cons_begin();
+    if (c == BACKSPACE) {
+        cons_putc('\b');
+        cons_putc(' ');
+        cons_putc('\b');
+    } else {
+        if (c == '\n')
+            cons_putc('\r');
+        cons_putc(c);
+    }
+    cons_end(locked);
+}
+
+// Called from the UART interrupt handler for each input character.
+void consoleintr(int c) {
+    acquire(&cons_in.lock);
+
+    switch (c) {
+    case C('U'):  // kill line
+        while (cons_in.e != cons_in.w &&
+               cons_in.buf[(cons_in.e - 1) % INPUT_BUF_SIZE] != '\n') {
+            cons_in.e--;
+            echo(BACKSPACE);
+        }
+        break;
+    case C('H'):  // backspace
+    case '\x7f':  // delete key
+        if (cons_in.e != cons_in.w) {
+            cons_in.e--;
+            echo(BACKSPACE);
+        }
+        break;
+    default:
+        if (c != 0 && cons_in.e - cons_in.r < INPUT_BUF_SIZE) {
+            c = (c == '\r') ? '\n' : c;
+
+            echo(c);
+
+            // store for consumption by consoleread().
+            cons_in.buf[cons_in.e++ % INPUT_BUF_SIZE] = c;
+
+            if (c == '\n' || c == C('D') || cons_in.e - cons_in.r == INPUT_BUF_SIZE) {
+                // wake up consoleread() if a whole line (or end-of-file)
+                // has arrived.
+                cons_in.w = cons_in.e;
+                wakeup(&cons_in.r);
+            }
+        }
+        break;
+    }
+
+    release(&cons_in.lock);
+}
+
+// Read up to n bytes of input into dst, sleeping until a whole line
+// (or ^D) is available. Returns the number of bytes read; 0 means
+// end of file.
+int consoleread(char *dst, int n) {
+    int target = n;
+
+    acquire(&cons_in.lock);
+    while (n > 0) {
+        // wait until the interrupt handler has put some input into
+        // cons_in.buf.
+        while (cons_in.r == cons_in.w)
+            sleep(&cons_in.r, &cons_in.lock);
+
+        int c = cons_in.buf[cons_in.r++ % INPUT_BUF_SIZE];
+
+        if (c == C('D')) {  // end-of-file
+            if (n < target) {
+                // Save ^D for next time, to make sure caller gets a
+                // 0-byte result.
+                cons_in.r--;
+            }
+            break;
+        }
+
+        *dst++ = c;
+        --n;
+
+        if (c == '\n') {
+            // a whole line has arrived, return to the caller.
+            break;
+        }
+    }
+    release(&cons_in.lock);
+
+    return target - n;
 }
