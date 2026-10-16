@@ -14,8 +14,13 @@
 extern void kthread_trampoline(void);
 
 // Fixed-size process table. BSS is zeroed at boot (arch/arm64/entry.S),
-// and UNUSED == 0, so every slot starts out free with no extra init.
+// and UNUSED == 0, so every slot starts out free.
 static struct proc ptable[NPROC];
+
+void procinit(void) {
+    for (int i = 0; i < NPROC; i++)
+        initlock(&ptable[i].lock, "proc");
+}
 
 struct cpu cpus[NCPU];
 
@@ -45,14 +50,17 @@ void proc_mapstacks(pagetable_t pagetable) {
     }
 }
 
+// Find an UNUSED slot and claim it. Returns with p->lock held.
 static struct proc *allocproc(void) {
     for (int i = 0; i < NPROC; i++) {
         struct proc *p = &ptable[i];
+        acquire(&p->lock);
         if (p->state == UNUSED) {
             memset(&p->ctx, 0, sizeof(p->ctx));
             p->state = USED;
             return p;
         }
+        release(&p->lock);
     }
     return 0;
 }
@@ -67,22 +75,48 @@ struct proc *kthread_create(void (*fn)(void *), void *arg) {
     p->ctx.x19 = (uint64)arg;
     p->ctx.x20 = (uint64)fn;
     p->state = RUNNABLE;
+    release(&p->lock);
     return p;
 }
 
+// First C code a new thread runs, from kthread_trampoline. scheduler()
+// switched here holding p->lock; drop it. The intena that release()
+// restores belongs to whatever ran on this CPU before (possibly a
+// thread preempted from an IRQ, with interrupts off), so turn them on
+// explicitly: kernel threads start interruptible.
+void kthread_start(void) {
+    release(&myproc()->lock);
+    intr_on();
+}
+
+// Switch to the scheduler. Must hold only p->lock and have already
+// changed p->state. Saves and restores intena because intena is a
+// property of this thread, not of the CPU it happens to run on.
+static void sched(void) {
+    struct proc *p = myproc();
+
+    if (!holding(&p->lock))
+        panic("sched p->lock");
+    if (mycpu()->noff != 1)
+        panic("sched locks");
+    if (p->state == RUNNING)
+        panic("sched running");
+    if (intr_get())
+        panic("sched interruptible");
+
+    int intena = mycpu()->intena;
+    swtch(&p->ctx, &mycpu()->context);
+    mycpu()->intena = intena;
+}
+
 // Called by the currently running thread to give up the CPU.
-// swtch() runs with IRQs masked so an interrupt can't re-enter the
-// scheduler half way through; the caller's IRQ state is restored when
-// this thread is resumed.
 void yield() {
     struct proc *p = myproc();
-    int intena = intr_get();
 
-    intr_off();
+    acquire(&p->lock);
     p->state = RUNNABLE;
-    swtch(&p->ctx, &mycpu()->context);
-    if (intena)
-        intr_on();
+    sched();
+    release(&p->lock);
 }
 
 // Called by the currently running thread to terminate itself. The
@@ -91,45 +125,51 @@ void yield() {
 // that stack.
 void kthread_exit(void) {
     struct proc *p = myproc();
-    intr_off();
+
+    acquire(&p->lock);
     p->state = ZOMBIE;
-    swtch(&p->ctx, &mycpu()->context);
+    sched();
     panic("zombie thread resumed");
 }
 
 // Per-CPU scheduler loop, never returns. Round-robins over ptable,
 // switching to each RUNNABLE thread until it yields or exits, and
 // reclaims exited threads once it is back on its own stack.
+// p->lock is held across swtch() in both directions: the thread
+// releases it on the other side (yield(), kthread_start()), and
+// re-acquires it before switching back.
 void scheduler(void) {
     struct cpu *c = mycpu();
 
+    c->proc = 0;
     for (;;) {
-        int ran = 0;
-
-        // Let pending interrupts (e.g. timer ticks) in, then walk the
-        // table and switch with IRQs masked.
+        // The most recent thread may have had interrupts off; enable
+        // them so pending ones (e.g. timer ticks) get taken, then turn
+        // them back off to avoid a race between an interrupt and wfi.
         intr_on();
         intr_off();
 
+        int found = 0;
         for (int i = 0; i < NPROC; i++) {
             struct proc *p = &ptable[i];
-            if (p->state != RUNNABLE)
-                continue;
+            acquire(&p->lock);
+            if (p->state == RUNNABLE) {
+                p->state = RUNNING;
+                c->proc = p;
+                swtch(&c->context, &p->ctx);
+                c->proc = 0;
+                found = 1;
 
-            p->state = RUNNING;
-            c->proc = p;
-            swtch(&c->context, &p->ctx);
-            c->proc = 0;
-            ran = 1;
-
-            // the kstack stays mapped for the slot's next thread
-            if (p->state == ZOMBIE)
-                p->state = UNUSED;
+                // the kstack stays mapped for the slot's next thread
+                if (p->state == ZOMBIE)
+                    p->state = UNUSED;
+            }
+            release(&p->lock);
         }
 
         // nothing to run: sleep until the next interrupt. wfi wakes on a
         // pending IRQ even while masked; intr_on() above then takes it.
-        if (!ran)
+        if (!found)
             asm volatile("wfi");
     }
 }

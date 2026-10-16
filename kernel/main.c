@@ -105,6 +105,7 @@ int main() {
     kfree(p);
     log_msg("Freed page\n");
 
+    procinit();
     kvminit();
     kvminithart();
     log_msg("Kernel page table installed\n");

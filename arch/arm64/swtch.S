@@ -25,9 +25,9 @@ swtch:
 // Entry point for a brand-new kernel thread. swtch() lands here via ctx.ra
 // with x19/x20 restored from the context we set up in kthread_create():
 // x19 holds the thread's arg, x20 holds the thread's fn.
-// scheduler() switches with IRQs masked; a new thread starts with them on.
+// kthread_start() drops the p->lock scheduler() switched in with.
 kthread_trampoline:
-    msr daifclr, #2
+    bl kthread_start
     mov x0, x19
     blr x20
     // fn returned: tear the thread down. kthread_exit() never returns.

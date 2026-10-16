@@ -4,6 +4,7 @@
 #include "types.h"
 #include "vm.h"
 #include "param.h"
+#include "spinlock.h"
 
 enum procstate { UNUSED, USED, RUNNABLE, RUNNING, ZOMBIE };
 
@@ -24,6 +25,9 @@ struct context {
 };
 
 struct proc {
+    struct spinlock lock;
+
+    // p->lock must be held when using these:
     enum procstate state;
     struct context ctx;
     uint64 kstack;   // VA of the kernel stack, KSTACK(slot)
@@ -43,6 +47,7 @@ void swtch(struct context *old, struct context *new);
 
 struct cpu *mycpu(void);
 
+void procinit(void);
 void proc_mapstacks(pagetable_t pagetable);
 struct proc *kthread_create(void (*fn)(void *), void *arg);
 void yield(void);
