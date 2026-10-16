@@ -69,22 +69,22 @@
 .global _vectors
 _vectors:
     /* Current EL with SP0 */
-    b sync_addr /* Synchronous */
+    b el1_sync  /* Synchronous */
     .balign 128
     b irq_addr  /* IRQ/vIRQ */
     .balign 128
-    b fiq_addr  /* FIQ/vFIQ */
+    b el1_fiq   /* FIQ/vFIQ */
     .balign 128
-    b serr_addr /* SError/vSError */
+    b el1_serr  /* SError/vSError */
     .balign 128
     /* Current EL with SPn */
-    b sync_addr /* Synchronous */
+    b el1_sync  /* Synchronous */
     .balign 128
     b irq_addr  /* IRQ/vIRQ */
     .balign 128
-    b fiq_addr  /* FIQ/vFIQ */
+    b el1_fiq   /* FIQ/vFIQ */
     .balign 128
-    b serr_addr /* SError/vSError */
+    b el1_serr  /* SError/vSError */
     .balign 128
     /* Lower EL with Aarch64 */
     b sync_addr /* Synchronous */
@@ -106,6 +106,27 @@ _vectors:
     .balign 128
 
 .section .text, "ax"
+
+// Synchronous exceptions, FIQs and SErrors taken from EL1 are fatal.
+// Handle them on this CPU's emergency stack (SP_EL0, set in entry.S)
+// rather than the current kernel stack: if that stack just overflowed
+// into its guard page, pushing a trapframe there would fault again and
+// walk down into the next kernel stack.
+.macro FATAL_ENTRY handler
+    msr spsel, #0
+    SAVE_TRAPFRAME
+    bl \handler
+1:  wfi
+    b 1b
+.endm
+
+el1_sync:
+    FATAL_ENTRY sync_handler
+el1_fiq:
+    FATAL_ENTRY fiq_handler
+el1_serr:
+    FATAL_ENTRY serr_handler
+
 
 sync_addr:
     SAVE_TRAPFRAME

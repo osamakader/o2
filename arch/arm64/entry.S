@@ -41,6 +41,12 @@ _entry:
         lsl x1, x1, #12
         add sp, x0, x1
 
+        // SP_EL0 is unused at EL1: point it at this CPU's emergency
+        // stack for fatal exceptions (exceptions.S).
+        ldr x0, =estack
+        add x0, x0, x1
+        msr sp_el0, x0
+
         // set up the vector table
         ldr x0, =_vectors
         msr vbar_el1, x0

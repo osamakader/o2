@@ -6,6 +6,11 @@
 
 __attribute__((aligned(16), section(".stack"))) char stack0[4096 * NCPU];
 
+// Per-CPU stacks for fatal exceptions taken at EL1 (arch/arm64/
+// exceptions.S), kept in SP_EL0 so a kernel stack overflow can still be
+// reported.
+__attribute__((aligned(16), section(".stack"))) char estack[4096 * NCPU];
+
 static void setup_serial() {
     pl011_init(P2V(UART0), 24000000);
 }
