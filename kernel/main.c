@@ -110,7 +110,8 @@ int main() {
     kvminithart();
     log_msg("Kernel page table installed\n");
 
-    init_gicv3();
+    gic_init();
+    gic_inithart();
 
     kthread_create(kthread_test, "A");
     kthread_create(kthread_test, "B");
