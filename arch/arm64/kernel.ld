@@ -1,15 +1,21 @@
 OUTPUT_ARCH(aarch64)
-ENTRY( _entry )
+
+/* must match KVA_OFFSET in kernel/include/memlayout.h */
+KVA_OFFSET = 0xFFFFFFC000000000;
+
+/* qemu jumps to the physical entry point with the MMU off */
+ENTRY( _entry_phys )
 
 SECTIONS
 {
   /*
-   * ensure that entry.S / _entry is at 0x40080000,
-   * where qemu's -kernel jumps.
+   * The kernel runs in the high half at physical + KVA_OFFSET but is
+   * loaded at 0x40080000, where qemu's -kernel puts it.
    */
-  . = 0x40080000;
+  . = 0x40080000 + KVA_OFFSET;
+  _entry_phys = _entry - KVA_OFFSET;
 
-  .text : {
+  .text : AT(ADDR(.text) - KVA_OFFSET) {
     PROVIDE(stext = .);
     KEEP(*(.text.boot))
     *(.text .text.*)
@@ -21,21 +27,21 @@ SECTIONS
     PROVIDE(etext = .);
   }
 
-  .rodata : {
+  .rodata : AT(ADDR(.rodata) - KVA_OFFSET) {
     . = ALIGN(16);
     *(.srodata .srodata.*) /* do not need to distinguish this from .rodata */
     . = ALIGN(16);
     *(.rodata .rodata.*)
   }
 
-  .data : {
+  .data : AT(ADDR(.data) - KVA_OFFSET) {
     . = ALIGN(16);
     *(.sdata .sdata.*) /* do not need to distinguish this from .data */
     . = ALIGN(16);
     *(.data .data.*)
   }
 
-  .stack (NOLOAD) : {
+  .stack (NOLOAD) : AT(ADDR(.stack) - KVA_OFFSET) {
     . = ALIGN(16);
     __stack_start = .;
     KEEP(*(.stack))
@@ -43,7 +49,7 @@ SECTIONS
     __stack_end = .;
   }
 
-  .bss : {
+  .bss : AT(ADDR(.bss) - KVA_OFFSET) {
     . = ALIGN(16);
     __bss_start = .;
     *(.sbss .sbss.*)

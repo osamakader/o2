@@ -30,7 +30,8 @@ _entry:
 
 2:      bl mmu_on
 
-        // Continue at the link address of the code below.
+        // Jump from the physical (identity-mapped) address to the
+        // high-half link address of the code below.
         ldr x0, =3f
         br x0
 3:
@@ -68,6 +69,7 @@ mmu_on:
 
         adrp x0, boot_pagetable
         msr ttbr0_el1, x0
+        msr ttbr1_el1, x0
         isb
         tlbi vmalle1
         dsb nsh
@@ -80,11 +82,18 @@ mmu_on:
         isb
         ret
 
-// Coarse identity map used until kvminithart() installs the real
-// kernel page table.
+// Coarse boot page table, loaded into both TTBR0 and TTBR1 until
+// kvminithart() installs the real kernel page table. The same first
+// 2GB of physical memory appear at the identity address (low half,
+// needed while the PC is still physical) and at P2V() (high half).
+#define BOOT_HIGH_IDX ((KVA_OFFSET >> 30) & 0x1ff)
+
 .section .data
 .balign 4096
 boot_pagetable:
         .quad 0x00000000 | BOOT_DEVICE  // [0, 1GB): UART, GIC
         .quad KERNBASE | BOOT_NORMAL    // [1GB, 2GB): RAM, kernel
-        .fill 510, 8, 0
+        .fill BOOT_HIGH_IDX - 2, 8, 0
+        .quad 0x00000000 | BOOT_DEVICE  // P2V([0, 1GB))
+        .quad KERNBASE | BOOT_NORMAL    // P2V([1GB, 2GB))
+        .fill 512 - BOOT_HIGH_IDX - 2, 8, 0

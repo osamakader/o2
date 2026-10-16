@@ -16,7 +16,7 @@ extern char etext[];  // kernel.ld: first page after kernel text
 // intermediate tables if alloc is set. Returns 0 if a table is
 // missing and alloc is clear, or if allocation fails.
 pte_t *walk(pagetable_t pagetable, uint64 va, int alloc) {
-    if (va >= MAXVA)
+    if (!VA_VALID(va))
         panic("walk");
 
     for (int level = 2; level > 0; level--) {

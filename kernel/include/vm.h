@@ -12,7 +12,7 @@
 #define PXSHIFT(level) (PGSHIFT + (9 * (level)))
 #define PX(level, va)  ((((uint64)(va)) >> PXSHIFT(level)) & PXMASK)
 
-// one beyond the highest virtual address
+// one beyond the highest user (low half) virtual address
 #define MAXVA (1UL << 39)
 
 typedef uint64 pte_t;

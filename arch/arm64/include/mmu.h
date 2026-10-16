@@ -31,20 +31,29 @@
 #define MAIR_VALUE      ((_UL(0x04) << (8 * MT_DEVICE_nGnRE)) | \
                          (_UL(0xff) << (8 * MT_NORMAL)))
 
-// TCR_EL1: 39-bit VA, 4KB granule, inner-shareable write-back
-// cacheable table walks. TTBR1 walks are disabled (EPD1) for now.
+// TCR_EL1: 39-bit VA in both halves, 4KB granule, inner-shareable
+// write-back cacheable table walks. TTBR0 holds the low half (boot
+// identity map, later user space), TTBR1 the kernel's high half.
 #define TCR_T0SZ(n)     (_UL(n) << 0)
+#define TCR_EPD0        (_UL(1) << 7)   // disable TTBR0 walks
 #define TCR_IRGN0_WBWA  (_UL(1) << 8)
 #define TCR_ORGN0_WBWA  (_UL(1) << 10)
 #define TCR_SH0_INNER   (_UL(3) << 12)
 #define TCR_TG0_4K      (_UL(0) << 14)
 #define TCR_T1SZ(n)     (_UL(n) << 16)
-#define TCR_EPD1        (_UL(1) << 23)
+#define TCR_IRGN1_WBWA  (_UL(1) << 24)
+#define TCR_ORGN1_WBWA  (_UL(1) << 26)
+#define TCR_SH1_INNER   (_UL(3) << 28)
 #define TCR_TG1_4K      (_UL(2) << 30)
 #define TCR_IPS_SHIFT   32
 #define TCR_VALUE       (TCR_T0SZ(25) | TCR_IRGN0_WBWA | TCR_ORGN0_WBWA | \
-                         TCR_SH0_INNER | TCR_TG0_4K | TCR_T1SZ(25) | \
-                         TCR_EPD1 | TCR_TG1_4K)
+                         TCR_SH0_INNER | TCR_TG0_4K | \
+                         TCR_T1SZ(25) | TCR_IRGN1_WBWA | TCR_ORGN1_WBWA | \
+                         TCR_SH1_INNER | TCR_TG1_4K)
+
+// With T0SZ = T1SZ = 25, a VA is translated if bits [63:39] are all 0
+// (TTBR0) or all 1 (TTBR1).
+#define VA_VALID(va)    (((va) >> 39) == 0 || ((va) >> 39) == (~_UL(0) >> 39))
 
 // SCTLR_EL1 bits
 #define SCTLR_M (_UL(1) << 0)    // MMU enable
