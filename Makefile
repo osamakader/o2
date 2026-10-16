@@ -9,6 +9,7 @@ OBJS = \
   kernel/console.o \
   arch/$(ARCH)/uart.o \
   arch/$(ARCH)/gicv3.o \
+  arch/$(ARCH)/mmu.o \
   kernel/timer.o \
   kernel/main.o \
   kernel/string.o \

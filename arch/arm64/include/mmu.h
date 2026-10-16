@@ -22,6 +22,26 @@
 #define MAIR_VALUE      ((0x04UL << (8 * MT_DEVICE_nGnRE)) | \
                          (0xffUL << (8 * MT_NORMAL)))
 
+// TCR_EL1: 39-bit VA, 4KB granule, inner-shareable write-back
+// cacheable table walks. TTBR1 walks are disabled (EPD1) for now.
+#define TCR_T0SZ(n)     ((uint64)(n) << 0)
+#define TCR_IRGN0_WBWA  (1UL << 8)
+#define TCR_ORGN0_WBWA  (1UL << 10)
+#define TCR_SH0_INNER   (3UL << 12)
+#define TCR_TG0_4K      (0UL << 14)
+#define TCR_T1SZ(n)     ((uint64)(n) << 16)
+#define TCR_EPD1        (1UL << 23)
+#define TCR_TG1_4K      (2UL << 30)
+#define TCR_IPS_SHIFT   32
+#define TCR_VALUE       (TCR_T0SZ(25) | TCR_IRGN0_WBWA | TCR_ORGN0_WBWA | \
+                         TCR_SH0_INNER | TCR_TG0_4K | TCR_T1SZ(25) | \
+                         TCR_EPD1 | TCR_TG1_4K)
+
+// SCTLR_EL1 bits
+#define SCTLR_M (1UL << 0)    // MMU enable
+#define SCTLR_C (1UL << 2)    // data cache enable
+#define SCTLR_I (1UL << 12)   // instruction cache enable
+
 // output address bits [47:12] sit in place in the descriptor
 #define PTE_ADDR_MASK  0x0000fffffffff000UL
 #define PA2PTE(pa)     ((uint64)(pa) & PTE_ADDR_MASK)

@@ -106,6 +106,8 @@ int main() {
     log_msg("Freed page\n");
 
     kvminit();
+    kvminithart();
+    log_msg("MMU enabled\n");
 
     init_gicv3();
 
