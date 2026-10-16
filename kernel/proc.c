@@ -36,7 +36,7 @@ void proc_mapstacks(pagetable_t pagetable) {
         char *pa = kalloc();
         if (!pa)
             panic("proc_mapstacks");
-        if (mappages(pagetable, KSTACK(i), PGSIZE, (uint64)pa, PTE_KERN_DATA) != 0)
+        if (mappages(pagetable, KSTACK(i), PGSIZE, V2P(pa), PTE_KERN_DATA) != 0)
             panic("proc_mapstacks: map");
         ptable[i].kstack = KSTACK(i);
     }

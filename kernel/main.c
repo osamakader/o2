@@ -9,7 +9,7 @@
 #include "vm.h"
 
 static void setup_serial() {
-    pl011_init(0x9000000, 24000000);
+    pl011_init(P2V(UART0), 24000000);
 }
 
 void fiq_handler(struct trapframe *tf) {

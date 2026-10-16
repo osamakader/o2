@@ -6,7 +6,7 @@
 #include "mmu.h"
 #include "proc.h"
 
-// the kernel's page table, an identity map of RAM and devices.
+// the kernel's page table: RAM and devices at P2V(pa).
 pagetable_t kernel_pagetable;
 
 extern char stext[];  // kernel.ld: start of kernel text
@@ -22,12 +22,12 @@ pte_t *walk(pagetable_t pagetable, uint64 va, int alloc) {
     for (int level = 2; level > 0; level--) {
         pte_t *pte = &pagetable[PX(level, va)];
         if (*pte & PTE_VALID) {
-            pagetable = (pagetable_t)PTE2PA(*pte);
+            pagetable = (pagetable_t)P2V(PTE2PA(*pte));
         } else {
             if (!alloc || (pagetable = (pagetable_t)kalloc()) == 0)
                 return 0;
             memset(pagetable, 0, PGSIZE);
-            *pte = MKTABLE(pagetable);
+            *pte = MKTABLE(V2P(pagetable));
         }
     }
     return &pagetable[PX(0, va)];
@@ -68,18 +68,18 @@ static pagetable_t kvmmake(void) {
         panic("kvmmake");
     memset(pagetable, 0, PGSIZE);
 
-    kvmmap(pagetable, UART0, UART0, PGSIZE, PTE_KERN_DEVICE);
-    kvmmap(pagetable, GICD, GICD, GICD_SIZE, PTE_KERN_DEVICE);
-    kvmmap(pagetable, GICR, GICR, GICR_SIZE, PTE_KERN_DEVICE);
+    kvmmap(pagetable, P2V(UART0), UART0, PGSIZE, PTE_KERN_DEVICE);
+    kvmmap(pagetable, P2V(GICD), GICD, GICD_SIZE, PTE_KERN_DEVICE);
+    kvmmap(pagetable, P2V(GICR), GICR, GICR_SIZE, PTE_KERN_DEVICE);
 
     // RAM below the kernel image (qemu puts the DTB here)
-    kvmmap(pagetable, KERNBASE, KERNBASE, (uint64)stext - KERNBASE, PTE_KERN_DATA);
+    kvmmap(pagetable, P2V(KERNBASE), KERNBASE, V2P(stext) - KERNBASE, PTE_KERN_DATA);
 
     // kernel text: read-only, executable
-    kvmmap(pagetable, (uint64)stext, (uint64)stext, (uint64)etext - (uint64)stext, PTE_KERN_TEXT);
+    kvmmap(pagetable, (uint64)stext, V2P(stext), etext - stext, PTE_KERN_TEXT);
 
     // kernel data and the rest of RAM: read/write, never executable
-    kvmmap(pagetable, (uint64)etext, (uint64)etext, PHYSTOP - (uint64)etext, PTE_KERN_DATA);
+    kvmmap(pagetable, (uint64)etext, V2P(etext), PHYSTOP - V2P(etext), PTE_KERN_DATA);
 
     // a guarded kernel stack for each ptable slot
     proc_mapstacks(pagetable);

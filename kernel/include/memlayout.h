@@ -26,6 +26,12 @@
 
 #define PGSIZE 4096 // bytes per page
 
+// The kernel reaches all of RAM and the devices through a linear map:
+// virtual address = physical address + KVA_OFFSET.
+#define KVA_OFFSET 0
+#define P2V(pa) ((uint64)(pa) + KVA_OFFSET)
+#define V2P(va) ((uint64)(va) - KVA_OFFSET)
+
 // Kernel stacks live at the top of the address space, one per ptable
 // slot, each with an unmapped guard page below it so an overflow
 // faults instead of silently corrupting memory.

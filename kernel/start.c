@@ -1,6 +1,7 @@
 #include "types.h"
 #include "console.h"
 #include "param.h"
+#include "memlayout.h"
 
 __attribute__((aligned(16), section(".stack"))) char stack0[4096 * NCPU];
 
@@ -11,7 +12,7 @@ static uint32 get_cpu_id() {
 }
 
 static void setup_serial() {
-    pl011_init(0x9000000, 24000000);
+    pl011_init(P2V(UART0), 24000000);
 }
 
 void start(void) {

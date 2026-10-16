@@ -1,7 +1,8 @@
 #include "gicv3.h"
 #include "console.h"
+#include "memlayout.h"
 
-#define GICD_BASE 0x08000000
+#define GICD_BASE P2V(GICD)
 #define GICR_OFFSET 0xA0000
 
 #define GICD_CTRL 0x0000

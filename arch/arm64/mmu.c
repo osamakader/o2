@@ -1,4 +1,5 @@
 #include "types.h"
+#include "memlayout.h"
 #include "vm.h"
 #include "mmu.h"
 
@@ -16,7 +17,7 @@ void kvminithart(void) {
 
     asm volatile("msr mair_el1, %0" : : "r"(MAIR_VALUE));
     asm volatile("msr tcr_el1, %0" : : "r"(TCR_VALUE | (ips << TCR_IPS_SHIFT)));
-    asm volatile("msr ttbr0_el1, %0" : : "r"(kernel_pagetable));
+    asm volatile("msr ttbr0_el1, %0" : : "r"(V2P(kernel_pagetable)));
 
     // make the page-table writes visible to the walker, drop any
     // stale translations, then switch translation on.
