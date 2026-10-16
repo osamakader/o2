@@ -1,7 +1,22 @@
 #include "console.h"
+#include "spinlock.h"
+#include "cpu.h"
+
+// Serializes output from different CPUs, one log_msg() at a time.
+static struct spinlock cons_lock = { .name = "cons" };
+
+// Set by panic(); from then on output bypasses cons_lock, which the
+// panicking CPU may hold.
+static volatile int panicking;
 
 void log_msg(const char *msg) {
+    if (panicking) {
+        pl011_send(msg);
+        return;
+    }
+    acquire(&cons_lock);
     pl011_send(msg);
+    release(&cons_lock);
 }
 
 void log_hex(uint64 x)
@@ -37,8 +52,11 @@ void log_uint(uint64 x)
 
 void panic(const char *s)
 {
+  intr_off();
+  panicking = 1;
   log_msg("panic: ");
   log_msg(s);
   log_msg("\n");
-  for(;;);
+  for(;;)
+    asm volatile("wfi");
 }
