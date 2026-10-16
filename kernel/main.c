@@ -107,7 +107,7 @@ int main() {
 
     kvminit();
     kvminithart();
-    log_msg("MMU enabled\n");
+    log_msg("Kernel page table installed\n");
 
     init_gicv3();
 
