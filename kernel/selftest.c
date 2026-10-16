@@ -115,6 +115,25 @@ static void kthread_sleeplock(void *arg) {
     printf("sleeplock thread %ld done on cpu %d\n", (long)arg, cpuid());
 }
 
+// Reads console input line by line and echoes it back, so typing at
+// the serial console exercises UART interrupt -> consoleintr() ->
+// wakeup() -> consoleread(). ^D reports end of file.
+static void kthread_console(void *arg) {
+    char line[64];
+
+    for (;;) {
+        int n = consoleread(line, sizeof(line) - 1);
+        if (n == 0) {
+            printf("console: eof\n");
+            continue;
+        }
+        if (line[n - 1] == '\n')
+            n--;
+        line[n] = '\0';
+        printf("console: got \"%s\" on cpu %d\n", line, cpuid());
+    }
+}
+
 static void spawn(void (*fn)(void *), void *arg) {
     if (kthread_create(fn, arg) == 0)
         panic("selftest: kthread_create");
@@ -122,6 +141,7 @@ static void spawn(void (*fn)(void *), void *arg) {
 
 // Create the self-test threads. Called once from main() on CPU 0.
 void selftest(void) {
+    spawn(kthread_console, 0);
     spawn(kthread_test, "A");
     spawn(kthread_test, "B");
     spawn(kthread_spin, "C");
