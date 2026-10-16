@@ -44,6 +44,7 @@ void log_msg(const char *msg) {
     cons_end(locked);
 }
 
+// pl011_send() turns '\n' into "\r\n".
 static void cons_putc(char c) {
     char s[2] = { c, '\0' };
     pl011_send(s);
@@ -74,8 +75,6 @@ static void vprintf(const char *fmt, va_list ap) {
     for (int i = 0; fmt[i]; i++) {
         char c = fmt[i];
         if (c != '%') {
-            if (c == '\n')
-                cons_putc('\r');
             cons_putc(c);
             continue;
         }
@@ -199,8 +198,6 @@ static void echo(int c) {
         cons_putc(' ');
         cons_putc('\b');
     } else {
-        if (c == '\n')
-            cons_putc('\r');
         cons_putc(c);
     }
     cons_end(locked);
