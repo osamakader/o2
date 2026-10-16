@@ -28,10 +28,15 @@ static void kthread_spin(void *arg) {
     }
 }
 
+static void spawn(void (*fn)(void *), void *arg) {
+    if (kthread_create(fn, arg) == 0)
+        panic("selftest: kthread_create");
+}
+
 // Create the self-test threads. Called once from main() on CPU 0.
 void selftest(void) {
-    kthread_create(kthread_test, "A");
-    kthread_create(kthread_test, "B");
-    kthread_create(kthread_spin, "C");
-    kthread_create(kthread_spin, "D");
+    spawn(kthread_test, "A");
+    spawn(kthread_test, "B");
+    spawn(kthread_spin, "C");
+    spawn(kthread_spin, "D");
 }
