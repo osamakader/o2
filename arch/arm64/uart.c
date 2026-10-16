@@ -73,8 +73,8 @@ int pl011_reset(const struct pl011 *dev)
         lcr |= LCR_STP2;
 
     write_reg(dev, LCR_OFFSET, lcr);
-    // mask all interrupts 
-    write_reg(dev, IMSC_OFFSET, 0x7ff);
+    // mask all interrupts: a set IMSC bit enables that interrupt
+    write_reg(dev, IMSC_OFFSET, 0);
 
     // disable DMA 
     write_reg(dev, DMACR_OFFSET, 0x0);
