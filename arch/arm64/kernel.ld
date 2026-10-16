@@ -44,6 +44,7 @@ SECTIONS
 
   /* data starts on its own page, apart from read-only data */
   . = ALIGN(0x1000);
+  PROVIDE(sdata = .);
 
   .data : AT(ADDR(.data) - KVA_OFFSET) {
     . = ALIGN(16);

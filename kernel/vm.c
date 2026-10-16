@@ -11,6 +11,7 @@ pagetable_t kernel_pagetable;
 
 extern char stext[];  // kernel.ld: start of kernel text
 extern char etext[];  // kernel.ld: first page after kernel text
+extern char sdata[];  // kernel.ld: first page of writable data
 
 // Return the address of the leaf PTE for va, allocating the
 // intermediate tables if alloc is set. Returns 0 if a table is
@@ -78,8 +79,11 @@ static pagetable_t kvmmake(void) {
     // kernel text: read-only, executable
     kvmmap(pagetable, (uint64)stext, V2P(stext), etext - stext, PTE_KERN_TEXT);
 
+    // read-only data
+    kvmmap(pagetable, (uint64)etext, V2P(etext), sdata - etext, PTE_KERN_RODATA);
+
     // kernel data and the rest of RAM: read/write, never executable
-    kvmmap(pagetable, (uint64)etext, V2P(etext), PHYSTOP - V2P(etext), PTE_KERN_DATA);
+    kvmmap(pagetable, (uint64)sdata, V2P(sdata), PHYSTOP - V2P(sdata), PTE_KERN_DATA);
 
     // a guarded kernel stack for each ptable slot
     proc_mapstacks(pagetable);
