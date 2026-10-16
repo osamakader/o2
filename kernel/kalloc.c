@@ -6,6 +6,7 @@
 #include "memlayout.h"
 #include "defs.h"
 #include "console.h"
+#include "spinlock.h"
 
 extern char end[]; // first address after kernel.
                    // defined by kernel.ld.
@@ -15,6 +16,7 @@ struct run {
 };
 
 struct {
+  struct spinlock lock;
   struct run *freelist;
 } kmem;
 
@@ -35,8 +37,10 @@ void kfree(void *pa)
 
   r = (struct run*)pa;
 
+  acquire(&kmem.lock);
   r->next = kmem.freelist;
   kmem.freelist = r;
+  release(&kmem.lock);
 }
 
 void freerange(void *pa_start, void *pa_end)
@@ -49,6 +53,7 @@ void freerange(void *pa_start, void *pa_end)
 
 void kinit()
 {
+  initlock(&kmem.lock, "kmem");
   freerange(end, (void*)P2V(PHYSTOP));
 }
 
@@ -60,9 +65,11 @@ void * kalloc(void)
 {
   struct run *r;
 
+  acquire(&kmem.lock);
   r = kmem.freelist;
   if(r)
     kmem.freelist = r->next;
+  release(&kmem.lock);
 
   if(r)
     memset((char*)r, 5, PGSIZE); // fill with junk
