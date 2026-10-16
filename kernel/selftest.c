@@ -6,6 +6,7 @@
 #include "timer.h"
 #include "cpu.h"
 #include "spinlock.h"
+#include "sleeplock.h"
 
 // Two threads that take turns via yield() to exercise the scheduler.
 static void kthread_test(void *arg) {
@@ -90,6 +91,30 @@ static void kthread_consumer(void *arg) {
            PC_PRODUCERS * PC_ITEMS, sleeps, psleeps);
 }
 
+// Threads take a sleeplock and hold it across sleep_ticks(), as a
+// driver caller would across disk I/O. Two holders at once would show
+// up as inside != 1.
+#define SL_THREADS 3
+#define SL_ROUNDS  3
+
+static struct sleeplock sl;
+static int sl_inside;   // holders inside the critical section
+
+static void kthread_sleeplock(void *arg) {
+    for (int i = 0; i < SL_ROUNDS; i++) {
+        acquiresleep(&sl);
+        if (!holdingsleep(&sl))
+            panic("sleeplock: not holding after acquiresleep");
+        int inside = __atomic_add_fetch(&sl_inside, 1, __ATOMIC_SEQ_CST);
+        if (inside != 1)
+            panic("sleeplock: %d holders", inside);
+        sleep_ticks(2);
+        __atomic_sub_fetch(&sl_inside, 1, __ATOMIC_SEQ_CST);
+        releasesleep(&sl);
+    }
+    printf("sleeplock thread %ld done on cpu %d\n", (long)arg, cpuid());
+}
+
 static void spawn(void (*fn)(void *), void *arg) {
     if (kthread_create(fn, arg) == 0)
         panic("selftest: kthread_create");
@@ -104,6 +129,9 @@ void selftest(void) {
     spawn(kthread_sleeper, "E");
     spawn(kthread_sleeper, "F");
     spawn(kthread_consumer, 0);
+    initsleeplock(&sl, "selftest");
+    for (long i = 0; i < SL_THREADS; i++)
+        spawn(kthread_sleeplock, (void *)i);
     for (int i = 0; i < PC_PRODUCERS; i++)
         spawn(kthread_producer, 0);
 }
