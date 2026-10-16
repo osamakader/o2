@@ -3,6 +3,14 @@
 
 #include "types.h"
 
+// This core's index: MPIDR_EL1 Aff0, which qemu virt numbers 0..ncpu-1.
+// Only stable while interrupts are off; a thread may migrate otherwise.
+static inline int cpuid(void) {
+    uint64 mpidr;
+    asm volatile("mrs %0, mpidr_el1" : "=r"(mpidr));
+    return mpidr & 0xff;
+}
+
 // IRQ mask helpers for the current core (PSTATE.I).
 
 static inline void intr_on(void) {

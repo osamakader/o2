@@ -3,6 +3,7 @@
 
 #include "types.h"
 #include "vm.h"
+#include "param.h"
 
 enum procstate { UNUSED, USED, RUNNABLE, RUNNING, ZOMBIE };
 
@@ -28,7 +29,17 @@ struct proc {
     uint64 kstack;   // VA of the kernel stack, KSTACK(slot)
 };
 
+// Per-CPU state.
+struct cpu {
+    struct proc *proc;        // thread running on this cpu, or 0
+    struct context context;   // swtch() here to enter scheduler()
+};
+
+extern struct cpu cpus[NCPU];
+
 void swtch(struct context *old, struct context *new);
+
+struct cpu *mycpu(void);
 
 void proc_mapstacks(pagetable_t pagetable);
 struct proc *kthread_create(void (*fn)(void *), void *arg);

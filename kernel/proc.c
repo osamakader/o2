@@ -16,17 +16,16 @@ extern void kthread_trampoline(void);
 // and UNUSED == 0, so every slot starts out free with no extra init.
 static struct proc ptable[NPROC];
 
-// The proc currently running on this core, i.e. the one that owns the
-// stack scheduler() last swtch()'d into. yield() uses this instead of a
-// hardcoded proc so any thread made via kthread_create() can call it.
-static struct proc *current;
+struct cpu cpus[NCPU];
 
-// Context of scheduler(): yield() swtch()es back here.
-// Becomes per-CPU once secondary cores run threads.
-static struct context sched_ctx;
+// This core's struct cpu. Call with interrupts off.
+struct cpu *mycpu(void) {
+    return &cpus[cpuid()];
+}
 
+// The thread running on this core, or 0 in the scheduler.
 struct proc *myproc(void) {
-    return current;
+    return mycpu()->proc;
 }
 
 // Allocate a page for each ptable slot's kernel stack and map it at
@@ -72,12 +71,12 @@ struct proc *kthread_create(void (*fn)(void *), void *arg) {
 // scheduler half way through; the caller's IRQ state is restored when
 // this thread is resumed.
 void yield() {
-    struct proc *p = current;
+    struct proc *p = myproc();
     int intena = intr_get();
 
     intr_off();
     p->state = RUNNABLE;
-    swtch(&p->ctx, &sched_ctx);
+    swtch(&p->ctx, &mycpu()->context);
     if (intena)
         intr_on();
 }
@@ -87,10 +86,10 @@ void yield() {
 // yet; mark it ZOMBIE and let scheduler() reclaim it once we are off
 // that stack.
 void kthread_exit(void) {
-    struct proc *p = current;
+    struct proc *p = myproc();
     intr_off();
     p->state = ZOMBIE;
-    swtch(&p->ctx, &sched_ctx);
+    swtch(&p->ctx, &mycpu()->context);
     panic("zombie thread resumed");
 }
 
@@ -98,6 +97,8 @@ void kthread_exit(void) {
 // switching to each RUNNABLE thread until it yields or exits, and
 // reclaims exited threads once it is back on its own stack.
 void scheduler(void) {
+    struct cpu *c = mycpu();
+
     for (;;) {
         int ran = 0;
 
@@ -112,9 +113,9 @@ void scheduler(void) {
                 continue;
 
             p->state = RUNNING;
-            current = p;
-            swtch(&sched_ctx, &p->ctx);
-            current = 0;
+            c->proc = p;
+            swtch(&c->context, &p->ctx);
+            c->proc = 0;
             ran = 1;
 
             // the kstack stays mapped for the slot's next thread
