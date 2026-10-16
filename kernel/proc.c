@@ -4,6 +4,8 @@
 #include "proc.h"
 #include "console.h"
 #include "cpu.h"
+#include "vm.h"
+#include "mmu.h"
 
 // Entry point for a freshly created kernel thread (arch/arm64/swtch.S).
 // swtch() restores x19/x20 as callee-saved registers, so kthread_create()
@@ -27,18 +29,26 @@ struct proc *myproc(void) {
     return current;
 }
 
-void procinit(struct proc *p) {
-    memset(&p->ctx, 0, sizeof(p->ctx));
-    p->state = UNUSED;
-    p->kstack = 0;
+// Allocate a page for each ptable slot's kernel stack and map it at
+// KSTACK(slot) in the kernel page table. Called once from kvmmake().
+void proc_mapstacks(pagetable_t pagetable) {
+    for (int i = 0; i < NPROC; i++) {
+        char *pa = kalloc();
+        if (!pa)
+            panic("proc_mapstacks");
+        if (mappages(pagetable, KSTACK(i), PGSIZE, (uint64)pa, PTE_KERN_DATA) != 0)
+            panic("proc_mapstacks: map");
+        ptable[i].kstack = KSTACK(i);
+    }
 }
 
 static struct proc *allocproc(void) {
     for (int i = 0; i < NPROC; i++) {
-        if (ptable[i].state == UNUSED) {
-            procinit(&ptable[i]);
-            ptable[i].state = USED;
-            return &ptable[i];
+        struct proc *p = &ptable[i];
+        if (p->state == UNUSED) {
+            memset(&p->ctx, 0, sizeof(p->ctx));
+            p->state = USED;
+            return p;
         }
     }
     return 0;
@@ -49,14 +59,8 @@ struct proc *kthread_create(void (*fn)(void *), void *arg) {
     if (!p)
         return 0;
 
-    p->kstack = kalloc();
-    if (!p->kstack) {
-        p->state = UNUSED;
-        return 0;
-    }
-
     p->ctx.ra = (uint64)kthread_trampoline;
-    p->ctx.sp = (uint64)p->kstack + PGSIZE;
+    p->ctx.sp = p->kstack + PGSIZE;
     p->ctx.x19 = (uint64)arg;
     p->ctx.x20 = (uint64)fn;
     p->state = RUNNABLE;
@@ -79,8 +83,9 @@ void yield() {
 }
 
 // Called by the currently running thread to terminate itself. The
-// thread is still on its own kstack here, so it can't free it; mark it
-// ZOMBIE and let scheduler() reclaim the slot once we are off that stack.
+// thread is still on its own kstack here, so the slot can't be reused
+// yet; mark it ZOMBIE and let scheduler() reclaim it once we are off
+// that stack.
 void kthread_exit(void) {
     struct proc *p = current;
     intr_off();
@@ -112,11 +117,9 @@ void scheduler(void) {
             current = 0;
             ran = 1;
 
-            if (p->state == ZOMBIE) {
-                kfree(p->kstack);
-                p->kstack = 0;
+            // the kstack stays mapped for the slot's next thread
+            if (p->state == ZOMBIE)
                 p->state = UNUSED;
-            }
         }
 
         // nothing to run: sleep until the next interrupt. wfi wakes on a

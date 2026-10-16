@@ -25,5 +25,10 @@
 
 #define PGSIZE 4096 // bytes per page
 
+// Kernel stacks live at the top of the address space, one per ptable
+// slot, each with an unmapped guard page below it so an overflow
+// faults instead of silently corrupting memory.
+#define KSTACK(i) (MAXVA - ((i) + 1) * 2 * PGSIZE)
+
 #define PGROUNDUP(sz)  (((sz)+PGSIZE-1) & ~(PGSIZE-1))
 #define PGROUNDDOWN(a) (((a)) & ~(PGSIZE-1))

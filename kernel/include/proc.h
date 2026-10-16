@@ -2,6 +2,7 @@
 #define PROC_H
 
 #include "types.h"
+#include "vm.h"
 
 enum procstate { UNUSED, USED, RUNNABLE, RUNNING, ZOMBIE };
 
@@ -24,12 +25,12 @@ struct context {
 struct proc {
     enum procstate state;
     struct context ctx;
-    void *kstack;
+    uint64 kstack;   // VA of the kernel stack, KSTACK(slot)
 };
 
 void swtch(struct context *old, struct context *new);
 
-void procinit(struct proc *p);
+void proc_mapstacks(pagetable_t pagetable);
 struct proc *kthread_create(void (*fn)(void *), void *arg);
 void yield(void);
 void kthread_exit(void) __attribute__((noreturn));

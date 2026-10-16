@@ -4,6 +4,7 @@
 #include "console.h"
 #include "vm.h"
 #include "mmu.h"
+#include "proc.h"
 
 // the kernel's page table, an identity map of RAM and devices.
 pagetable_t kernel_pagetable;
@@ -79,6 +80,9 @@ static pagetable_t kvmmake(void) {
 
     // kernel data and the rest of RAM: read/write, never executable
     kvmmap(pagetable, (uint64)etext, (uint64)etext, PHYSTOP - (uint64)etext, PTE_KERN_DATA);
+
+    // a guarded kernel stack for each ptable slot
+    proc_mapstacks(pagetable);
 
     return pagetable;
 }
