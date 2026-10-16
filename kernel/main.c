@@ -34,28 +34,6 @@ void check_level() {
     }
 }
 
-// Two threads that take turns via yield() to exercise the scheduler.
-static void kthread_test(void *arg) {
-    const char *name = arg;
-    for (int i = 0; i < 3; i++) {
-        printf("%s iteration %d on cpu %d\n", name, i, cpuid());
-        yield();
-    }
-    printf("%s exiting\n", name);
-}
-
-// Busy-waits without ever calling yield(), so it only makes progress
-// alongside another spinner if the timer preempts it.
-static void kthread_spin(void *arg) {
-    const char *name = arg;
-    for (int i = 0; i < 3; i++) {
-        uint64 until = *(volatile uint64 *)&ticks + 10;
-        while (*(volatile uint64 *)&ticks < until)
-            ;
-        printf("%s spin %d on cpu %d\n", name, i, cpuid());
-    }
-}
-
 // Power on the other CPUs. Each enters at the physical _entry with the
 // MMU off and comes up through entry.S into main(). PSCI rejects the
 // first MPIDR that has no CPU behind it.
@@ -92,10 +70,7 @@ int main() {
         gic_init();
         gic_inithart();
 
-        kthread_create(kthread_test, "A");
-        kthread_create(kthread_test, "B");
-        kthread_create(kthread_spin, "C");
-        kthread_create(kthread_spin, "D");
+        selftest();
 
         init_timer();
 

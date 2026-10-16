@@ -18,6 +18,7 @@ OBJS = \
   kernel/kalloc.o \
   kernel/proc.o \
   kernel/spinlock.o \
+  kernel/selftest.o \
   kernel/vm.o \
 
 CFLAGS = -Wall -Werror -O -fno-omit-frame-pointer -ggdb -gdwarf-2
