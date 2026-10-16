@@ -6,6 +6,14 @@ KVA_OFFSET = 0xFFFFFFC000000000;
 /* qemu jumps to the physical entry point with the MMU off */
 ENTRY( _entry_phys )
 
+/* separate load segments so none is writable and executable */
+PHDRS
+{
+  text   PT_LOAD FLAGS(5);   /* R-X */
+  rodata PT_LOAD FLAGS(4);   /* R-- */
+  data   PT_LOAD FLAGS(6);   /* RW- */
+}
+
 SECTIONS
 {
   /*
@@ -25,21 +33,24 @@ SECTIONS
     KEEP(*(.vectors .vectors.*))
     . = ALIGN(0x1000);
     PROVIDE(etext = .);
-  }
+  } :text
 
   .rodata : AT(ADDR(.rodata) - KVA_OFFSET) {
     . = ALIGN(16);
     *(.srodata .srodata.*) /* do not need to distinguish this from .rodata */
     . = ALIGN(16);
     *(.rodata .rodata.*)
-  }
+  } :rodata
+
+  /* data starts on its own page, apart from read-only data */
+  . = ALIGN(0x1000);
 
   .data : AT(ADDR(.data) - KVA_OFFSET) {
     . = ALIGN(16);
     *(.sdata .sdata.*) /* do not need to distinguish this from .data */
     . = ALIGN(16);
     *(.data .data.*)
-  }
+  } :data
 
   .stack (NOLOAD) : AT(ADDR(.stack) - KVA_OFFSET) {
     . = ALIGN(16);
