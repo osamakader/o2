@@ -3,17 +3,33 @@
 #include "timer.h"
 #include "proc.h"
 #include "cpu.h"
+#include "spinlock.h"
 
 // Timer interrupts seen by CPU 0. Every CPU has its own timer, so
 // counting on all of them would advance ticks ncpu times per tick.
-// Single writer; readers on other CPUs see each aligned store whole.
+// Updated under tickslock; sleepers wait on &ticks.
+struct spinlock tickslock = { .name = "time" };
 uint64 ticks;
 
 void timer_irq()
 {
-  if (cpuid() == 0)
+  if (cpuid() == 0) {
+    acquire(&tickslock);
     ticks++;
+    wakeup(&ticks);
+    release(&tickslock);
+  }
   rearm_timer();
+}
+
+// Block the calling thread for at least n ticks.
+void sleep_ticks(uint64 n)
+{
+  acquire(&tickslock);
+  uint64 ticks0 = ticks;
+  while (ticks - ticks0 < n)
+    sleep(&ticks, &tickslock);
+  release(&tickslock);
 }
 
 // interrupts handler
