@@ -109,8 +109,3 @@ void gic_inithart() {
     write_icc_igrpen1_el1(1);
     isb();
 }
-
-void enable_irqs() {
-    log_msg("enabling interrupts\n");
-    __asm__ volatile ("msr daifclr, #0x3");
-}

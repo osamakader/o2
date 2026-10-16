@@ -7,6 +7,9 @@
 #include "trap.h"
 #include "defs.h"
 #include "vm.h"
+#include "psci.h"
+#include "param.h"
+#include "cpu.h"
 
 static void setup_serial() {
     pl011_init(P2V(UART0), 24000000);
@@ -66,7 +69,7 @@ void check_level() {
 static void kthread_test(void *arg) {
     const char *name = arg;
     for (int i = 0; i < 3; i++) {
-        printf("%s iteration %d\n", name, i);
+        printf("%s iteration %d on cpu %d\n", name, i, cpuid());
         yield();
     }
     printf("%s exiting\n", name);
@@ -80,38 +83,60 @@ static void kthread_spin(void *arg) {
         uint64 until = *(volatile uint64 *)&ticks + 10;
         while (*(volatile uint64 *)&ticks < until)
             ;
-        printf("%s spin %d\n", name, i);
+        printf("%s spin %d on cpu %d\n", name, i, cpuid());
+    }
+}
+
+// Power on the other CPUs. Each enters at the physical _entry with the
+// MMU off and comes up through entry.S into main(). PSCI rejects the
+// first MPIDR that has no CPU behind it.
+static void start_secondaries(void) {
+    extern char _entry[];
+
+    for (int i = 1; i < NCPU; i++) {
+        long r = psci_cpu_on(i, V2P(_entry));
+        if (r == PSCI_INVALID_PARAMETERS)
+            break;
+        if (r != PSCI_SUCCESS)
+            printf("cpu %d: psci_cpu_on failed: %ld\n", i, r);
     }
 }
 
 int main() {
-    log_msg("Starting kernel ...\n");
-    check_level();
+    if (cpuid() == 0) {
+        log_msg("Starting kernel ...\n");
+        check_level();
 
-    kinit();
-    
-    void *p = kalloc();
-    printf("Allocated page at: %p\n", p);
+        kinit();
 
-    kfree(p);
-    log_msg("Freed page\n");
+        void *p = kalloc();
+        printf("Allocated page at: %p\n", p);
 
-    procinit();
-    kvminit();
-    kvminithart();
-    log_msg("Kernel page table installed\n");
+        kfree(p);
+        log_msg("Freed page\n");
 
-    gic_init();
-    gic_inithart();
+        procinit();
+        kvminit();
+        kvminithart();
+        log_msg("Kernel page table installed\n");
 
-    kthread_create(kthread_test, "A");
-    kthread_create(kthread_test, "B");
-    kthread_create(kthread_spin, "C");
-    kthread_create(kthread_spin, "D");
+        gic_init();
+        gic_inithart();
 
-    init_timer();
-    enable_irqs();
-    log_msg("IRQs are enabled\n");
+        kthread_create(kthread_test, "A");
+        kthread_create(kthread_test, "B");
+        kthread_create(kthread_spin, "C");
+        kthread_create(kthread_spin, "D");
+
+        init_timer();
+
+        start_secondaries();
+    } else {
+        kvminithart();
+        gic_inithart();
+        init_timer();
+        printf("cpu %d starting\n", cpuid());
+    }
 
     scheduler();
 }

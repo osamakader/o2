@@ -3,6 +3,5 @@
 
 void gic_init();
 void gic_inithart();
-void enable_irqs();
 
 #endif
