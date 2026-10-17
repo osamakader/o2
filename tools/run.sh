@@ -1,14 +1,18 @@
 #!/bin/sh
 # Boot the kernel non-interactively and print its serial output.
 #
-#   tools/run.sh [-a arch] [-c cpus] [-t seconds] [-i input] [-d delay] [-f]
+#   tools/run.sh [-a arch] [-c cpus] [-t seconds] [-i input] [-d delay]
+#                [-l line-delay] [-f]
 #
-# -i feeds the file to the console, -d seconds after boot (default 3).
+# -i feeds the file to the console, -d seconds after boot (default 3);
+# with -l, one line at a time (ending in CR, like a terminal) with
+# line-delay seconds in between, since the console buffers only 128
+# characters of unread input.
 # -f starts from a freshly made fs.img (it otherwise persists).
 # Uses the QEMU command line from the Makefile (make print-qemu).
 
-ARCH=arm64 CPUS=3 TIMEOUT=10 INPUT= DELAY=3 FRESH=
-while getopts a:c:t:i:d:f o; do
+ARCH=arm64 CPUS=3 TIMEOUT=10 INPUT= DELAY=3 FRESH= LDELAY=
+while getopts a:c:t:i:d:l:f o; do
     case $o in
     a) ARCH=$OPTARG ;;
     c) CPUS=$OPTARG ;;
@@ -16,6 +20,7 @@ while getopts a:c:t:i:d:f o; do
     i) INPUT=$OPTARG ;;
     d) DELAY=$OPTARG ;;
     f) FRESH=1 ;;
+    l) LDELAY=$OPTARG ;;
     *) exit 2 ;;
     esac
 done
@@ -29,8 +34,21 @@ CMD=$(make -s ARCH="$ARCH" CPUS="$CPUS" print-qemu) || exit 1
 # port on stdio instead.
 CMD=$(echo "$CMD" | sed 's/ -nographic/ -display none -monitor none -serial stdio/')
 
+feed() {
+    sleep "$DELAY"
+    if [ -n "$LDELAY" ]; then
+        while IFS= read -r line; do
+            printf '%s\r' "$line"
+            sleep "$LDELAY"
+        done < "$INPUT"
+    else
+        cat "$INPUT"
+    fi
+    sleep "$TIMEOUT"
+}
+
 if [ -n "$INPUT" ]; then
-    (sleep "$DELAY"; cat "$INPUT"; sleep "$TIMEOUT") | timeout "$TIMEOUT" $CMD 2>&1 | tr -d '\r'
+    feed | timeout "$TIMEOUT" $CMD 2>&1 | tr -d '\r'
 else
     timeout "$TIMEOUT" $CMD < /dev/null 2>&1 | tr -d '\r'
 fi
