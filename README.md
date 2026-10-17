@@ -54,6 +54,15 @@ isn't ASID-tagged and flushes on ASID changes itself, which makes the
 arm64 ASID path slower under QEMU, so by default arm64 runs everything
 under ASID 0 and flushes the TLB on each return to user mode instead.
 
+## Floating point
+
+User programs may use floating point and SIMD; the kernel itself is
+built without them. FP state is switched lazily: a process's first FP
+instruction traps (arm64: CPACR_EL1.FPEN, riscv64: sstatus.FS off), and
+the kernel then loads its registers. A process that never uses FP
+costs nothing, and one that does has its registers saved only when it
+is switched out.
+
 ## Credits
 
 Much of the arch-independent kernel (file system, log, buffer cache,
