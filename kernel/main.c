@@ -36,7 +36,7 @@ int main(int boot) {
 
         // console input: UART receive interrupts, handled on this CPU
         uart_enable_rx_irq();
-        intc_enable(UART0_IRQ, cpuid());
+        irq_register(UART0_IRQ, uartintr, cpuid());
 
         userinit();   // first, so init is pid 1
         selftest();   // before any CPU schedules: init hasn't run yet

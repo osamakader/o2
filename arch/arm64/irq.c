@@ -7,7 +7,7 @@
 #include "proc.h"
 #include "cpu.h"
 #include "timer.h"
-#include "uart.h"
+#include "intc.h"
 #include "trap.h"
 
 #define TIMER_IRQ 27   // EL1 virtual timer PPI
@@ -29,11 +29,9 @@ void handle_irq(struct trapframe *tf)
     clockintr();
     timer_rearm();
     break;
-  case UART0_IRQ:
-    uartintr();
-    break;
   default:
-    printf("unexpected interrupt %d on cpu %d\n", id, cpuid());
+    if (!irq_handle(id))
+      printf("unexpected interrupt %d on cpu %d\n", id, cpuid());
     break;
   }
 

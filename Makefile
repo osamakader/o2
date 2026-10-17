@@ -10,6 +10,7 @@ KOBJS = \
   kernel/main.o \
   kernel/console.o \
   kernel/clock.o \
+  kernel/irq.o \
   kernel/string.o \
   kernel/kalloc.o \
   kernel/proc.o \

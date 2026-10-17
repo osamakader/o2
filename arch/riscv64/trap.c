@@ -8,7 +8,7 @@
 #include "cpu.h"
 #include "trap.h"
 #include "timer.h"
-#include "uart.h"
+#include "intc.h"
 #include "vm.h"
 #include "defs.h"
 
@@ -64,9 +64,7 @@ static int devintr(uint64 cause)
         // supervisor external interrupt, via the PLIC
         int irq = plic_claim();
 
-        if (irq == UART0_IRQ)
-            uartintr();
-        else if (irq)
+        if (irq && !irq_handle(irq))
             printf("unexpected interrupt irq=%d\n", irq);
 
         // the PLIC allows each device to raise at most one interrupt
