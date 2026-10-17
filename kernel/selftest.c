@@ -197,7 +197,7 @@ void selftest(void) {
 }
 
 // File system, read-only: list the root directory mkfs made, and read
-// README.md through the inode layer.
+// README through the inode layer.
 static void kthread_fs_read(void *arg) {
     struct dirent de;
     char buf[8];
@@ -223,18 +223,18 @@ static void kthread_fs_read(void *arg) {
     printf("\n");
     iunlockput(dp);
 
-    struct inode *ip = namei("/README.md");
+    struct inode *ip = namei("/README");
     if (ip == 0)
-        panic("fs test: no /README.md");
+        panic("fs test: no /README");
     ilock(ip);
     if (ip->type != T_FILE || readi(ip, 0, (uint64)buf, 0, 4) != 4 ||
         memcmp(buf, "# o2", 4) != 0)
-        panic("fs test: README.md content");
+        panic("fs test: README content");
     uint size = ip->size;
     iunlockput(ip);
     end_op();
 
-    printf("fs read ok: %d entries, README.md %d bytes\n", n, size);
+    printf("fs read ok: %d entries, README %d bytes\n", n, size);
 }
 
 // Free data blocks (bitmap) and free inodes, read from disk.

@@ -1,5 +1,5 @@
 // User-mode tests: processes, memory, faults, files, directories and
-// pipes. Run from the shell: usertests
+// pipes. Run from the shell: o2tests
 
 #include "types.h"
 #include "user.h"
@@ -13,7 +13,7 @@ static int failed;
 
 static void fail(const char *test, const char *why)
 {
-  printf("usertests: %s FAILED: %s\n", test, why);
+  printf("o2tests: %s FAILED: %s\n", test, why);
   failed = 1;
 }
 
@@ -290,7 +290,7 @@ static void test_ps(void)
   for(int i = 0; i < n; i++){
     if(procs[i].pid == me){
       seen_me = 1;
-      if(procs[i].state != PS_RUNNING || procs[i].kthread || strcmp(procs[i].name, "usertests") != 0)
+      if(procs[i].state != PS_RUNNING || procs[i].kthread || strcmp(procs[i].name, "o2tests") != 0)
         fail("ps", "self");
     }
     if(procs[i].pid == pid){
@@ -308,7 +308,7 @@ static void test_ps(void)
   wait(0);
 }
 
-static void usertests(void)
+static void o2tests(void)
 {
   struct { const char *name; void (*fn)(void); } tests[] = {
     { "forkwait", test_forkwait },
@@ -324,13 +324,13 @@ static void usertests(void)
   for(int i = 0; i < sizeof(tests) / sizeof(tests[0]); i++){
     int before = failed;
     tests[i].fn();
-    printf("usertests: %s %s\n", tests[i].name, failed == before ? "ok" : "FAILED");
+    printf("o2tests: %s %s\n", tests[i].name, failed == before ? "ok" : "FAILED");
   }
-  printf(failed ? "usertests: SOME TESTS FAILED\n" : "usertests: ALL TESTS PASSED\n");
+  printf(failed ? "o2tests: SOME TESTS FAILED\n" : "o2tests: ALL TESTS PASSED\n");
 }
 
 int main(void)
 {
-  usertests();
+  o2tests();
   exit(failed);
 }

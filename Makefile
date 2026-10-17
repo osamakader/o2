@@ -153,7 +153,15 @@ $(B)/user/_%: $(B)/user/%.o $(ULIB) user/$(ARCH)/user.ld
 	$(LD) $(LDFLAGS) -T user/$(ARCH)/user.ld -o $@ $< $(ULIB)
 	$(OBJDUMP) -S $@ > $(B)/user/$*.asm
 
-.PRECIOUS: $(B)/user/%.o
+# xv6's own user programs (user/xv6), built unmodified: their
+# kernel/*.h and user/user.h includes resolve through user/xv6/include.
+$(B)/user/xv6/%.o: CFLAGS += -I user/xv6/include
+
+$(B)/user/xv6/_%: $(B)/user/xv6/%.o $(ULIB) user/$(ARCH)/user.ld
+	$(LD) $(LDFLAGS) -T user/$(ARCH)/user.ld -o $@ $< $(ULIB)
+	$(OBJDUMP) -S $@ > $(B)/user/xv6/$*.asm
+
+.PRECIOUS: $(B)/user/%.o $(B)/user/xv6/%.o
 
 clean:
 	rm -rf build
@@ -181,11 +189,19 @@ UPROGS = \
   $(B)/user/_pwd \
   $(B)/user/_rm \
   $(B)/user/_sh \
-  $(B)/user/_usertests \
+  $(B)/user/_o2tests \
+  $(B)/user/xv6/_usertests \
+  $(B)/user/xv6/_grind \
+  $(B)/user/xv6/_stressfs \
   $(B)/user/_wc \
 
-$(FSIMG): $(MKFS) README.md $(UPROGS)
-	$(MKFS) $@ README.md $(UPROGS) > /dev/null
+# README.md goes into the file system as README (xv6 tests read it)
+$(B)/README: README.md
+	@mkdir -p $(dir $@)
+	cp $< $@
+
+$(FSIMG): $(MKFS) $(B)/README $(UPROGS)
+	$(MKFS) $@ $(B)/README $(UPROGS) > /dev/null
 
 QEMUOPTS += -kernel $(KERNEL) -m 128M -smp $(CPUS) -nographic
 QEMUOPTS += -global virtio-mmio.force-legacy=false
