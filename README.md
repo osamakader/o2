@@ -39,8 +39,12 @@ User page tables don't map the kernel. On riscv64, as in xv6, each
 maps only the process's memory, a trampoline page and its trap frame;
 traps switch `satp` to the kernel page table in the trampoline. On
 arm64 (KPTI), TTBR1 holds a table with just the trampoline while user
-code runs, and the trampoline vectors switch it back on entry. Both
-flush the TLB on the way out, since there are no ASIDs yet.
+code runs, and the trampoline vectors switch it back on entry. Each
+process slot has its own ASID and the kernel uses ASID 0, with all
+mappings non-global, so crossings don't flush the TLB; an ASID is
+flushed on every hart when its address space shrinks, is replaced by
+exec, or is freed. (QEMU's TLB isn't ASID-tagged: it flushes on ASID
+changes itself, so the benefit only shows on hardware.)
 
 ## Credits
 
