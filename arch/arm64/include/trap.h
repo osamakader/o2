@@ -14,6 +14,12 @@ struct trapframe {
 
 _Static_assert(sizeof(struct trapframe) == 288, "exceptions.S TF_SIZE");
 
+// System call convention: number in x8, arguments in x0-x5, result in
+// x0. Generic code (kernel/syscall.c) goes through these.
+#define TF_SYSNUM(tf)  ((tf)->x[8])
+#define TF_ARG(tf, n)  ((tf)->x[n])
+#define TF_RET(tf)     ((tf)->x[0])
+
 void fiq_handler(struct trapframe *tf);
 void serr_handler(struct trapframe *tf);
 void sync_handler(struct trapframe *tf);
