@@ -3,6 +3,9 @@
 
 #include "types.h"
 #include "user.h"
+#include "stat.h"
+#include "fcntl.h"
+#include "file.h"
 
 #define PGSIZE 4096
 
@@ -157,6 +160,93 @@ static void test_kill(void)
     fail("kill", "status");
 }
 
+// Create, write, read back, unlink.
+static void test_files(void)
+{
+  char buf[100];
+  int fd = open("tf", O_CREATE | O_RDWR);
+  if(fd < 0){
+    fail("files", "create");
+    return;
+  }
+  for(int i = 0; i < 50; i++)
+    if(write(fd, "0123456789", 10) != 10)
+      fail("files", "write");
+  close(fd);
+
+  struct stat st;
+  if(stat("tf", &st) < 0 || st.type != T_FILE || st.size != 500)
+    fail("files", "stat");
+
+  fd = open("tf", O_RDONLY);
+  int total = 0, n;
+  while((n = read(fd, buf, sizeof(buf))) > 0){
+    for(int i = 0; i < n; i++)
+      if(buf[i] != '0' + (total + i) % 10)
+        fail("files", "content");
+    total += n;
+  }
+  close(fd);
+  if(total != 500)
+    fail("files", "read size");
+  if(unlink("tf") < 0 || open("tf", O_RDONLY) >= 0)
+    fail("files", "unlink");
+}
+
+// mkdir, chdir, relative paths, link, and non-empty directories.
+static void test_dirs(void)
+{
+  if(mkdir("td") < 0 || chdir("td") < 0){
+    fail("dirs", "mkdir/chdir");
+    return;
+  }
+  int fd = open("f", O_CREATE | O_WRONLY);
+  if(fd < 0 || write(fd, "x", 1) != 1)
+    fail("dirs", "create in dir");
+  close(fd);
+  if(chdir("..") < 0 || open("td/f", O_RDONLY) < 0)
+    fail("dirs", "relative open");
+  if(link("td/f", "td/g") < 0 || unlink("td/f") < 0 || open("td/g", O_RDONLY) < 0)
+    fail("dirs", "link");
+  if(unlink("td") == 0)
+    fail("dirs", "unlinked a non-empty directory");
+  if(unlink("td/g") < 0 || unlink("td") < 0)
+    fail("dirs", "cleanup");
+  // the open descriptors from the checks above
+  for(int i = 3; i < 16; i++)
+    close(i);
+}
+
+// A child writes through a pipe; the parent reads it all and sees EOF.
+static void test_pipe(void)
+{
+  int fds[2];
+  if(pipe(fds) < 0){
+    fail("pipe", "pipe");
+    return;
+  }
+  int pid = fork();
+  if(pid == 0){
+    close(fds[0]);
+    for(int i = 0; i < 100; i++)
+      write(fds[1], "abcdefghij", 10);
+    exit(0);
+  }
+  close(fds[1]);
+  char buf[64];
+  int total = 0, n;
+  while((n = read(fds[0], buf, sizeof(buf))) > 0){
+    for(int i = 0; i < n; i++)
+      if(buf[i] != 'a' + (total + i) % 10)
+        fail("pipe", "content");
+    total += n;
+  }
+  close(fds[0]);
+  wait(0);
+  if(total != 1000)
+    fail("pipe", "length");
+}
+
 static void usertests(void)
 {
   struct { const char *name; void (*fn)(void); } tests[] = {
@@ -165,6 +255,9 @@ static void usertests(void)
     { "faults", test_faults },
     { "badptr", test_badptr },
     { "kill", test_kill },
+    { "files", test_files },
+    { "dirs", test_dirs },
+    { "pipe", test_pipe },
   };
   for(int i = 0; i < sizeof(tests) / sizeof(tests[0]); i++){
     int before = failed;
@@ -176,6 +269,14 @@ static void usertests(void)
 
 int main(void)
 {
+  // stdin, stdout and stderr: the console, made on first boot
+  if(open("console", O_RDWR) < 0){
+    mknod("console", CONSOLE, 0);
+    open("console", O_RDWR);
+  }
+  dup(0);  // stdout
+  dup(0);  // stderr
+
   printf("init: starting, pid %d\n", getpid());
 
   usertests();

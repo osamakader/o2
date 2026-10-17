@@ -3,6 +3,8 @@
 
 #include "types.h"
 
+struct stat;
+
 // system calls
 int fork(void);
 int exit(int) __attribute__((noreturn));
@@ -14,6 +16,16 @@ int getpid(void);
 char *sbrk(int);
 int sleep(int);
 int uptime(void);
+int pipe(int *);
+int close(int);
+int open(const char *, int);
+int mknod(const char *, short, short);
+int unlink(const char *);
+int fstat(int fd, struct stat *);
+int link(const char *, const char *);
+int mkdir(const char *);
+int chdir(const char *);
+int dup(int);
 
 // ulib.c
 char *strcpy(char *, const char *);
@@ -24,6 +36,8 @@ void *memmove(void *, const void *, int);
 int memcmp(const void *, const void *, uint);
 void *memcpy(void *, const void *, uint);
 char *gets(char *, int max);
+int stat(const char *, struct stat *);
+char *strchr(const char *, char c);
 int atoi(const char *);
 
 // printf.c

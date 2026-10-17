@@ -1,5 +1,7 @@
 #include "types.h"
 #include "user.h"
+#include "stat.h"
+#include "fcntl.h"
 
 int main(int argc, char *argv[]);
 
@@ -108,4 +110,25 @@ int memcmp(const void *s1, const void *s2, uint n)
 void* memcpy(void *dst, const void *src, uint n)
 {
   return memmove(dst, src, n);
+}
+
+int stat(const char *n, struct stat *st)
+{
+  int fd;
+  int r;
+
+  fd = open(n, O_RDONLY);
+  if(fd < 0)
+    return -1;
+  r = fstat(fd, st);
+  close(fd);
+  return r;
+}
+
+char* strchr(const char *s, char c)
+{
+  for(; *s; s++)
+    if(*s == c)
+      return (char*)s;
+  return 0;
 }
