@@ -10,6 +10,7 @@
 #include "defs.h"
 #include "vm.h"
 #include "memlayout.h"
+#include "buf.h"
 
 // Two threads that take turns via yield() to exercise the scheduler.
 static void kthread_test(void *arg) {
@@ -168,6 +169,44 @@ static void uvm_selftest(void) {
     printf("uvm ok\n");
 }
 
+// Concurrent disk I/O: each thread owns a range of blocks; for each it
+// saves the contents, writes a pattern unique to (thread, block), reads
+// it back into another buffer, compares, and restores the original, so
+// the disk image ends up unchanged.
+#define DISK_THREADS 4
+#define DISK_BLOCKS  20
+
+static void kthread_disk(void *arg) {
+    long t = (long)arg;
+    struct buf *orig = kalloc(), *pat = kalloc(), *back = kalloc();
+
+    if (!orig || !pat || !back)
+        panic("disk test: kalloc");
+
+    for (int i = 0; i < DISK_BLOCKS; i++) {
+        uint blockno = 100 + t * DISK_BLOCKS + i;
+        orig->blockno = pat->blockno = back->blockno = blockno;
+
+        virtio_disk_rw(orig, 0);
+
+        for (int k = 0; k < BSIZE; k++)
+            pat->data[k] = (uchar)(t * 31 + blockno * 7 + k);
+        virtio_disk_rw(pat, 1);
+
+        memset(back->data, 0, BSIZE);
+        virtio_disk_rw(back, 0);
+        if (memcmp(back->data, pat->data, BSIZE) != 0)
+            panic("disk test: block %d read back wrong", blockno);
+
+        virtio_disk_rw(orig, 1);
+    }
+
+    kfree(orig);
+    kfree(pat);
+    kfree(back);
+    printf("disk thread %ld ok on cpu %d\n", t, cpuid());
+}
+
 static void spawn(void (*fn)(void *), void *arg) {
     if (kthread_create(fn, arg) == 0)
         panic("selftest: kthread_create");
@@ -185,6 +224,9 @@ void selftest(void) {
     spawn(kthread_sleeper, "E");
     spawn(kthread_sleeper, "F");
     spawn(kthread_consumer, 0);
+    if (virtio_disk_present())
+        for (long i = 0; i < DISK_THREADS; i++)
+            spawn(kthread_disk, (void *)i);
     initsleeplock(&sl, "selftest");
     for (long i = 0; i < SL_THREADS; i++)
         spawn(kthread_sleeplock, (void *)i);
