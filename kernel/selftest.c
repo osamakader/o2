@@ -11,6 +11,9 @@
 #include "vm.h"
 #include "memlayout.h"
 #include "buf.h"
+#include "fs.h"
+#include "file.h"
+#include "stat.h"
 
 // Two threads that take turns via yield() to exercise the scheduler.
 static void kthread_test(void *arg) {
@@ -220,4 +223,50 @@ void selftest(void) {
         spawn(kthread_sleeplock, (void *)i);
     for (int i = 0; i < PC_PRODUCERS; i++)
         spawn(kthread_producer, 0);
+}
+
+// File system, read-only: list the root directory mkfs made, and read
+// README.md through the inode layer.
+static void kthread_fs_read(void *arg) {
+    struct dirent de;
+    char buf[8];
+    int n = 0;
+
+    begin_op();
+    struct inode *dp = namei("/");
+    if (dp == 0)
+        panic("fs test: no root");
+    ilock(dp);
+    printf("fs: /");
+    for (uint off = 0; off < dp->size; off += sizeof(de)) {
+        if (readi(dp, 0, (uint64)&de, off, sizeof(de)) != sizeof(de))
+            panic("fs test: readi dir");
+        if (de.inum == 0)
+            continue;
+        char name[DIRSIZ + 1];
+        memmove(name, de.name, DIRSIZ);
+        name[DIRSIZ] = 0;
+        printf(" %s", name);
+        n++;
+    }
+    printf("\n");
+    iunlockput(dp);
+
+    struct inode *ip = namei("/README.md");
+    if (ip == 0)
+        panic("fs test: no /README.md");
+    ilock(ip);
+    if (ip->type != T_FILE || readi(ip, 0, (uint64)buf, 0, 4) != 4 ||
+        memcmp(buf, "# o2", 4) != 0)
+        panic("fs test: README.md content");
+    uint size = ip->size;
+    iunlockput(ip);
+    end_op();
+
+    printf("fs read ok: %d entries, README.md %d bytes\n", n, size);
+}
+
+// Called once the file system is up (first forkret).
+void selftest_fs(void) {
+    spawn(kthread_fs_read, 0);
 }

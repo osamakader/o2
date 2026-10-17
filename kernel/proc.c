@@ -90,10 +90,22 @@ extern void userret(struct trapframe *tf) __attribute__((noreturn));
 // A fork child's (or the first process's) very first scheduling by
 // scheduler() will swtch to forkret.
 static void forkret(void) {
+    static int first = 1;
     struct proc *p = myproc();
 
     // Still holding p->lock from scheduler.
     release(&p->lock);
+
+    if (first) {
+        // File system initialization must be run in the context of a
+        // regular process (e.g., because it calls sleep), and thus
+        // cannot be run from main().
+        fsinit(ROOTDEV);
+        first = 0;
+        // ensure other cores see first = 0.
+        __sync_synchronize();
+        selftest_fs();
+    }
 
     userret(p->trapframe);
 }
@@ -491,5 +503,14 @@ int either_copyout(int user_dst, uint64 dst, void *src, uint64 len) {
     if (user_dst)
         return copyout(myproc()->pagetable, dst, src, len);
     memmove((char *)dst, src, len);
+    return 0;
+}
+
+// Copy from either a user address, or kernel address, depending on
+// user_src. Returns 0 on success, -1 on error.
+int either_copyin(void *dst, int user_src, uint64 src, uint64 len) {
+    if (user_src)
+        return copyin(myproc()->pagetable, dst, src, len);
+    memmove(dst, (char *)src, len);
     return 0;
 }

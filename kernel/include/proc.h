@@ -30,6 +30,7 @@ struct proc {
     uint64 sz;                    // size of process memory (bytes)
     pagetable_t pagetable;        // user page table; 0 for kernel threads
     struct trapframe *trapframe;  // user registers, at the top of kstack
+    struct inode *cwd;            // current directory
     char name[16];                // process name (debugging)
 };
 
@@ -57,6 +58,7 @@ int kill(int pid);
 void setkilled(struct proc *p);
 int killed(struct proc *p);
 int either_copyout(int user_dst, uint64 dst, void *src, uint64 len);
+int either_copyin(void *dst, int user_src, uint64 src, uint64 len);
 void proc_mapstacks(pagetable_t pagetable);
 struct proc *kthread_create(void (*fn)(void *), void *arg);
 void yield(void);
