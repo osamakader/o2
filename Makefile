@@ -21,6 +21,7 @@ KOBJS = \
   kernel/selftest.o \
   kernel/vm.o \
   kernel/exec.o \
+  kernel/virtio_disk.o \
   kernel/syscall.o \
   kernel/sysproc.o \
   kernel/sysfile.o \

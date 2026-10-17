@@ -26,6 +26,9 @@ void *kalloc(void);
 void kfree(void *pa);
 uint64 kfreepages(void);
 
+// virtio_disk.c
+void virtio_disk_init(void);
+
 // arch: start the other CPUs; each enters main(0)
 void start_cpus(void);
 
