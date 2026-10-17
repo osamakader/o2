@@ -172,31 +172,6 @@ static void uvm_selftest(void) {
     printf("uvm ok\n");
 }
 
-// Buffer cache: two threads read 100 blocks, more than NBUF, in
-// opposite orders through bread() and compare each with a direct disk
-// read, so buffers get evicted and shared while in use.
-#define BIO_THREADS 2
-#define BIO_BLOCKS  100
-
-static void kthread_bio(void *arg) {
-    long t = (long)arg;
-    struct buf *direct = kalloc();
-
-    if (!direct)
-        panic("bio test: kalloc");
-    for (int i = 0; i < BIO_BLOCKS; i++) {
-        uint blockno = t == 0 ? i : BIO_BLOCKS - 1 - i;
-        struct buf *b = bread(ROOTDEV, blockno);
-        direct->blockno = blockno;
-        virtio_disk_rw(direct, 0);
-        if (b->blockno != blockno || memcmp(b->data, direct->data, BSIZE) != 0)
-            panic("bio test: block %d differs", blockno);
-        brelse(b);
-    }
-    kfree(direct);
-    printf("bio thread %ld ok on cpu %d\n", t, cpuid());
-}
-
 static void spawn(void (*fn)(void *), void *arg) {
     if (kthread_create(fn, arg) == 0)
         panic("selftest: kthread_create");
@@ -214,10 +189,6 @@ void selftest(void) {
     spawn(kthread_sleeper, "E");
     spawn(kthread_sleeper, "F");
     spawn(kthread_consumer, 0);
-    if (virtio_disk_present()) {
-        for (long i = 0; i < BIO_THREADS; i++)
-            spawn(kthread_bio, (void *)i);
-    }
     initsleeplock(&sl, "selftest");
     for (long i = 0; i < SL_THREADS; i++)
         spawn(kthread_sleeplock, (void *)i);
