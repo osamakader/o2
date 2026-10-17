@@ -77,6 +77,15 @@ runcmd(struct cmd *cmd)
     if(ecmd->argv[0] == 0)
       exit(1);
     exec(ecmd->argv[0], ecmd->argv);
+    if(strchr(ecmd->argv[0], '/') == 0){
+      // not in the current directory: programs live in /
+      char path[64];
+      if(strlen(ecmd->argv[0]) + 2 <= sizeof(path)){
+        path[0] = '/';
+        strcpy(path + 1, ecmd->argv[0]);
+        exec(path, ecmd->argv);
+      }
+    }
     fprintf(2, "exec %s failed\n", ecmd->argv[0]);
     break;
 
@@ -158,11 +167,18 @@ main(void)
 
   // Read and run input commands.
   while(getcmd(buf, sizeof(buf)) >= 0){
-    if(buf[0] == 'c' && buf[1] == 'd' && buf[2] == ' '){
+    if(buf[0] == 'c' && buf[1] == 'd' &&
+       (buf[2] == ' ' || buf[2] == '\n' || buf[2] == 0)){
       // Chdir must be called by the parent, not the child.
-      buf[strlen(buf)-1] = 0;  // chop \n
-      if(chdir(buf+3) < 0)
-        fprintf(2, "cannot cd %s\n", buf+3);
+      char *dir = buf + 2;
+      while(*dir == ' ')
+        dir++;
+      if(dir[strlen(dir)-1] == '\n')
+        dir[strlen(dir)-1] = 0;  // chop \n
+      if(*dir == 0)
+        dir = "/";  // plain cd: go to the root
+      if(chdir(dir) < 0)
+        fprintf(2, "cannot cd %s\n", dir);
       continue;
     }
     if(fork1() == 0)
