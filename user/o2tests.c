@@ -6,6 +6,7 @@
 #include "stat.h"
 #include "fcntl.h"
 #include "procinfo.h"
+#include "syscall.h"
 
 #define PGSIZE 4096
 
@@ -337,6 +338,356 @@ static void test_klog(void)
     fail("klog", "bad buffer");
 }
 
+
+// FP/SIMD register tests. Each runs in one asm block, so the compiler
+// can't move values between FP registers behind our back: fill all 32
+// FP registers (both halves on arm64) with a pattern from seed, do
+// something that may switch processes (a syscall, or spinning long
+// enough to be preempted), then count registers that changed.
+
+#if defined(__aarch64__)
+#define FP_FILL \
+    "fmov d0, x9\n" "add x9, x9, #1\n" "ins v0.d[1], x9\n" "add x9, x9, #1\n" \
+    "fmov d1, x9\n" "add x9, x9, #1\n" "ins v1.d[1], x9\n" "add x9, x9, #1\n" \
+    "fmov d2, x9\n" "add x9, x9, #1\n" "ins v2.d[1], x9\n" "add x9, x9, #1\n" \
+    "fmov d3, x9\n" "add x9, x9, #1\n" "ins v3.d[1], x9\n" "add x9, x9, #1\n" \
+    "fmov d4, x9\n" "add x9, x9, #1\n" "ins v4.d[1], x9\n" "add x9, x9, #1\n" \
+    "fmov d5, x9\n" "add x9, x9, #1\n" "ins v5.d[1], x9\n" "add x9, x9, #1\n" \
+    "fmov d6, x9\n" "add x9, x9, #1\n" "ins v6.d[1], x9\n" "add x9, x9, #1\n" \
+    "fmov d7, x9\n" "add x9, x9, #1\n" "ins v7.d[1], x9\n" "add x9, x9, #1\n" \
+    "fmov d8, x9\n" "add x9, x9, #1\n" "ins v8.d[1], x9\n" "add x9, x9, #1\n" \
+    "fmov d9, x9\n" "add x9, x9, #1\n" "ins v9.d[1], x9\n" "add x9, x9, #1\n" \
+    "fmov d10, x9\n" "add x9, x9, #1\n" "ins v10.d[1], x9\n" "add x9, x9, #1\n" \
+    "fmov d11, x9\n" "add x9, x9, #1\n" "ins v11.d[1], x9\n" "add x9, x9, #1\n" \
+    "fmov d12, x9\n" "add x9, x9, #1\n" "ins v12.d[1], x9\n" "add x9, x9, #1\n" \
+    "fmov d13, x9\n" "add x9, x9, #1\n" "ins v13.d[1], x9\n" "add x9, x9, #1\n" \
+    "fmov d14, x9\n" "add x9, x9, #1\n" "ins v14.d[1], x9\n" "add x9, x9, #1\n" \
+    "fmov d15, x9\n" "add x9, x9, #1\n" "ins v15.d[1], x9\n" "add x9, x9, #1\n" \
+    "fmov d16, x9\n" "add x9, x9, #1\n" "ins v16.d[1], x9\n" "add x9, x9, #1\n" \
+    "fmov d17, x9\n" "add x9, x9, #1\n" "ins v17.d[1], x9\n" "add x9, x9, #1\n" \
+    "fmov d18, x9\n" "add x9, x9, #1\n" "ins v18.d[1], x9\n" "add x9, x9, #1\n" \
+    "fmov d19, x9\n" "add x9, x9, #1\n" "ins v19.d[1], x9\n" "add x9, x9, #1\n" \
+    "fmov d20, x9\n" "add x9, x9, #1\n" "ins v20.d[1], x9\n" "add x9, x9, #1\n" \
+    "fmov d21, x9\n" "add x9, x9, #1\n" "ins v21.d[1], x9\n" "add x9, x9, #1\n" \
+    "fmov d22, x9\n" "add x9, x9, #1\n" "ins v22.d[1], x9\n" "add x9, x9, #1\n" \
+    "fmov d23, x9\n" "add x9, x9, #1\n" "ins v23.d[1], x9\n" "add x9, x9, #1\n" \
+    "fmov d24, x9\n" "add x9, x9, #1\n" "ins v24.d[1], x9\n" "add x9, x9, #1\n" \
+    "fmov d25, x9\n" "add x9, x9, #1\n" "ins v25.d[1], x9\n" "add x9, x9, #1\n" \
+    "fmov d26, x9\n" "add x9, x9, #1\n" "ins v26.d[1], x9\n" "add x9, x9, #1\n" \
+    "fmov d27, x9\n" "add x9, x9, #1\n" "ins v27.d[1], x9\n" "add x9, x9, #1\n" \
+    "fmov d28, x9\n" "add x9, x9, #1\n" "ins v28.d[1], x9\n" "add x9, x9, #1\n" \
+    "fmov d29, x9\n" "add x9, x9, #1\n" "ins v29.d[1], x9\n" "add x9, x9, #1\n" \
+    "fmov d30, x9\n" "add x9, x9, #1\n" "ins v30.d[1], x9\n" "add x9, x9, #1\n" \
+    "fmov d31, x9\n" "add x9, x9, #1\n" "ins v31.d[1], x9\n" "add x9, x9, #1\n"
+#define FP_CHECK \
+    "fmov x10, d0\n" "cmp x10, x9\n" "cinc x11, x11, ne\n" "add x9, x9, #1\n" "umov x10, v0.d[1]\n" "cmp x10, x9\n" "cinc x11, x11, ne\n" "add x9, x9, #1\n" \
+    "fmov x10, d1\n" "cmp x10, x9\n" "cinc x11, x11, ne\n" "add x9, x9, #1\n" "umov x10, v1.d[1]\n" "cmp x10, x9\n" "cinc x11, x11, ne\n" "add x9, x9, #1\n" \
+    "fmov x10, d2\n" "cmp x10, x9\n" "cinc x11, x11, ne\n" "add x9, x9, #1\n" "umov x10, v2.d[1]\n" "cmp x10, x9\n" "cinc x11, x11, ne\n" "add x9, x9, #1\n" \
+    "fmov x10, d3\n" "cmp x10, x9\n" "cinc x11, x11, ne\n" "add x9, x9, #1\n" "umov x10, v3.d[1]\n" "cmp x10, x9\n" "cinc x11, x11, ne\n" "add x9, x9, #1\n" \
+    "fmov x10, d4\n" "cmp x10, x9\n" "cinc x11, x11, ne\n" "add x9, x9, #1\n" "umov x10, v4.d[1]\n" "cmp x10, x9\n" "cinc x11, x11, ne\n" "add x9, x9, #1\n" \
+    "fmov x10, d5\n" "cmp x10, x9\n" "cinc x11, x11, ne\n" "add x9, x9, #1\n" "umov x10, v5.d[1]\n" "cmp x10, x9\n" "cinc x11, x11, ne\n" "add x9, x9, #1\n" \
+    "fmov x10, d6\n" "cmp x10, x9\n" "cinc x11, x11, ne\n" "add x9, x9, #1\n" "umov x10, v6.d[1]\n" "cmp x10, x9\n" "cinc x11, x11, ne\n" "add x9, x9, #1\n" \
+    "fmov x10, d7\n" "cmp x10, x9\n" "cinc x11, x11, ne\n" "add x9, x9, #1\n" "umov x10, v7.d[1]\n" "cmp x10, x9\n" "cinc x11, x11, ne\n" "add x9, x9, #1\n" \
+    "fmov x10, d8\n" "cmp x10, x9\n" "cinc x11, x11, ne\n" "add x9, x9, #1\n" "umov x10, v8.d[1]\n" "cmp x10, x9\n" "cinc x11, x11, ne\n" "add x9, x9, #1\n" \
+    "fmov x10, d9\n" "cmp x10, x9\n" "cinc x11, x11, ne\n" "add x9, x9, #1\n" "umov x10, v9.d[1]\n" "cmp x10, x9\n" "cinc x11, x11, ne\n" "add x9, x9, #1\n" \
+    "fmov x10, d10\n" "cmp x10, x9\n" "cinc x11, x11, ne\n" "add x9, x9, #1\n" "umov x10, v10.d[1]\n" "cmp x10, x9\n" "cinc x11, x11, ne\n" "add x9, x9, #1\n" \
+    "fmov x10, d11\n" "cmp x10, x9\n" "cinc x11, x11, ne\n" "add x9, x9, #1\n" "umov x10, v11.d[1]\n" "cmp x10, x9\n" "cinc x11, x11, ne\n" "add x9, x9, #1\n" \
+    "fmov x10, d12\n" "cmp x10, x9\n" "cinc x11, x11, ne\n" "add x9, x9, #1\n" "umov x10, v12.d[1]\n" "cmp x10, x9\n" "cinc x11, x11, ne\n" "add x9, x9, #1\n" \
+    "fmov x10, d13\n" "cmp x10, x9\n" "cinc x11, x11, ne\n" "add x9, x9, #1\n" "umov x10, v13.d[1]\n" "cmp x10, x9\n" "cinc x11, x11, ne\n" "add x9, x9, #1\n" \
+    "fmov x10, d14\n" "cmp x10, x9\n" "cinc x11, x11, ne\n" "add x9, x9, #1\n" "umov x10, v14.d[1]\n" "cmp x10, x9\n" "cinc x11, x11, ne\n" "add x9, x9, #1\n" \
+    "fmov x10, d15\n" "cmp x10, x9\n" "cinc x11, x11, ne\n" "add x9, x9, #1\n" "umov x10, v15.d[1]\n" "cmp x10, x9\n" "cinc x11, x11, ne\n" "add x9, x9, #1\n" \
+    "fmov x10, d16\n" "cmp x10, x9\n" "cinc x11, x11, ne\n" "add x9, x9, #1\n" "umov x10, v16.d[1]\n" "cmp x10, x9\n" "cinc x11, x11, ne\n" "add x9, x9, #1\n" \
+    "fmov x10, d17\n" "cmp x10, x9\n" "cinc x11, x11, ne\n" "add x9, x9, #1\n" "umov x10, v17.d[1]\n" "cmp x10, x9\n" "cinc x11, x11, ne\n" "add x9, x9, #1\n" \
+    "fmov x10, d18\n" "cmp x10, x9\n" "cinc x11, x11, ne\n" "add x9, x9, #1\n" "umov x10, v18.d[1]\n" "cmp x10, x9\n" "cinc x11, x11, ne\n" "add x9, x9, #1\n" \
+    "fmov x10, d19\n" "cmp x10, x9\n" "cinc x11, x11, ne\n" "add x9, x9, #1\n" "umov x10, v19.d[1]\n" "cmp x10, x9\n" "cinc x11, x11, ne\n" "add x9, x9, #1\n" \
+    "fmov x10, d20\n" "cmp x10, x9\n" "cinc x11, x11, ne\n" "add x9, x9, #1\n" "umov x10, v20.d[1]\n" "cmp x10, x9\n" "cinc x11, x11, ne\n" "add x9, x9, #1\n" \
+    "fmov x10, d21\n" "cmp x10, x9\n" "cinc x11, x11, ne\n" "add x9, x9, #1\n" "umov x10, v21.d[1]\n" "cmp x10, x9\n" "cinc x11, x11, ne\n" "add x9, x9, #1\n" \
+    "fmov x10, d22\n" "cmp x10, x9\n" "cinc x11, x11, ne\n" "add x9, x9, #1\n" "umov x10, v22.d[1]\n" "cmp x10, x9\n" "cinc x11, x11, ne\n" "add x9, x9, #1\n" \
+    "fmov x10, d23\n" "cmp x10, x9\n" "cinc x11, x11, ne\n" "add x9, x9, #1\n" "umov x10, v23.d[1]\n" "cmp x10, x9\n" "cinc x11, x11, ne\n" "add x9, x9, #1\n" \
+    "fmov x10, d24\n" "cmp x10, x9\n" "cinc x11, x11, ne\n" "add x9, x9, #1\n" "umov x10, v24.d[1]\n" "cmp x10, x9\n" "cinc x11, x11, ne\n" "add x9, x9, #1\n" \
+    "fmov x10, d25\n" "cmp x10, x9\n" "cinc x11, x11, ne\n" "add x9, x9, #1\n" "umov x10, v25.d[1]\n" "cmp x10, x9\n" "cinc x11, x11, ne\n" "add x9, x9, #1\n" \
+    "fmov x10, d26\n" "cmp x10, x9\n" "cinc x11, x11, ne\n" "add x9, x9, #1\n" "umov x10, v26.d[1]\n" "cmp x10, x9\n" "cinc x11, x11, ne\n" "add x9, x9, #1\n" \
+    "fmov x10, d27\n" "cmp x10, x9\n" "cinc x11, x11, ne\n" "add x9, x9, #1\n" "umov x10, v27.d[1]\n" "cmp x10, x9\n" "cinc x11, x11, ne\n" "add x9, x9, #1\n" \
+    "fmov x10, d28\n" "cmp x10, x9\n" "cinc x11, x11, ne\n" "add x9, x9, #1\n" "umov x10, v28.d[1]\n" "cmp x10, x9\n" "cinc x11, x11, ne\n" "add x9, x9, #1\n" \
+    "fmov x10, d29\n" "cmp x10, x9\n" "cinc x11, x11, ne\n" "add x9, x9, #1\n" "umov x10, v29.d[1]\n" "cmp x10, x9\n" "cinc x11, x11, ne\n" "add x9, x9, #1\n" \
+    "fmov x10, d30\n" "cmp x10, x9\n" "cinc x11, x11, ne\n" "add x9, x9, #1\n" "umov x10, v30.d[1]\n" "cmp x10, x9\n" "cinc x11, x11, ne\n" "add x9, x9, #1\n" \
+    "fmov x10, d31\n" "cmp x10, x9\n" "cinc x11, x11, ne\n" "add x9, x9, #1\n" "umov x10, v31.d[1]\n" "cmp x10, x9\n" "cinc x11, x11, ne\n" "add x9, x9, #1\n"
+#define FP_CLOBBERS "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18", "v19", "v20", "v21", "v22", "v23", "v24", "v25", "v26", "v27", "v28", "v29", "v30", "v31"
+
+// fill, syscall num(a0), check; returns mismatches, *ret = syscall result
+static int fp_regs_syscall(uint64 seed, int num, uint64 a0, uint64 *ret)
+{
+  register uint64 x0 asm("x0") = a0;
+  register uint64 x8 asm("x8") = num;
+  uint64 bad;
+  asm volatile(
+    "mov x9, %[seed]\n"
+    FP_FILL
+    "svc #0\n"
+    "mov x9, %[seed]\n"
+    "mov x11, #0\n"
+    FP_CHECK
+    "mov %[bad], x11\n"
+    : [bad] "=r"(bad), "+r"(x0)
+    : [seed] "r"(seed), "r"(x8)
+    : "x9", "x10", "x11", "memory", "cc", FP_CLOBBERS);
+  *ret = x0;
+  return bad;
+}
+
+// fill, spin for n iterations, check; returns mismatches
+static int fp_regs_spin(uint64 seed, uint64 n)
+{
+  uint64 bad;
+  asm volatile(
+    "mov x9, %[seed]\n"
+    FP_FILL
+    "mov x12, %[n]\n"
+    "1: subs x12, x12, #1\n"
+    "b.ne 1b\n"
+    "mov x9, %[seed]\n"
+    "mov x11, #0\n"
+    FP_CHECK
+    "mov %[bad], x11\n"
+    : [bad] "=r"(bad)
+    : [seed] "r"(seed), [n] "r"(n)
+    : "x9", "x10", "x11", "x12", "cc", FP_CLOBBERS);
+  return bad;
+}
+
+#define FP_NREGS 64
+
+// check only; returns mismatches
+static int fp_regs_check(uint64 seed)
+{
+  uint64 bad;
+  asm volatile(
+    "mov x9, %[seed]\n"
+    "mov x11, #0\n"
+    FP_CHECK
+    "mov %[bad], x11\n"
+    : [bad] "=r"(bad)
+    : [seed] "r"(seed)
+    : "x9", "x10", "x11", "cc");
+  return bad;
+}
+#else
+#define FP_FILL \
+    "fmv.d.x f0, t0\n" "addi t0, t0, 1\n" \
+    "fmv.d.x f1, t0\n" "addi t0, t0, 1\n" \
+    "fmv.d.x f2, t0\n" "addi t0, t0, 1\n" \
+    "fmv.d.x f3, t0\n" "addi t0, t0, 1\n" \
+    "fmv.d.x f4, t0\n" "addi t0, t0, 1\n" \
+    "fmv.d.x f5, t0\n" "addi t0, t0, 1\n" \
+    "fmv.d.x f6, t0\n" "addi t0, t0, 1\n" \
+    "fmv.d.x f7, t0\n" "addi t0, t0, 1\n" \
+    "fmv.d.x f8, t0\n" "addi t0, t0, 1\n" \
+    "fmv.d.x f9, t0\n" "addi t0, t0, 1\n" \
+    "fmv.d.x f10, t0\n" "addi t0, t0, 1\n" \
+    "fmv.d.x f11, t0\n" "addi t0, t0, 1\n" \
+    "fmv.d.x f12, t0\n" "addi t0, t0, 1\n" \
+    "fmv.d.x f13, t0\n" "addi t0, t0, 1\n" \
+    "fmv.d.x f14, t0\n" "addi t0, t0, 1\n" \
+    "fmv.d.x f15, t0\n" "addi t0, t0, 1\n" \
+    "fmv.d.x f16, t0\n" "addi t0, t0, 1\n" \
+    "fmv.d.x f17, t0\n" "addi t0, t0, 1\n" \
+    "fmv.d.x f18, t0\n" "addi t0, t0, 1\n" \
+    "fmv.d.x f19, t0\n" "addi t0, t0, 1\n" \
+    "fmv.d.x f20, t0\n" "addi t0, t0, 1\n" \
+    "fmv.d.x f21, t0\n" "addi t0, t0, 1\n" \
+    "fmv.d.x f22, t0\n" "addi t0, t0, 1\n" \
+    "fmv.d.x f23, t0\n" "addi t0, t0, 1\n" \
+    "fmv.d.x f24, t0\n" "addi t0, t0, 1\n" \
+    "fmv.d.x f25, t0\n" "addi t0, t0, 1\n" \
+    "fmv.d.x f26, t0\n" "addi t0, t0, 1\n" \
+    "fmv.d.x f27, t0\n" "addi t0, t0, 1\n" \
+    "fmv.d.x f28, t0\n" "addi t0, t0, 1\n" \
+    "fmv.d.x f29, t0\n" "addi t0, t0, 1\n" \
+    "fmv.d.x f30, t0\n" "addi t0, t0, 1\n" \
+    "fmv.d.x f31, t0\n" "addi t0, t0, 1\n"
+#define FP_CHECK \
+    "fmv.x.d t1, f0\n" "beq t1, t0, 1f\n" "addi t2, t2, 1\n" "1: addi t0, t0, 1\n" \
+    "fmv.x.d t1, f1\n" "beq t1, t0, 1f\n" "addi t2, t2, 1\n" "1: addi t0, t0, 1\n" \
+    "fmv.x.d t1, f2\n" "beq t1, t0, 1f\n" "addi t2, t2, 1\n" "1: addi t0, t0, 1\n" \
+    "fmv.x.d t1, f3\n" "beq t1, t0, 1f\n" "addi t2, t2, 1\n" "1: addi t0, t0, 1\n" \
+    "fmv.x.d t1, f4\n" "beq t1, t0, 1f\n" "addi t2, t2, 1\n" "1: addi t0, t0, 1\n" \
+    "fmv.x.d t1, f5\n" "beq t1, t0, 1f\n" "addi t2, t2, 1\n" "1: addi t0, t0, 1\n" \
+    "fmv.x.d t1, f6\n" "beq t1, t0, 1f\n" "addi t2, t2, 1\n" "1: addi t0, t0, 1\n" \
+    "fmv.x.d t1, f7\n" "beq t1, t0, 1f\n" "addi t2, t2, 1\n" "1: addi t0, t0, 1\n" \
+    "fmv.x.d t1, f8\n" "beq t1, t0, 1f\n" "addi t2, t2, 1\n" "1: addi t0, t0, 1\n" \
+    "fmv.x.d t1, f9\n" "beq t1, t0, 1f\n" "addi t2, t2, 1\n" "1: addi t0, t0, 1\n" \
+    "fmv.x.d t1, f10\n" "beq t1, t0, 1f\n" "addi t2, t2, 1\n" "1: addi t0, t0, 1\n" \
+    "fmv.x.d t1, f11\n" "beq t1, t0, 1f\n" "addi t2, t2, 1\n" "1: addi t0, t0, 1\n" \
+    "fmv.x.d t1, f12\n" "beq t1, t0, 1f\n" "addi t2, t2, 1\n" "1: addi t0, t0, 1\n" \
+    "fmv.x.d t1, f13\n" "beq t1, t0, 1f\n" "addi t2, t2, 1\n" "1: addi t0, t0, 1\n" \
+    "fmv.x.d t1, f14\n" "beq t1, t0, 1f\n" "addi t2, t2, 1\n" "1: addi t0, t0, 1\n" \
+    "fmv.x.d t1, f15\n" "beq t1, t0, 1f\n" "addi t2, t2, 1\n" "1: addi t0, t0, 1\n" \
+    "fmv.x.d t1, f16\n" "beq t1, t0, 1f\n" "addi t2, t2, 1\n" "1: addi t0, t0, 1\n" \
+    "fmv.x.d t1, f17\n" "beq t1, t0, 1f\n" "addi t2, t2, 1\n" "1: addi t0, t0, 1\n" \
+    "fmv.x.d t1, f18\n" "beq t1, t0, 1f\n" "addi t2, t2, 1\n" "1: addi t0, t0, 1\n" \
+    "fmv.x.d t1, f19\n" "beq t1, t0, 1f\n" "addi t2, t2, 1\n" "1: addi t0, t0, 1\n" \
+    "fmv.x.d t1, f20\n" "beq t1, t0, 1f\n" "addi t2, t2, 1\n" "1: addi t0, t0, 1\n" \
+    "fmv.x.d t1, f21\n" "beq t1, t0, 1f\n" "addi t2, t2, 1\n" "1: addi t0, t0, 1\n" \
+    "fmv.x.d t1, f22\n" "beq t1, t0, 1f\n" "addi t2, t2, 1\n" "1: addi t0, t0, 1\n" \
+    "fmv.x.d t1, f23\n" "beq t1, t0, 1f\n" "addi t2, t2, 1\n" "1: addi t0, t0, 1\n" \
+    "fmv.x.d t1, f24\n" "beq t1, t0, 1f\n" "addi t2, t2, 1\n" "1: addi t0, t0, 1\n" \
+    "fmv.x.d t1, f25\n" "beq t1, t0, 1f\n" "addi t2, t2, 1\n" "1: addi t0, t0, 1\n" \
+    "fmv.x.d t1, f26\n" "beq t1, t0, 1f\n" "addi t2, t2, 1\n" "1: addi t0, t0, 1\n" \
+    "fmv.x.d t1, f27\n" "beq t1, t0, 1f\n" "addi t2, t2, 1\n" "1: addi t0, t0, 1\n" \
+    "fmv.x.d t1, f28\n" "beq t1, t0, 1f\n" "addi t2, t2, 1\n" "1: addi t0, t0, 1\n" \
+    "fmv.x.d t1, f29\n" "beq t1, t0, 1f\n" "addi t2, t2, 1\n" "1: addi t0, t0, 1\n" \
+    "fmv.x.d t1, f30\n" "beq t1, t0, 1f\n" "addi t2, t2, 1\n" "1: addi t0, t0, 1\n" \
+    "fmv.x.d t1, f31\n" "beq t1, t0, 1f\n" "addi t2, t2, 1\n" "1: addi t0, t0, 1\n"
+#define FP_CLOBBERS "f0", "f1", "f2", "f3", "f4", "f5", "f6", "f7", "f8", "f9", "f10", "f11", "f12", "f13", "f14", "f15", "f16", "f17", "f18", "f19", "f20", "f21", "f22", "f23", "f24", "f25", "f26", "f27", "f28", "f29", "f30", "f31"
+
+static int fp_regs_syscall(uint64 seed, int num, uint64 arg, uint64 *ret)
+{
+  register uint64 a0 asm("a0") = arg;
+  register uint64 a7 asm("a7") = num;
+  uint64 bad;
+  asm volatile(
+    "mv t0, %[seed]\n"
+    FP_FILL
+    "ecall\n"
+    "mv t0, %[seed]\n"
+    "li t2, 0\n"
+    FP_CHECK
+    "mv %[bad], t2\n"
+    : [bad] "=r"(bad), "+r"(a0)
+    : [seed] "r"(seed), "r"(a7)
+    : "t0", "t1", "t2", "memory", FP_CLOBBERS);
+  *ret = a0;
+  return bad;
+}
+
+static int fp_regs_spin(uint64 seed, uint64 n)
+{
+  uint64 bad;
+  asm volatile(
+    "mv t0, %[seed]\n"
+    FP_FILL
+    "mv t3, %[n]\n"
+    "1: addi t3, t3, -1\n"
+    "bnez t3, 1b\n"
+    "mv t0, %[seed]\n"
+    "li t2, 0\n"
+    FP_CHECK
+    "mv %[bad], t2\n"
+    : [bad] "=r"(bad)
+    : [seed] "r"(seed), [n] "r"(n)
+    : "t0", "t1", "t2", "t3", FP_CLOBBERS);
+  return bad;
+}
+
+#define FP_NREGS 32
+
+static int fp_regs_check(uint64 seed)
+{
+  uint64 bad;
+  asm volatile(
+    "mv t0, %[seed]\n"
+    "li t2, 0\n"
+    FP_CHECK
+    "mv %[bad], t2\n"
+    : [bad] "=r"(bad)
+    : [seed] "r"(seed)
+    : "t0", "t1", "t2");
+  return bad;
+}
+#endif
+
+// Arithmetic on doubles; volatile inputs keep the compiler from folding
+// it at build time.
+static void test_fp_math(void)
+{
+  volatile double two = 2.0, one = 1.0, seven = 7.0, x = 1.0, s = 0.0;
+  volatile int n = 1000;
+
+  for(int i = 0; i < 20; i++)
+    x = (x + two / x) / two;           // Newton's method for sqrt(2)
+  if((long)(x * 1e9) != 1414213562L)
+    fail("fp math", "sqrt(2)");
+
+  for(int k = 1; k <= n; k++)
+    s = s + one / ((double)k * k);     // Basel series, 1000 terms
+  if((long)(s * 1e9) != 1643934566L)
+    fail("fp math", "sum 1/k^2");
+
+  if((long)((22.0 * one / seven) * 1e9) != 3142857142L)
+    fail("fp math", "22/7");
+}
+
+#define FP_SEED 0x5eed000000000000UL
+
+// Several processes keep distinct values in all FP registers across
+// system calls and preemption: their FP state must not leak or get
+// lost when they switch.
+static void test_fp_regs(void)
+{
+  enum { N = 4, ROUNDS = 5 };
+  uint64 ret;
+
+  for(int c = 0; c < N; c++){
+    int pid = fork();
+    if(pid == 0){
+      int bad = 0;
+      uint64 seed = FP_SEED + ((uint64)c << 32);
+      for(int r = 0; r < ROUNDS; r++){
+        bad += fp_regs_syscall(seed + r * 100, SYS_pause, 1, &ret);
+        bad += fp_regs_syscall(seed + r * 100, SYS_getpid, 0, &ret);
+        bad += fp_regs_spin(seed + r * 100 + 50, 20000000);
+      }
+      exit(bad ? 1 : 0);
+    }
+  }
+  for(int c = 0; c < N; c++){
+    int status = -1;
+    wait(&status);
+    if(status != 0)
+      fail("fp regs", "registers changed across a switch");
+  }
+}
+
+// fork(): the child starts with the parent's FP registers.
+static void test_fp_fork(void)
+{
+  uint64 pid;
+  int bad = fp_regs_syscall(FP_SEED + 7, SYS_fork, 0, &pid);
+  if(pid == 0)
+    exit(bad ? 1 : 0);
+  int status = -1;
+  wait(&status);
+  if(bad)
+    fail("fp fork", "parent's registers changed");
+  if(status != 0)
+    fail("fp fork", "child didn't inherit the registers");
+}
+
+// exec(): the new program doesn't see the old one's FP registers.
+static void test_fp_exec(void)
+{
+  int pid = fork();
+  if(pid == 0){
+    uint64 ret;
+    char *argv[] = { "o2tests", "fpexec", 0 };
+    fp_regs_syscall(FP_SEED + 9, SYS_getpid, 0, &ret);  // fill, keep live
+    exec("o2tests", argv);
+    exec("/o2tests", argv);
+    exit(2);
+  }
+  int status = -1;
+  wait(&status);
+  if(status != 0)
+    fail("fp exec", "new program saw the old FP registers");
+}
+
+// o2tests fpexec, run by test_fp_exec: no FP register may still hold
+// the old program's value.
+static int fp_old_pattern_left(void)
+{
+  return FP_NREGS - fp_regs_check(FP_SEED + 9);
+}
+
 static void o2tests(void)
 {
   struct { const char *name; void (*fn)(void); } tests[] = {
@@ -350,6 +701,10 @@ static void o2tests(void)
     { "pipe", test_pipe },
     { "ps", test_ps },
     { "klog", test_klog },
+    { "fp math", test_fp_math },
+    { "fp regs", test_fp_regs },
+    { "fp fork", test_fp_fork },
+    { "fp exec", test_fp_exec },
   };
   for(int i = 0; i < sizeof(tests) / sizeof(tests[0]); i++){
     int before = failed;
@@ -359,8 +714,10 @@ static void o2tests(void)
   printf(failed ? "o2tests: SOME TESTS FAILED\n" : "o2tests: ALL TESTS PASSED\n");
 }
 
-int main(void)
+int main(int argc, char *argv[])
 {
+  if(argc == 2 && strcmp(argv[1], "fpexec") == 0)
+    exit(fp_old_pattern_left() ? 1 : 0);
   o2tests();
   exit(failed);
 }
