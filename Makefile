@@ -153,6 +153,7 @@ UPROGS = \
   $(B)/user/_mkdir \
   $(B)/user/_rm \
   $(B)/user/_sh \
+  $(B)/user/_usertests \
   $(B)/user/_wc \
 
 $(FSIMG): $(MKFS) README.md $(UPROGS)
