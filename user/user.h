@@ -3,6 +3,8 @@
 
 #include "types.h"
 
+#define SBRK_ERROR ((char *)-1)
+
 struct stat;
 struct procinfo;
 
@@ -15,7 +17,7 @@ int write(int, const void *, int);
 int kill(int);
 int exec(const char *, char **);
 int getpid(void);
-char *sbrk(int);
+char *sys_sbrk(int, int);
 int pause(int);
 int sync(void);
 int uptime(void);
@@ -40,6 +42,8 @@ void *memmove(void *, const void *, int);
 int memcmp(const void *, const void *, uint);
 void *memcpy(void *, const void *, uint);
 char *gets(char *, int max);
+char *sbrk(int);
+char *sbrklazy(int);
 int stat(const char *, struct stat *);
 char *strchr(const char *, char c);
 int atoi(const char *);

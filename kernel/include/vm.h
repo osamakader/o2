@@ -38,6 +38,7 @@ uint64 uvmdealloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz);
 void uvmfree(pagetable_t pagetable, uint64 sz);
 int uvmcopy(pagetable_t old, pagetable_t new, uint64 sz);
 void uvmclear(pagetable_t pagetable, uint64 va);
+uint64 vmfault(pagetable_t pagetable, uint64 va);
 int copyout(pagetable_t pagetable, uint64 dstva, const char *src, uint64 len);
 int copyin(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len);
 int copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max);

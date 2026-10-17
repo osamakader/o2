@@ -2,12 +2,13 @@
 
 // System call stubs: number in a7, arguments already in a0-a5,
 // result comes back in a0. A cpp macro, so SYS_* expands.
-#define SYSCALL(name) \
-    .global name; \
-    name: \
+#define SYSCALL_AS(sym, name) \
+    .global sym; \
+    sym: \
     li a7, SYS_##name; \
     ecall; \
     ret
+#define SYSCALL(name) SYSCALL_AS(name, name)
 
 SYSCALL(fork)
 SYSCALL(exit)
@@ -16,7 +17,7 @@ SYSCALL(read)
 SYSCALL(kill)
 SYSCALL(exec)
 SYSCALL(getpid)
-SYSCALL(sbrk)
+SYSCALL_AS(sys_sbrk, sbrk)   // sbrk()/sbrklazy() in ulib.c
 SYSCALL(pause)
 SYSCALL(uptime)
 SYSCALL(write)

@@ -111,7 +111,8 @@ uint64 walkaddr(pagetable_t pagetable, uint64 va) {
 }
 
 // Remove npages of mappings starting from va, which must be page
-// aligned and mapped. Optionally free the physical memory.
+// aligned; pages never mapped (lazy allocation) are skipped. Optionally
+// free the physical memory.
 void uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free) {
     if ((va % PGSIZE) != 0)
         panic("uvmunmap: not aligned");
@@ -119,7 +120,7 @@ void uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free) {
     for (uint64 a = va; a < va + npages * PGSIZE; a += PGSIZE) {
         pte_t *pte = walk(pagetable, a, 0);
         if (pte == 0 || (*pte & PTE_VALID) == 0)
-            panic("uvmunmap: not mapped");
+            continue;  // never touched lazily allocated memory
         if (do_free)
             kfree((void *)P2V(PTE2PA(*pte)));
         *pte = 0;
@@ -209,7 +210,7 @@ int uvmcopy(pagetable_t old, pagetable_t new, uint64 sz) {
     for (i = 0; i < sz; i += PGSIZE) {
         pte_t *pte = walk(old, i, 0);
         if (pte == 0 || (*pte & PTE_VALID) == 0)
-            panic("uvmcopy: page not present");
+            continue;  // not allocated yet (lazy): nothing to copy
         uint64 pa = PTE2PA(*pte);
         uint64 flags = PTE_FLAGS(*pte);
 
@@ -238,6 +239,32 @@ void uvmclear(pagetable_t pagetable, uint64 va) {
     *pte = PTE_CLEAR_USER(*pte);
 }
 
+// Lazily allocated memory (sbrklazy): map a zeroed user page at va in
+// the current process's page table if va is below its size and nothing
+// is mapped there yet. Returns the page's physical address, or 0.
+uint64 vmfault(pagetable_t pagetable, uint64 va) {
+    struct proc *p = myproc();
+
+    if (p == 0 || p->pagetable != pagetable || va >= p->sz)
+        return 0;
+    va = PGROUNDDOWN(va);
+    pte_t *pte = walk(pagetable, va, 0);
+    if (pte && (*pte & PTE_VALID))
+        return 0;  // mapped: a real fault, e.g. the stack guard page
+
+    char *mem = kalloc();
+    if (mem == 0)
+        return 0;
+    memset(mem, 0, PGSIZE);
+    if (mappages(pagetable, va, PGSIZE, V2P(mem), PTE_USER(PERM_W)) != 0) {
+        kfree(mem);
+        return 0;
+    }
+    // riscv64 harts may have cached the invalid entry
+    asid_flush(p->asid);
+    return V2P(mem);
+}
+
 // Copy from kernel to user. Copy len bytes from src to virtual address
 // dstva in a given page table. Return 0 on success, -1 on error.
 int copyout(pagetable_t pagetable, uint64 dstva, const char *src, uint64 len) {
@@ -246,6 +273,8 @@ int copyout(pagetable_t pagetable, uint64 dstva, const char *src, uint64 len) {
         if (va0 >= MAXVA)
             return -1;
         pte_t *pte = walk(pagetable, va0, 0);
+        if ((pte == 0 || (*pte & PTE_VALID) == 0) && vmfault(pagetable, va0) != 0)
+            pte = walk(pagetable, va0, 0);
         if (pte == 0 || (*pte & PTE_VALID) == 0 || !PTE_IS_USER_W(*pte))
             return -1;
         uint64 n = PGSIZE - (dstva - va0);
@@ -266,7 +295,7 @@ int copyin(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len) {
     while (len > 0) {
         uint64 va0 = PGROUNDDOWN(srcva);
         uint64 pa0 = walkaddr(pagetable, va0);
-        if (pa0 == 0)
+        if (pa0 == 0 && (pa0 = vmfault(pagetable, va0)) == 0)
             return -1;
         uint64 n = PGSIZE - (srcva - va0);
         if (n > len)
@@ -289,7 +318,7 @@ int copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max) {
     while (got_null == 0 && max > 0) {
         uint64 va0 = PGROUNDDOWN(srcva);
         uint64 pa0 = walkaddr(pagetable, va0);
-        if (pa0 == 0)
+        if (pa0 == 0 && (pa0 = vmfault(pagetable, va0)) == 0)
             return -1;
         uint64 n = PGSIZE - (srcva - va0);
         if (n > max)

@@ -2,6 +2,9 @@
 #include "param.h"
 #include "defs.h"
 #include "proc.h"
+#include "syscall.h"
+#include "vm.h"
+#include "mmu.h"
 #include "spinlock.h"
 #include "timer.h"
 
@@ -32,12 +35,25 @@ uint64 sys_fork(void) {
     return fork();
 }
 
+// sbrk(n, type): grow or shrink memory by n bytes, returning the old
+// size. Growing with SBRK_LAZY only raises sz; vmfault() allocates
+// each page when it is first touched.
 uint64 sys_sbrk(void) {
-    int n;
+    int n, type;
+    struct proc *p = myproc();
+
     argint(0, &n);
-    uint64 addr = myproc()->sz;
-    if (growproc(n) < 0)
-        return -1;
+    argint(1, &type);
+    uint64 addr = p->sz;
+
+    if (type == SBRK_EAGER || n < 0) {
+        if (growproc(n) < 0)
+            return -1;
+    } else {
+        if (addr + n < addr || addr + n > USERTOP)
+            return -1;
+        p->sz += n;
+    }
     return addr;
 }
 

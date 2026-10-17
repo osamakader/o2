@@ -137,6 +137,9 @@ void usertrap(void)
         syscall();
     } else if ((dev = devintr(tf->cause)) != DEV_NONE) {
         // ok
+    } else if ((tf->cause == 13 || tf->cause == 15) &&
+               vmfault(p->pagetable, tf->tval) != 0) {
+        // load/store page fault on lazily allocated memory
     } else {
         // a fault in the user program: kill it, not the kernel
         printf("usertrap(): %s (scause 0x%lx) pid=%d %s\n            sepc=%p stval=%p\n",

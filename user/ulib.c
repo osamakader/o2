@@ -2,6 +2,7 @@
 #include "user.h"
 #include "stat.h"
 #include "fcntl.h"
+#include "syscall.h"
 
 int main(int argc, char *argv[]);
 
@@ -131,4 +132,14 @@ char* strchr(const char *s, char c)
     if(*s == c)
       return (char*)s;
   return 0;
+}
+
+char* sbrk(int n)
+{
+  return sys_sbrk(n, SBRK_EAGER);
+}
+
+char* sbrklazy(int n)
+{
+  return sys_sbrk(n, SBRK_LAZY);
 }
