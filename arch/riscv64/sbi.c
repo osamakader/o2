@@ -3,6 +3,11 @@
 
 #include "types.h"
 #include "sbi.h"
+#include "param.h"
+#include "memlayout.h"
+#include "defs.h"
+#include "console.h"
+#include "cpu.h"
 
 #define SBI_EXT_TIME 0x54494D45   // "TIME"
 #define SBI_EXT_HSM  0x48534D     // "HSM"
@@ -39,4 +44,21 @@ void sbi_set_timer(uint64 stime)
 long sbi_hart_start(uint64 hartid, uint64 start_addr, uint64 opaque)
 {
     return sbi_call(SBI_EXT_HSM, 0, hartid, start_addr, opaque).error;
+}
+
+// Start the other harts. Each enters at the physical _entry_secondary
+// with the MMU off and comes up through entry.S into main(0). Under
+// OpenSBI the boot hart can be any of them, so try every id but our
+// own; ids with no hart behind them are rejected.
+void start_cpus(void)
+{
+    extern char _entry_secondary[];
+
+    for (int i = 0; i < NCPU; i++) {
+        if (i == cpuid())
+            continue;
+        long r = sbi_hart_start(i, V2P(_entry_secondary), 0);
+        if (r != SBI_SUCCESS && r != SBI_ERR_INVALID_PARAM)
+            printf("cpu %d: sbi_hart_start failed: %ld\n", i, r);
+    }
 }

@@ -42,7 +42,6 @@ AOBJS = \
   sbi.o \
   timer.o \
   plic.o \
-  stubs.o \
 
 QEMUOPTS = -machine virt -bios default
 else
