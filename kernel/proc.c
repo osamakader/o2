@@ -334,13 +334,13 @@ int growproc(int n) {
     uint64 sz = p->sz;
 
     if (n > 0) {
-        if (sz + n >= USERTOP)
+        if (sz + n > USERTOP)
             return -1;
         if ((sz = uvmalloc(p->pagetable, sz, sz + n, PERM_W)) == 0)
             return -1;
     } else if (n < 0) {
-        if ((uint64)-n > sz)
-            return -1;
+        // shrinking below 0 wraps sz + n around: uvmdealloc() then
+        // leaves the size unchanged, as xv6 does.
         sz = uvmdealloc(p->pagetable, sz, sz + n);
     }
     p->sz = sz;
