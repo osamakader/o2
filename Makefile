@@ -1,20 +1,15 @@
 ARCH ?= arm64
 
-OBJS = \
-  arch/$(ARCH)/entry.o \
-  arch/$(ARCH)/exceptions.o \
-  arch/$(ARCH)/swtch.o \
-  kernel/clock.o \
-  arch/$(ARCH)/irq.o \
+# Everything is built under build/$(ARCH), so both arches can be built
+# from the same tree without cleaning in between.
+B = build/$(ARCH)
+KERNEL = $(B)/kernel.elf
+
+KOBJS = \
   kernel/start.o \
-  kernel/console.o \
-  arch/$(ARCH)/uart.o \
-  arch/$(ARCH)/gicv3.o \
-  arch/$(ARCH)/mmu.o \
-  arch/$(ARCH)/psci.o \
-  arch/$(ARCH)/trap.o \
-  arch/$(ARCH)/timer.o \
   kernel/main.o \
+  kernel/console.o \
+  kernel/clock.o \
   kernel/string.o \
   kernel/kalloc.o \
   kernel/proc.o \
@@ -31,14 +26,29 @@ OBJS = \
 CFLAGS = -Wall -Werror -O -fno-omit-frame-pointer -ggdb -gdwarf-2
 
 ifeq ($(ARCH), riscv64)
-	QEMU = qemu-system-riscv64
-	TOOLPREFIX = riscv64-linux-gnu-
-	CFLAGS += -march=rv64gc
+QEMU = qemu-system-riscv64
+TOOLPREFIX = riscv64-linux-gnu-
+CFLAGS += -march=rv64gc
 else
-	QEMU = qemu-system-aarch64
-	TOOLPREFIX = aarch64-linux-gnu-
-	CFLAGS += -march=armv8-a -mgeneral-regs-only -mno-outline-atomics
+QEMU = qemu-system-aarch64
+TOOLPREFIX = aarch64-linux-gnu-
+CFLAGS += -march=armv8-a -mgeneral-regs-only -mno-outline-atomics
+AOBJS = \
+  entry.o \
+  exceptions.o \
+  swtch.o \
+  irq.o \
+  uart.o \
+  gicv3.o \
+  mmu.o \
+  psci.o \
+  trap.o \
+  timer.o \
+
+QEMUOPTS = -machine virt,gic-version=3 -cpu cortex-a57
 endif
+
+OBJS = $(addprefix $(B)/arch/$(ARCH)/, $(AOBJS)) $(addprefix $(B)/, $(KOBJS))
 
 CC = $(TOOLPREFIX)gcc
 AS = $(TOOLPREFIX)gas
@@ -62,44 +72,48 @@ endif
 
 LDFLAGS = -z max-page-size=4096
 
-kernel.elf: $(OBJS) arch/$(ARCH)/kernel.ld
-	$(LD) $(LDFLAGS) -T arch/$(ARCH)/kernel.ld -o kernel.elf $(OBJS) 
-	$(OBJDUMP) -S kernel.elf > kernel.asm
-	$(OBJDUMP) -t kernel.elf | sed '1,/SYMBOL TABLE/d; s/ .* / /; /^$$/d' > kernel.sym
+all: $(KERNEL)
 
-%.o: %.S
+$(KERNEL): $(OBJS) arch/$(ARCH)/kernel.ld
+	$(LD) $(LDFLAGS) -T arch/$(ARCH)/kernel.ld -o $@ $(OBJS)
+	$(OBJDUMP) -S $@ > $(B)/kernel.asm
+	$(OBJDUMP) -t $@ | sed '1,/SYMBOL TABLE/d; s/ .* / /; /^$$/d' > $(B)/kernel.sym
+
+$(B)/%.o: %.S
+	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -g -c -o $@ $<
 
-%.o: %.c
+$(B)/%.o: %.c
+	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -g -c -o $@ $<
 
--include arch/$(ARCH)/*.d
--include kernel/*.d
--include user/*.d
+-include $(shell find $(B) -name '*.d' 2>/dev/null)
 
-# initcode.S embeds user/_init with .incbin, which -MD doesn't track.
-kernel/initcode.o: user/_init
+# initcode.S embeds the init program with .incbin, which -MD doesn't
+# track.
+$(B)/kernel/initcode.o: $(B)/user/_init
+$(B)/kernel/initcode.o: CFLAGS += -DINITCODE='"$(B)/user/_init"'
 
-# User programs: linked at VA 0 against a tiny libc (ulib, printf, usys).
-ULIB = user/ulib.o user/usys.o user/printf.o
+# User programs: linked at VA 0 against a tiny libc (ulib, printf, and
+# the arch's syscall stubs).
+ULIB = $(B)/user/ulib.o $(B)/user/$(ARCH)/usys.o $(B)/user/printf.o
 
-user/_%: user/%.o $(ULIB) user/user.ld
-	$(LD) $(LDFLAGS) -T user/user.ld -o $@ $< $(ULIB)
-	$(OBJDUMP) -S $@ > user/$*.asm
+$(B)/user/_%: $(B)/user/%.o $(ULIB) user/$(ARCH)/user.ld
+	$(LD) $(LDFLAGS) -T user/$(ARCH)/user.ld -o $@ $< $(ULIB)
+	$(OBJDUMP) -S $@ > $(B)/user/$*.asm
 
-.PRECIOUS: user/%.o
+.PRECIOUS: $(B)/user/%.o
 
-clean: 
-	rm -rf *.log *.sym *.asm *.o \
-	*/*.o */*.d */*.asm */*.sym \
-	arch/*/*.o arch/*/*.d kernel.elf \
-	user/_*
+clean:
+	rm -rf build
 
 ifndef CPUS
 CPUS := 3
 endif
 
-QEMUOPTS = -machine virt,gic-version=3 -kernel kernel.elf -m 128M -smp $(CPUS) -nographic -cpu cortex-a57
+QEMUOPTS += -kernel $(KERNEL) -m 128M -smp $(CPUS) -nographic
 
-qemu: kernel.elf
+qemu: $(KERNEL)
 	$(QEMU) $(QEMUOPTS)
+
+.PHONY: all clean qemu

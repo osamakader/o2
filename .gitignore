@@ -63,3 +63,6 @@ kernel.sym
 # user program binaries and listings
 user/_*
 user/*.asm
+
+# build output (per arch)
+build/
