@@ -688,6 +688,39 @@ static int fp_old_pattern_left(void)
   return FP_NREGS - fp_regs_check(FP_SEED + 9);
 }
 
+// getppid() is the parent's pid, and init's (1) once the parent has
+// exited.
+static void test_getppid(void)
+{
+  int me = getpid(), fds[2];
+  if(pipe(fds) < 0){
+    fail("getppid", "pipe");
+    return;
+  }
+  int pid = fork();
+  if(pid == 0){
+    close(fds[0]);
+    int ok = getppid() == me;
+    if(fork() == 0){
+      // orphaned once our parent exits
+      for(int i = 0; i < 100 && getppid() != 1; i++)
+        pause(1);
+      char c = ok && getppid() == 1 ? 'y' : 'n';
+      write(fds[1], &c, 1);
+      exit(0);
+    }
+    exit(0);
+  }
+  close(fds[1]);
+  wait(0);
+  char c = 0;
+  if(read(fds[0], &c, 1) != 1 || c != 'y')
+    fail("getppid", "wrong parent");
+  close(fds[0]);
+  if(getppid() <= 0)
+    fail("getppid", "o2tests has no parent");
+}
+
 static void o2tests(void)
 {
   struct { const char *name; void (*fn)(void); } tests[] = {
@@ -701,6 +734,7 @@ static void o2tests(void)
     { "pipe", test_pipe },
     { "ps", test_ps },
     { "klog", test_klog },
+    { "getppid", test_getppid },
     { "fp math", test_fp_math },
     { "fp regs", test_fp_regs },
     { "fp fork", test_fp_fork },

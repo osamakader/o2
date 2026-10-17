@@ -59,6 +59,7 @@ int fork(void);
 void exit(int status) __attribute__((noreturn));
 int wait(uint64 addr);
 int kill(int pid);
+int getppid(void);
 void setkilled(struct proc *p);
 int killed(struct proc *p);
 void procdump(void);

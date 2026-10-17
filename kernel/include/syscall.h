@@ -28,6 +28,7 @@
 #define SYS_sync   22
 #define SYS_getprocs 23   // o2 extension
 #define SYS_klog   24     // o2 extension
+#define SYS_getppid 25
 
 // sbrk(n, type): allocate now, or only on first touch (page fault)
 #define SBRK_EAGER 1

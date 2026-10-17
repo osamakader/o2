@@ -33,6 +33,7 @@ int chdir(const char *);
 int dup(int);
 int getprocs(struct procinfo *, int);
 int klog(char *, int);
+int getppid(void);
 
 // ulib.c
 char *strcpy(char *, const char *);

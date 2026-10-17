@@ -12,6 +12,10 @@ uint64 sys_getpid(void) {
     return myproc()->pid;
 }
 
+uint64 sys_getppid(void) {
+    return getppid();
+}
+
 uint64 sys_exit(void) {
     int n;
     argint(0, &n);

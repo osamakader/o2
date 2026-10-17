@@ -532,6 +532,15 @@ int kill(int pid) {
     return -1;
 }
 
+// The parent's pid; 0 for init, which has none.
+int getppid(void) {
+    acquire(&wait_lock);
+    struct proc *parent = myproc()->parent;
+    int pid = parent ? parent->pid : 0;
+    release(&wait_lock);
+    return pid;
+}
+
 void setkilled(struct proc *p) {
     acquire(&p->lock);
     p->killed = 1;
