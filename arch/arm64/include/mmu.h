@@ -76,4 +76,15 @@
 #define PTE_KERN_DATA   (PTE_ATTRIDX(MT_NORMAL) | PTE_SH_INNER | PTE_AP_RW | PTE_PXN | PTE_UXN)
 #define PTE_KERN_DEVICE (PTE_ATTRIDX(MT_DEVICE_nGnRE) | PTE_AP_RW | PTE_PXN | PTE_UXN)
 
+// user mappings: never executable at EL1; read-only unless PERM_W,
+// not executable at EL0 unless PERM_X.
+#define PTE_USER(perm) (PTE_ATTRIDX(MT_NORMAL) | PTE_SH_INNER | PTE_PXN | \
+                        (((perm) & PERM_W) ? PTE_AP_RW_USER : PTE_AP_RO_USER) | \
+                        (((perm) & PERM_X) ? 0 : PTE_UXN))
+
+// is this leaf accessible / writable from EL0? (AP[2:1] = x1 / 01)
+#define PTE_AP_MASK      (_UL(3) << 6)
+#define PTE_IS_USER(pte)   (((pte) & PTE_AP_RW_USER) != 0)
+#define PTE_IS_USER_W(pte) (((pte) & PTE_AP_MASK) == PTE_AP_RW_USER)
+
 #endif
