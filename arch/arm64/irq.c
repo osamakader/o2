@@ -1,40 +1,20 @@
+// Interrupt dispatch through the GICv3 CPU interface.
+
+#include "types.h"
+#include "param.h"
+#include "memlayout.h"
 #include "console.h"
-#include "isr.h"
-#include "timer.h"
 #include "proc.h"
 #include "cpu.h"
-#include "spinlock.h"
-#include "memlayout.h"
+#include "timer.h"
 #include "uart.h"
+#include "trap.h"
 
-// Timer interrupts seen by CPU 0. Every CPU has its own timer, so
-// counting on all of them would advance ticks ncpu times per tick.
-// Updated under tickslock; sleepers wait on &ticks.
-struct spinlock tickslock = { .name = "time" };
-uint64 ticks;
+#define TIMER_IRQ 27   // EL1 virtual timer PPI
 
-void timer_irq()
-{
-  if (cpuid() == 0) {
-    acquire(&tickslock);
-    ticks++;
-    wakeup(&ticks);
-    release(&tickslock);
-  }
-  rearm_timer();
-}
+void timer_rearm(void);
 
-// Block the calling thread for at least n ticks.
-void sleep_ticks(uint64 n)
-{
-  acquire(&tickslock);
-  uint64 ticks0 = ticks;
-  while (ticks - ticks0 < n)
-    sleep(&ticks, &tickslock);
-  release(&tickslock);
-}
-
-// interrupts handler
+// IRQ from EL1 or EL0 (via usertrap_irq()).
 void handle_irq(struct trapframe *tf)
 {
   uint32 id = 0;
@@ -46,7 +26,8 @@ void handle_irq(struct trapframe *tf)
 
   switch (id) {
   case TIMER_IRQ:
-    timer_irq();
+    clockintr();
+    timer_rearm();
     break;
   case UART0_IRQ:
     uartintr();

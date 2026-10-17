@@ -8,7 +8,6 @@
 #include "cpu.h"
 #include "vm.h"
 #include "defs.h"
-#include "isr.h"
 
 #define ESR_EC(esr) (((esr) >> 26) & 0x3f)
 

@@ -78,13 +78,13 @@ int main() {
         userinit();   // first, so init is pid 1
         selftest();   // before any CPU schedules: init hasn't run yet
 
-        init_timer();
+        timerinithart();
 
         start_secondaries();
     } else {
         kvminithart();
         gic_inithart();
-        init_timer();
+        timerinithart();
         printf("cpu %d starting\n", cpuid());
     }
 

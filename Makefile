@@ -4,7 +4,8 @@ OBJS = \
   arch/$(ARCH)/entry.o \
   arch/$(ARCH)/exceptions.o \
   arch/$(ARCH)/swtch.o \
-  kernel/isr.o \
+  kernel/clock.o \
+  arch/$(ARCH)/irq.o \
   kernel/start.o \
   kernel/console.o \
   arch/$(ARCH)/uart.o \
@@ -12,7 +13,7 @@ OBJS = \
   arch/$(ARCH)/mmu.o \
   arch/$(ARCH)/psci.o \
   arch/$(ARCH)/trap.o \
-  kernel/timer.o \
+  arch/$(ARCH)/timer.o \
   kernel/main.o \
   kernel/string.o \
   kernel/kalloc.o \
