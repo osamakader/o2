@@ -25,4 +25,5 @@ void serr_handler(struct trapframe *tf);
 void sync_handler(struct trapframe *tf);
 void usertrap(struct trapframe *tf);
 void usertrapret(struct trapframe *tf);
+void usertrap_irq(struct trapframe *tf);
 #endif

@@ -63,6 +63,11 @@ struct cpu *mycpu(void);
 
 void procinit(void);
 void userinit(void);
+void exit(int status) __attribute__((noreturn));
+int wait(uint64 addr);
+int kill(int pid);
+void setkilled(struct proc *p);
+int killed(struct proc *p);
 void proc_mapstacks(pagetable_t pagetable);
 struct proc *kthread_create(void (*fn)(void *), void *arg);
 void yield(void);

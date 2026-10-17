@@ -84,6 +84,11 @@ static struct proc *allocproc(void) {
 // the first user process; orphans are reparented to it.
 struct proc *initproc;
 
+// helps ensure that wakeups of wait()ing parents are not lost. helps
+// obey the memory model when using p->parent. must be acquired before
+// any p->lock.
+static struct spinlock wait_lock = { .name = "wait_lock" };
+
 // Assembly in exceptions.S: switch to tf and return to user mode.
 extern void userret(struct trapframe *tf) __attribute__((noreturn));
 
@@ -291,4 +296,125 @@ void userinit(void) {
 
     p->state = RUNNABLE;
     release(&p->lock);
+}
+
+// Pass p's abandoned children to init.
+// Caller must hold wait_lock.
+static void reparent(struct proc *p) {
+    for (int i = 0; i < NPROC; i++) {
+        struct proc *pp = &ptable[i];
+        if (pp->parent == p) {
+            pp->parent = initproc;
+            wakeup(initproc);
+        }
+    }
+}
+
+// Exit the current user process. Does not return. An exited process
+// remains in the zombie state until its parent calls wait().
+void exit(int status) {
+    struct proc *p = myproc();
+
+    if (p == initproc)
+        panic("init exiting");
+
+    acquire(&wait_lock);
+
+    // Give any children to init.
+    reparent(p);
+
+    // Parent might be sleeping in wait().
+    wakeup(p->parent);
+
+    acquire(&p->lock);
+
+    p->xstate = status;
+    p->state = ZOMBIE;
+
+    release(&wait_lock);
+
+    // Jump into the scheduler, never to return.
+    sched();
+    panic("zombie exit");
+}
+
+// Wait for a child process to exit and return its pid. Return -1 if
+// this process has no children. If addr is not 0, copy the child's
+// exit status there.
+int wait(uint64 addr) {
+    struct proc *p = myproc();
+
+    acquire(&wait_lock);
+
+    for (;;) {
+        // Scan through table looking for exited children.
+        int havekids = 0;
+        for (int i = 0; i < NPROC; i++) {
+            struct proc *pp = &ptable[i];
+            if (pp->parent != p)
+                continue;
+
+            // make sure the child isn't still in exit() or swtch().
+            acquire(&pp->lock);
+
+            havekids = 1;
+            if (pp->state == ZOMBIE) {
+                // Found one.
+                int pid = pp->pid;
+                if (addr != 0 && copyout(p->pagetable, addr, (char *)&pp->xstate,
+                                         sizeof(pp->xstate)) < 0) {
+                    release(&pp->lock);
+                    release(&wait_lock);
+                    return -1;
+                }
+                freeproc(pp);
+                release(&pp->lock);
+                release(&wait_lock);
+                return pid;
+            }
+            release(&pp->lock);
+        }
+
+        // No point waiting if we don't have any children.
+        if (!havekids || killed(p)) {
+            release(&wait_lock);
+            return -1;
+        }
+
+        // Wait for a child to exit.
+        sleep(p, &wait_lock);
+    }
+}
+
+// Kill the process with the given pid. The victim won't exit until it
+// tries to return to user space (see usertrap()).
+int kill(int pid) {
+    for (int i = 0; i < NPROC; i++) {
+        struct proc *p = &ptable[i];
+        acquire(&p->lock);
+        if (p->pid == pid && p->pagetable != 0) {
+            p->killed = 1;
+            if (p->state == SLEEPING) {
+                // Wake process from sleep().
+                p->state = RUNNABLE;
+            }
+            release(&p->lock);
+            return 0;
+        }
+        release(&p->lock);
+    }
+    return -1;
+}
+
+void setkilled(struct proc *p) {
+    acquire(&p->lock);
+    p->killed = 1;
+    release(&p->lock);
+}
+
+int killed(struct proc *p) {
+    acquire(&p->lock);
+    int k = p->killed;
+    release(&p->lock);
+    return k;
 }

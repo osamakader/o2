@@ -161,7 +161,7 @@ el0_sync:
 
 el0_irq:
     EL0_ENTRY
-    bl handle_irq
+    bl usertrap_irq
     b ret_to_user
 
 // userret(tf): enter user mode for the first time (forkret), from the

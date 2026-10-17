@@ -8,6 +8,7 @@
 #include "cpu.h"
 #include "vm.h"
 #include "defs.h"
+#include "isr.h"
 
 #define ESR_EC(esr) (((esr) >> 26) & 0x3f)
 
@@ -52,16 +53,40 @@ void serr_handler(struct trapframe *tf)
 // interrupts masked.
 void usertrap(struct trapframe *tf)
 {
+    struct proc *p = myproc();
+
     if (ESR_EC(tf->esr) == EC_SVC64) {
+        // system call
+
+        if (killed(p))
+            exit(-1);
+
         // ELR already points past the svc instruction. An interrupt
         // will change registers, so enable only now that we're done
         // with them.
         intr_on();
+
         syscall();
-        return;
+    } else {
+        // a fault in the user program: kill it, not the kernel
+        printf("usertrap(): %s (esr %p) pid=%d %s\n            elr=%p far=%p\n",
+               ec_name(ESR_EC(tf->esr)), (void *)tf->esr, p->pid, p->name,
+               (void *)tf->elr, (void *)tf->far);
+        setkilled(p);
     }
-    panic("usertrap: %s esr %p elr %p far %p", ec_name(ESR_EC(tf->esr)),
-          (void *)tf->esr, (void *)tf->elr, (void *)tf->far);
+
+    if (killed(p))
+        exit(-1);
+}
+
+// IRQ from EL0: handle it (a timer tick may yield), then make a killed
+// process exit instead of returning to user mode.
+void usertrap_irq(struct trapframe *tf)
+{
+    handle_irq(tf);
+
+    if (killed(myproc()))
+        exit(-1);
 }
 
 // Last step before returning to EL0 through tf: with interrupts off
