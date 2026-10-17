@@ -10,6 +10,7 @@
 #include "exec.h"
 #include "procinfo.h"
 #include "fpu.h"
+#include "syscall.h"
 
 // Fixed-size process table. BSS is zeroed at boot (arch/<arch>/entry.S),
 // and UNUSED == 0, so every slot starts out free.
@@ -464,10 +465,11 @@ void exit(int status) {
     panic("zombie exit");
 }
 
-// Wait for a child process to exit and return its pid. Return -1 if
-// this process has no children. If addr is not 0, copy the child's
-// exit status there.
-int wait(uint64 addr) {
+// Wait for a child process to exit and return its pid: child pid, or
+// any child if pid is -1. Return -1 if this process has no such child,
+// and with WNOHANG 0 if none has exited yet. If addr is not 0, copy
+// the child's exit status there.
+int waitpid(int pid, uint64 addr, int options) {
     struct proc *p = myproc();
 
     acquire(&wait_lock);
@@ -477,7 +479,7 @@ int wait(uint64 addr) {
         int havekids = 0;
         for (int i = 0; i < NPROC; i++) {
             struct proc *pp = &ptable[i];
-            if (pp->parent != p)
+            if (pp->parent != p || (pid != -1 && pp->pid != pid))
                 continue;
 
             // make sure the child isn't still in exit() or swtch().
@@ -486,7 +488,7 @@ int wait(uint64 addr) {
             havekids = 1;
             if (pp->state == ZOMBIE) {
                 // Found one.
-                int pid = pp->pid;
+                int cpid = pp->pid;
                 if (addr != 0 && copyout(p->pagetable, addr, (char *)&pp->xstate,
                                          sizeof(pp->xstate)) < 0) {
                     release(&pp->lock);
@@ -496,7 +498,7 @@ int wait(uint64 addr) {
                 freeproc(pp);
                 release(&pp->lock);
                 release(&wait_lock);
-                return pid;
+                return cpid;
             }
             release(&pp->lock);
         }
@@ -505,6 +507,10 @@ int wait(uint64 addr) {
         if (!havekids || killed(p)) {
             release(&wait_lock);
             return -1;
+        }
+        if (options & WNOHANG) {
+            release(&wait_lock);
+            return 0;
         }
 
         // Wait for a child to exit.

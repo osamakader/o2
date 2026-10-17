@@ -26,7 +26,18 @@ uint64 sys_exit(void) {
 uint64 sys_wait(void) {
     uint64 p;
     argaddr(0, &p);
-    return wait(p);
+    return waitpid(-1, p, 0);
+}
+
+uint64 sys_waitpid(void) {
+    int pid, options;
+    uint64 p;
+    argint(0, &pid);
+    argaddr(1, &p);
+    argint(2, &options);
+    if (pid <= 0 && pid != -1)
+        return -1;   // no process groups
+    return waitpid(pid, p, options);
 }
 
 uint64 sys_kill(void) {

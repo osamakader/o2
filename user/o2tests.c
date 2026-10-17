@@ -826,6 +826,30 @@ static void test_lseek(void)
   close(fds[1]);
 }
 
+// waitpid() waits for one particular child, or with WNOHANG not at all.
+static void test_waitpid(void)
+{
+  int pids[3], status = -1;
+  for(int i = 0; i < 3; i++){
+    if((pids[i] = fork()) == 0){
+      pause(i == 1 ? 1 : 20);   // the middle one exits first
+      exit(10 + i);
+    }
+  }
+  if(waitpid(pids[2], &status, WNOHANG) != 0)
+    fail("waitpid", "WNOHANG with a running child");
+  if(waitpid(pids[2], &status, 0) != pids[2] || status != 12)
+    fail("waitpid", "a particular child");
+  // the middle one exited long ago, but stays until waited for
+  if(waitpid(pids[1], &status, WNOHANG) != pids[1] || status != 11)
+    fail("waitpid", "WNOHANG with an exited child");
+  if(waitpid(-1, &status, 0) != pids[0] || status != 10)
+    fail("waitpid", "any child");
+  if(waitpid(-1, 0, WNOHANG) != -1 || waitpid(pids[0], 0, 0) != -1 ||
+     waitpid(1, 0, 0) != -1 || waitpid(0, 0, 0) != -1)
+    fail("waitpid", "no such child");
+}
+
 static void o2tests(void)
 {
   struct { const char *name; void (*fn)(void); } tests[] = {
@@ -842,6 +866,7 @@ static void o2tests(void)
     { "getppid", test_getppid },
     { "dup2", test_dup2 },
     { "lseek", test_lseek },
+    { "waitpid", test_waitpid },
     { "fp math", test_fp_math },
     { "fp regs", test_fp_regs },
     { "fp fork", test_fp_fork },

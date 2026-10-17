@@ -79,6 +79,7 @@ extern uint64 sys_klog(void);
 extern uint64 sys_getppid(void);
 extern uint64 sys_dup2(void);
 extern uint64 sys_lseek(void);
+extern uint64 sys_waitpid(void);
 
 // An array mapping syscall numbers from syscall.h to the function that
 // handles the system call.
@@ -110,6 +111,7 @@ static uint64 (*syscalls[])(void) = {
     [SYS_getppid]  sys_getppid,
     [SYS_dup2]     sys_dup2,
     [SYS_lseek]    sys_lseek,
+    [SYS_waitpid]  sys_waitpid,
 };
 
 void syscall(void) {

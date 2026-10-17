@@ -31,9 +31,13 @@
 #define SYS_getppid 25
 #define SYS_dup2    26
 #define SYS_lseek   27
+#define SYS_waitpid 28
 
 // sbrk(n, type): allocate now, or only on first touch (page fault)
 #define SBRK_EAGER 1
 #define SBRK_LAZY  2
+
+// waitpid() options: return 0 instead of waiting if no child has exited
+#define WNOHANG    1
 
 #endif
