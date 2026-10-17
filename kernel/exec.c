@@ -145,8 +145,14 @@ int exec(struct proc *p, const char *name, struct elfsrc *src, char **argv) {
     p->pagetable = pagetable;
     p->sz = sz;
     tf_init_user(p->trapframe, elf.entry, sp);  // start at _start
-    if (oldpagetable)
+    if (oldpagetable) {
+        // This hart may still be translating through the old table (on
+        // riscv64 its upper half maps the kernel itself); leave it before
+        // kfree() fills it with junk. usertrapret() installs the new one.
+        if (p == myproc())
+            kvmswitch();
         uvmfree(oldpagetable, oldsz);
+    }
 
     return argc;
 
