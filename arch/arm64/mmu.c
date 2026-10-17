@@ -2,6 +2,7 @@
 #include "memlayout.h"
 #include "vm.h"
 #include "mmu.h"
+#include "proc.h"
 #include "defs.h"
 #include "console.h"
 
@@ -67,4 +68,19 @@ void sync_icache(uint64 va, uint64 len) {
 // No TLB flush needed: uvmswitch() flushes before user mode runs again.
 void kvmswitch(void) {
     asm volatile("msr ttbr0_el1, %0; isb" : : "r"(V2P(empty_pagetable)) : "memory");
+}
+
+// A user page table: nothing beyond the user's own memory yet.
+pagetable_t proc_pagetable(struct proc *p) {
+    return uvmcreate();
+}
+
+void proc_freepagetable(pagetable_t pagetable, uint64 sz) {
+    uvmfree(pagetable, sz);
+}
+
+// Traps from user mode save registers at the top of the (otherwise
+// empty) kernel stack.
+struct trapframe *trapframe_alloc(uint64 kstack) {
+    return (struct trapframe *)(kstack + PGSIZE) - 1;
 }

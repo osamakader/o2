@@ -49,6 +49,7 @@
 // the upper half (root entries 256..511) the kernel's.
 #define VA_VALID(va)  ((((long)(va)) << 25 >> 25) == (long)(va))
 #define MAXVA            (_UL(1) << 38)
+#define USERTOP          MAXVA   // end of user memory
 #define UVM_ROOT_ENTRIES 256
 #ifndef __ASSEMBLER__
 void uvminit_root(uint64 *root);   // copy the kernel half into a user root

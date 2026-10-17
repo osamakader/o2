@@ -54,7 +54,17 @@ void proc_mapstacks(pagetable_t pagetable) {
         if (mappages(pagetable, KSTACK(i), PGSIZE, V2P(pa), PTE_KERN_DATA) != 0)
             panic("proc_mapstacks: map");
         ptable[i].kstack = KSTACK(i);
+        ptable[i].trapframe = trapframe_alloc(KSTACK(i));
     }
+}
+
+// Top of p's kernel stack for kernel code: below the trapframe if the
+// arch keeps it on the kernel stack.
+static uint64 kstack_top(struct proc *p) {
+    uint64 tf = (uint64)p->trapframe;
+    if (tf >= p->kstack && tf < p->kstack + PGSIZE)
+        return tf;
+    return p->kstack + PGSIZE;
 }
 
 // Find an UNUSED slot and claim it with a fresh pid. Returns with
@@ -67,9 +77,6 @@ static struct proc *allocproc(void) {
             p->pid = allocpid();
             p->state = USED;
             memset(&p->ctx, 0, sizeof(p->ctx));
-            // Traps from user mode save registers at the top of the
-            // (otherwise empty) kernel stack; see exceptions.S.
-            p->trapframe = (struct trapframe *)(p->kstack + PGSIZE) - 1;
             return p;
         }
         release(&p->lock);
@@ -118,7 +125,7 @@ static void forkret(void) {
 // slot's next user.
 static void freeproc(struct proc *p) {
     if (p->pagetable)
-        uvmfree(p->pagetable, p->sz);
+        proc_freepagetable(p->pagetable, p->sz);
     p->pagetable = 0;
     p->sz = 0;
     p->pid = 0;
@@ -306,9 +313,9 @@ void userinit(void) {
 
     p->cwd = namei("/");
 
-    // forkret runs on the kernel stack just below the trapframe.
+    // forkret runs at the top of the kernel stack.
     p->ctx.ra = (uint64)forkret;
-    p->ctx.sp = (uint64)p->trapframe;
+    p->ctx.sp = kstack_top(p);
 
     p->state = RUNNABLE;
     release(&p->lock);
@@ -321,7 +328,7 @@ int growproc(int n) {
     uint64 sz = p->sz;
 
     if (n > 0) {
-        if (sz + n >= MAXVA)
+        if (sz + n >= USERTOP)
             return -1;
         if ((sz = uvmalloc(p->pagetable, sz, sz + n, PERM_W)) == 0)
             return -1;
@@ -346,7 +353,7 @@ int fork(void) {
         return -1;
 
     // Copy user memory from parent to child.
-    if ((np->pagetable = uvmcreate()) == 0 ||
+    if ((np->pagetable = proc_pagetable(np)) == 0 ||
         uvmcopy(p->pagetable, np->pagetable, p->sz) < 0) {
         freeproc(np);
         release(&np->lock);
@@ -371,7 +378,7 @@ int fork(void) {
     // The child starts in forkret, on its kernel stack below the
     // trapframe.
     np->ctx.ra = (uint64)forkret;
-    np->ctx.sp = (uint64)np->trapframe;
+    np->ctx.sp = kstack_top(np);
 
     int pid = np->pid;
 

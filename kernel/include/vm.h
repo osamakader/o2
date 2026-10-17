@@ -6,7 +6,8 @@
 // Page-table geometry shared by arm64 (4KB granule, 39-bit VA) and
 // riscv64 Sv39: three levels of 512 entries, 9 VA bits per level.
 // Level 2 is the root, level 0 holds the leaf page entries. The arch's
-// mmu.h defines the descriptor format, MAXVA (end of user space) and
+// mmu.h defines the descriptor format, MAXVA (end of user space),
+// USERTOP (end of user memory: below any arch pages at the top) and
 // how a user root table is set up (uvminit_root, UVM_ROOT_ENTRIES).
 
 #define PGSHIFT 12
@@ -41,6 +42,11 @@ int copyout(pagetable_t pagetable, uint64 dstva, const char *src, uint64 len);
 int copyin(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len);
 int copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max);
 void kvminithart(void);   // arch: switch this core to kernel_pagetable
+// arch: a new user page table for p, with any pages the arch needs in
+// every address space; and its counterpart, freeing user memory too
+struct proc;
+pagetable_t proc_pagetable(struct proc *p);
+void proc_freepagetable(pagetable_t pagetable, uint64 sz);
 void uvmswitch(pagetable_t pagetable);   // arch: install a user page table
 void kvmswitch(void);                    // arch: back to no user page table
 void sync_icache(uint64 va, uint64 len); // arch: make written code executable

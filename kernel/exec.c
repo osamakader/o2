@@ -66,7 +66,7 @@ int exec(struct proc *p, const char *name, struct elfsrc *src, char **argv) {
     struct elfhdr elf;
     struct proghdr ph;
     uint64 argc, sz = 0, sp, ustack[MAXARG], stackbase;
-    pagetable_t pagetable = uvmcreate();
+    pagetable_t pagetable = proc_pagetable(p);
 
     if (pagetable == 0)
         return -1;
@@ -151,13 +151,13 @@ int exec(struct proc *p, const char *name, struct elfsrc *src, char **argv) {
         // kfree() fills it with junk. usertrapret() installs the new one.
         if (p == myproc())
             kvmswitch();
-        uvmfree(oldpagetable, oldsz);
+        proc_freepagetable(oldpagetable, oldsz);
     }
 
     return argc;
 
 bad:
-    uvmfree(pagetable, sz);
+    proc_freepagetable(pagetable, sz);
     return -1;
 }
 

@@ -2,6 +2,7 @@
 #include "memlayout.h"
 #include "vm.h"
 #include "mmu.h"
+#include "proc.h"
 #include "cpu.h"
 
 // Map the qemu virt devices the kernel drives: UART, PLIC, virtio.
@@ -54,4 +55,19 @@ void uvmswitch(pagetable_t pagetable) {
 void kvmswitch(void) {
     csr_write(satp, MAKE_SATP(V2P(kernel_pagetable)));
     asm volatile("sfence.vma zero, zero");
+}
+
+// A user page table: nothing beyond the user's own memory yet.
+pagetable_t proc_pagetable(struct proc *p) {
+    return uvmcreate();
+}
+
+void proc_freepagetable(pagetable_t pagetable, uint64 sz) {
+    uvmfree(pagetable, sz);
+}
+
+// Traps from user mode save registers at the top of the (otherwise
+// empty) kernel stack.
+struct trapframe *trapframe_alloc(uint64 kstack) {
+    return (struct trapframe *)(kstack + PGSIZE) - 1;
 }

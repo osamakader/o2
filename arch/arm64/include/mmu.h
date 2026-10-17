@@ -58,6 +58,7 @@
 // User space is the whole TTBR0 range, [0, 2^39); the kernel lives in
 // TTBR1, so user root tables hold no kernel entries.
 #define MAXVA            (_UL(1) << 39)
+#define USERTOP          MAXVA   // end of user memory
 #define UVM_ROOT_ENTRIES 512
 #ifndef __ASSEMBLER__
 static inline void uvminit_root(uint64 *root) { }
