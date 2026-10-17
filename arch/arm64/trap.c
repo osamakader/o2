@@ -7,6 +7,7 @@
 #include "proc.h"
 #include "cpu.h"
 #include "vm.h"
+#include "defs.h"
 
 #define ESR_EC(esr) (((esr) >> 26) & 0x3f)
 
@@ -45,11 +46,20 @@ void serr_handler(struct trapframe *tf)
     panic("SError: esr %p elr %p", (void *)tf->esr, (void *)tf->elr);
 }
 
-// Synchronous exception from EL0. Syscalls are not dispatched yet.
+#define EC_SVC64 0x15
+
+// Synchronous exception from EL0, on the process's kernel stack with
+// interrupts masked.
 void usertrap(struct trapframe *tf)
 {
-    if (ESR_EC(tf->esr) == 0x15)
-        panic("usertrap: syscall %ld from pid %d", (long)tf->x[8], myproc()->pid);
+    if (ESR_EC(tf->esr) == EC_SVC64) {
+        // ELR already points past the svc instruction. An interrupt
+        // will change registers, so enable only now that we're done
+        // with them.
+        intr_on();
+        syscall();
+        return;
+    }
     panic("usertrap: %s esr %p elr %p far %p", ec_name(ESR_EC(tf->esr)),
           (void *)tf->esr, (void *)tf->elr, (void *)tf->far);
 }

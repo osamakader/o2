@@ -22,6 +22,9 @@ OBJS = \
   kernel/selftest.o \
   kernel/vm.o \
   kernel/exec.o \
+  kernel/syscall.o \
+  kernel/sysproc.o \
+  kernel/sysfile.o \
   kernel/initcode.o \
 
 CFLAGS = -Wall -Werror -O -fno-omit-frame-pointer -ggdb -gdwarf-2

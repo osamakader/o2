@@ -4,6 +4,7 @@
 #include "spinlock.h"
 #include "cpu.h"
 #include "proc.h"
+#include "vm.h"
 
 // Serializes output from different CPUs, one log_msg()/printf() at a
 // time.
@@ -169,6 +170,26 @@ void panic(const char *fmt, ...)
   printf("\n");
   park();
 }
+// Write n bytes from user address src to the console. Returns the
+// number of bytes written, short if src runs into unmapped memory.
+int consolewrite(uint64 src, int n) {
+    struct proc *p = myproc();
+    char buf[64];
+    int i = 0;
+
+    while (i < n) {
+        int m = n - i < (int)sizeof(buf) ? n - i : (int)sizeof(buf);
+        if (copyin(p->pagetable, buf, src + i, m) < 0)
+            break;
+        int locked = cons_begin();
+        for (int k = 0; k < m; k++)
+            cons_putc(buf[k]);
+        cons_end(locked);
+        i += m;
+    }
+    return i;
+}
+
 //
 // Console input, fed one character at a time by the UART interrupt
 // handler. Line discipline as in xv6:

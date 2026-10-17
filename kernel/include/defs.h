@@ -1,4 +1,15 @@
 #include "types.h"
+
+// number of elements in fixed-size array
+#define NELEM(x) (sizeof(x)/sizeof((x)[0]))
+
+// syscall.c
+int argstr(int n, char *buf, int max);
+void argint(int n, int *ip);
+void argaddr(int n, uint64 *ip);
+int fetchstr(uint64 addr, char *buf, int max);
+int fetchaddr(uint64 addr, uint64 *ip);
+void syscall(void);
 // string.c
 void* memset(void *dst, int c, uint n);
 int memcmp(const void *v1, const void *v2, uint n);
