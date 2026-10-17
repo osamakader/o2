@@ -118,25 +118,6 @@ static void kthread_sleeplock(void *arg) {
     printf("sleeplock thread %ld done on cpu %d\n", (long)arg, cpuid());
 }
 
-// Reads console input line by line and echoes it back, so typing at
-// the serial console exercises UART interrupt -> consoleintr() ->
-// wakeup() -> consoleread(). ^D reports end of file.
-static void kthread_console(void *arg) {
-    char line[64];
-
-    for (;;) {
-        int n = consoleread(line, sizeof(line) - 1);
-        if (n == 0) {
-            printf("console: eof\n");
-            continue;
-        }
-        if (line[n - 1] == '\n')
-            n--;
-        line[n] = '\0';
-        printf("console: got \"%s\" on cpu %d\n", line, cpuid());
-    }
-}
-
 // User page-table helpers on a scratch address space: grow, copy in
 // and out across page boundaries, fork-style copy, shrink, free, and
 // no pages leaked. The leak check counts free pages globally, so this
@@ -197,7 +178,6 @@ static void spawn(void (*fn)(void *), void *arg) {
 void selftest(void) {
     uvm_selftest();
 
-    spawn(kthread_console, 0);
     spawn(kthread_test, "A");
     spawn(kthread_test, "B");
     spawn(kthread_spin, "C");

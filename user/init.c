@@ -36,7 +36,19 @@ int main(void)
   sleep(25);
   printf("init: slept %d ticks\n", uptime() - t0);
 
-  // nothing else to do yet: reap orphans, idle in sleep()
+  // no shell yet: echo console lines back until end of file, then
+  // just reap orphans
+  char line[64];
+  for(;;){
+    int n = read(0, line, sizeof(line) - 1);
+    if(n <= 0)
+      break;
+    if(line[n-1] == '\n')
+      n--;
+    line[n] = 0;
+    printf("init: got \"%s\"\n", line);
+  }
+  printf("init: console eof\n");
   for(;;){
     if(wait(0) < 0)
       sleep(100);

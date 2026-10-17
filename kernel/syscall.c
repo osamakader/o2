@@ -60,6 +60,7 @@ extern uint64 sys_getpid(void);
 extern uint64 sys_sbrk(void);
 extern uint64 sys_sleep(void);
 extern uint64 sys_uptime(void);
+extern uint64 sys_read(void);
 extern uint64 sys_write(void);
 
 // An array mapping syscall numbers from syscall.h to the function that
@@ -73,6 +74,7 @@ static uint64 (*syscalls[])(void) = {
     [SYS_sbrk]   sys_sbrk,
     [SYS_sleep]  sys_sleep,
     [SYS_uptime] sys_uptime,
+    [SYS_read]   sys_read,
     [SYS_write]  sys_write,
 };
 

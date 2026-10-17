@@ -265,18 +265,25 @@ void consoleintr(int c) {
     release(&cons_in.lock);
 }
 
-// Read up to n bytes of input into dst, sleeping until a whole line
-// (or ^D) is available. Returns the number of bytes read; 0 means
-// end of file.
-int consoleread(char *dst, int n) {
+// Read up to n bytes of input into dst, a user address if user_dst
+// is set, sleeping until a whole line (or ^D) is available. Returns
+// the number of bytes read; 0 means end of file, -1 that the process
+// was killed while waiting.
+int consoleread(int user_dst, uint64 dst, int n) {
     int target = n;
 
     acquire(&cons_in.lock);
     while (n > 0) {
         // wait until the interrupt handler has put some input into
         // cons_in.buf.
-        while (cons_in.r == cons_in.w)
+        while (cons_in.r == cons_in.w) {
+            struct proc *p = myproc();
+            if (p->pagetable && killed(p)) {
+                release(&cons_in.lock);
+                return -1;
+            }
             sleep(&cons_in.r, &cons_in.lock);
+        }
 
         int c = cons_in.buf[cons_in.r++ % INPUT_BUF_SIZE];
 
@@ -289,7 +296,12 @@ int consoleread(char *dst, int n) {
             break;
         }
 
-        *dst++ = c;
+        // copy the input byte to the user-space or kernel buffer.
+        char cbuf = c;
+        if (either_copyout(user_dst, dst, &cbuf, 1) == -1)
+            break;
+
+        dst++;
         --n;
 
         if (c == '\n') {

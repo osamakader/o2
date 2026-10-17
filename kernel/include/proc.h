@@ -70,6 +70,7 @@ int wait(uint64 addr);
 int kill(int pid);
 void setkilled(struct proc *p);
 int killed(struct proc *p);
+int either_copyout(int user_dst, uint64 dst, void *src, uint64 len);
 void proc_mapstacks(pagetable_t pagetable);
 struct proc *kthread_create(void (*fn)(void *), void *arg);
 void yield(void);

@@ -486,3 +486,12 @@ int killed(struct proc *p) {
     release(&p->lock);
     return k;
 }
+
+// Copy to either a user address, or kernel address, depending on
+// user_dst. Returns 0 on success, -1 on error.
+int either_copyout(int user_dst, uint64 dst, void *src, uint64 len) {
+    if (user_dst)
+        return copyout(myproc()->pagetable, dst, src, len);
+    memmove((char *)dst, src, len);
+    return 0;
+}
