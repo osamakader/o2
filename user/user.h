@@ -41,6 +41,10 @@ int stat(const char *, struct stat *);
 char *strchr(const char *, char c);
 int atoi(const char *);
 
+// umalloc.c
+void *malloc(uint);
+void free(void *);
+
 // printf.c
 void fprintf(int, const char *, ...) __attribute__((format(printf, 2, 3)));
 void printf(const char *, ...) __attribute__((format(printf, 1, 2)));

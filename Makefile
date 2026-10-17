@@ -119,9 +119,9 @@ $(B)/%.o: %.c
 $(B)/kernel/initcode.o: $(B)/user/_initcode
 $(B)/kernel/initcode.o: CFLAGS += -DINITCODE='"$(B)/user/_initcode"'
 
-# User programs: linked at VA 0 against a tiny libc (ulib, printf, and
-# the arch's syscall stubs).
-ULIB = $(B)/user/ulib.o $(B)/user/$(ARCH)/usys.o $(B)/user/printf.o
+# User programs: linked at VA 0 against a tiny libc (ulib, printf,
+# malloc, and the arch's syscall stubs).
+ULIB = $(B)/user/ulib.o $(B)/user/$(ARCH)/usys.o $(B)/user/printf.o $(B)/user/umalloc.o
 
 $(B)/user/_%: $(B)/user/%.o $(ULIB) user/$(ARCH)/user.ld
 	$(LD) $(LDFLAGS) -T user/$(ARCH)/user.ld -o $@ $< $(ULIB)
@@ -143,7 +143,17 @@ $(MKFS): mkfs/mkfs.c kernel/include/fs.h kernel/include/param.h kernel/include/s
 
 # programs installed in the file system's root directory
 UPROGS = \
+  $(B)/user/_cat \
+  $(B)/user/_echo \
+  $(B)/user/_grep \
   $(B)/user/_init \
+  $(B)/user/_kill \
+  $(B)/user/_ln \
+  $(B)/user/_ls \
+  $(B)/user/_mkdir \
+  $(B)/user/_rm \
+  $(B)/user/_sh \
+  $(B)/user/_wc \
 
 $(FSIMG): $(MKFS) README.md $(UPROGS)
 	$(MKFS) $@ README.md $(UPROGS) > /dev/null
