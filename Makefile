@@ -69,11 +69,22 @@ kernel.elf: $(OBJS) arch/$(ARCH)/kernel.ld
 
 -include arch/$(ARCH)/*.d
 -include kernel/*.d
+-include user/*.d
+
+# User programs: linked at VA 0 against a tiny libc (ulib, printf, usys).
+ULIB = user/ulib.o user/usys.o user/printf.o
+
+user/_%: user/%.o $(ULIB) user/user.ld
+	$(LD) $(LDFLAGS) -T user/user.ld -o $@ $< $(ULIB)
+	$(OBJDUMP) -S $@ > user/$*.asm
+
+.PRECIOUS: user/%.o
 
 clean: 
 	rm -rf *.log *.sym *.asm *.o \
 	*/*.o */*.d */*.asm */*.sym \
-	arch/*/*.o arch/*/*.d kernel.elf
+	arch/*/*.o arch/*/*.d kernel.elf \
+	user/_*
 
 ifndef CPUS
 CPUS := 3
