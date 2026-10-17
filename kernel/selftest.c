@@ -7,6 +7,9 @@
 #include "cpu.h"
 #include "spinlock.h"
 #include "sleeplock.h"
+#include "defs.h"
+#include "vm.h"
+#include "memlayout.h"
 
 // Two threads that take turns via yield() to exercise the scheduler.
 static void kthread_test(void *arg) {
@@ -134,6 +137,55 @@ static void kthread_console(void *arg) {
     }
 }
 
+// User page-table helpers on a scratch address space: grow, copy in
+// and out across page boundaries, fork-style copy, shrink, free, and
+// no pages leaked.
+static void kthread_uvm(void *arg) {
+    uint64 free0 = kfreepages();
+    char buf[64], out[64];
+
+    pagetable_t pt = uvmcreate();
+    uint64 sz = uvmalloc(pt, 0, 3 * PGSIZE + 100, PERM_W);
+    if (pt == 0 || sz != 3 * PGSIZE + 100)
+        panic("uvm: alloc");
+
+    // straddle the first page boundary
+    safestrcpy(buf, "hello, user memory", sizeof(buf));
+    if (copyout(pt, PGSIZE - 5, buf, strlen(buf) + 1) != 0)
+        panic("uvm: copyout");
+    if (copyinstr(pt, out, PGSIZE - 5, sizeof(out)) != 0 || strncmp(buf, out, sizeof(out)) != 0)
+        panic("uvm: copyinstr");
+
+    // beyond sz (page 4 was never mapped)
+    if (copyout(pt, 4 * PGSIZE, buf, 1) == 0 || copyin(pt, out, 4 * PGSIZE, 1) == 0)
+        panic("uvm: access past sz succeeded");
+
+    // fork-style copy keeps contents
+    pagetable_t pt2 = uvmcreate();
+    if (uvmcopy(pt, pt2, sz) != 0)
+        panic("uvm: uvmcopy");
+    memset(out, 0, sizeof(out));
+    if (copyin(pt2, out, PGSIZE - 5, strlen(buf) + 1) != 0 || strncmp(buf, out, sizeof(out)) != 0)
+        panic("uvm: copy contents");
+
+    // a cleared (guard) page rejects user access
+    uvmclear(pt2, 0);
+    if (copyin(pt2, out, 0, 1) == 0)
+        panic("uvm: guard page readable");
+
+    // shrink to one page, then free everything
+    sz = uvmdealloc(pt, sz, PGSIZE);
+    if (copyin(pt, out, PGSIZE, 1) == 0)
+        panic("uvm: dealloc'd page still mapped");
+    uvmfree(pt, sz);
+    uvmfree(pt2, 3 * PGSIZE + 100);
+
+    uint64 free1 = kfreepages();
+    if (free1 != free0)
+        panic("uvm: leaked %ld pages", (long)(free0 - free1));
+    printf("uvm ok\n");
+}
+
 static void spawn(void (*fn)(void *), void *arg) {
     if (kthread_create(fn, arg) == 0)
         panic("selftest: kthread_create");
@@ -142,6 +194,7 @@ static void spawn(void (*fn)(void *), void *arg) {
 // Create the self-test threads. Called once from main() on CPU 0.
 void selftest(void) {
     spawn(kthread_console, 0);
+    spawn(kthread_uvm, 0);
     spawn(kthread_test, "A");
     spawn(kthread_test, "B");
     spawn(kthread_spin, "C");
