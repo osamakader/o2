@@ -52,6 +52,7 @@ CFLAGS += -march=rv64imac_zicsr_zifencei -mabi=lp64 -mcmodel=medany -mno-relax
 AOBJS = \
   entry.o \
   trapvec.o \
+  trampoline.o \
   trap.o \
   swtch.o \
   uart.o \

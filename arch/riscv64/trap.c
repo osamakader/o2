@@ -11,6 +11,7 @@
 #include "intc.h"
 #include "vm.h"
 #include "defs.h"
+#include "mmu.h"
 
 #define SCAUSE_INTR (1UL << 63)
 
@@ -97,15 +98,27 @@ void kerneltrap(struct trapframe *tf)
         yield();
 }
 
-// Trap from user mode (trapvec.S from_user), on the process's kernel
-// stack with interrupts off.
-void usertrap(struct trapframe *tf)
+extern char trampoline[], uservec[], tramp_userret[];  // trampoline.S
+extern void kernelvec(void);                            // trapvec.S
+
+// Trap from user mode: uservec (trampoline.S) saved the user registers
+// in the trap frame, switched to the kernel page table and stack, and
+// jumped here with interrupts off.
+void usertrap(void)
 {
     struct proc *p = myproc();
+    struct trapframe *tf = p->trapframe;
     int dev = DEV_NONE;
 
-    if (tf->status & SSTATUS_SPP)
+    if (csr_read(sstatus) & SSTATUS_SPP)
         panic("usertrap: not from user mode");
+
+    // in the kernel now: traps go to kernelvec.
+    csr_write(stvec, (uint64)kernelvec);
+
+    tf->epc = csr_read(sepc);
+    tf->cause = csr_read(scause);
+    tf->tval = csr_read(stval);
 
     if (tf->cause == 8) {
         // system call
@@ -138,14 +151,53 @@ void usertrap(struct trapframe *tf)
     // give up the CPU if this is a timer interrupt.
     if (dev == DEV_TIMER)
         yield();
+
+    usertrapret();
 }
 
-// Last step before returning to user mode through tf: with interrupts
-// off (sret then restores SIE from SPIE), remember this hart's id for
-// the next trap entry and install the process's page table.
-void usertrapret(struct trapframe *tf)
+// Return to user mode: through tramp_userret in the trampoline, which
+// switches to the user page table and srets.
+void usertrapret(void)
 {
+    struct proc *p = myproc();
+    struct trapframe *tf = p->trapframe;
+
+    // we're about to switch the destination of traps from kerneltrap()
+    // to usertrap(); interrupts stay off until sret.
     intr_off();
-    tf->hartid = cpuid();
-    uvmswitch(myproc()->pagetable);
+
+    // send syscalls, interrupts, and exceptions to uservec in the
+    // trampoline, at its TRAMPOLINE alias.
+    csr_write(stvec, TRAMPOLINE + (uservec - trampoline));
+
+    // what uservec needs next time the process traps into the kernel.
+    tf->kernel_satp = MAKE_SATP(V2P(kernel_pagetable));
+    tf->kernel_sp = p->kstack + PGSIZE;
+    tf->kernel_trap = (uint64)usertrap;
+    tf->kernel_hartid = cpuid();
+
+    // sret to user mode (SPP = 0) with interrupts enabled (SPIE).
+    uint64 x = csr_read(sstatus);
+    x &= ~SSTATUS_SPP;
+    x |= SSTATUS_SPIE;
+    csr_write(sstatus, x);
+
+    // sret jumps to the user pc.
+    csr_write(sepc, tf->epc);
+
+    // code exec() loaded on another hart must be visible here.
+    asm volatile("fence.i" ::: "memory");
+
+    // jump to tramp_userret at its TRAMPOLINE alias, which switches to
+    // the user page table, restores user registers, and srets.
+    uint64 satp = MAKE_SATP(V2P(p->pagetable));
+    uint64 fn = TRAMPOLINE + (tramp_userret - trampoline);
+    ((void (*)(uint64))fn)(satp);
+    __builtin_unreachable();
+}
+
+// A process's first return to user mode (forkret).
+void userret(struct trapframe *tf)
+{
+    usertrapret();
 }

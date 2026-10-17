@@ -12,6 +12,7 @@
 #include "fs.h"
 #include "file.h"
 #include "cpu.h"
+#include "mmu.h"
 
 static int memread(struct elfsrc *src, uint64 off, void *dst, uint64 n) {
     if (off > src->len || n > src->len - off)
@@ -90,6 +91,8 @@ int exec(struct proc *p, const char *name, struct elfsrc *src, char **argv) {
             goto bad;
         if (ph.vaddr % PGSIZE != 0)
             goto bad;
+        if (ph.vaddr + ph.memsz > USERTOP)
+            goto bad;
         uint64 sz1 = uvmalloc(pagetable, sz, ph.vaddr + ph.memsz, flags2perm(ph.flags));
         if (sz1 == 0)
             goto bad;
@@ -102,6 +105,8 @@ int exec(struct proc *p, const char *name, struct elfsrc *src, char **argv) {
     // Make the first inaccessible as a stack guard.
     // Use the rest as the user stack.
     sz = PGROUNDUP(sz);
+    if (sz + (USERSTACK + 1) * PGSIZE > USERTOP)
+        goto bad;
     uint64 sz1 = uvmalloc(pagetable, sz, sz + (USERSTACK + 1) * PGSIZE, PERM_W);
     if (sz1 == 0)
         goto bad;

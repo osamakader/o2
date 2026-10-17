@@ -46,13 +46,21 @@
 #define PTE_CLEAR_USER(pte) ((pte) & ~PTE_U)
 
 // Sv39: bits [63:39] must equal bit 38. The lower half is user space,
-// the upper half (root entries 256..511) the kernel's.
+// the upper half the kernel's.
 #define VA_VALID(va)  ((((long)(va)) << 25 >> 25) == (long)(va))
 #define MAXVA            (_UL(1) << 38)
-#define USERTOP          MAXVA   // end of user memory
-#define UVM_ROOT_ENTRIES 256
+
+// The top two pages of the user half, as in xv6: the trampoline
+// (uservec/userret, mapped at the same address in the kernel page
+// table) and the process's trap frame. Neither is user-accessible.
+// User page tables map nothing else of the kernel.
+#define TRAMPOLINE       (MAXVA - 0x1000)
+#define TRAPFRAME        (TRAMPOLINE - 0x1000)
+#define USERTOP          TRAPFRAME   // end of user memory
+
+#define UVM_ROOT_ENTRIES 512
 #ifndef __ASSEMBLER__
-void uvminit_root(uint64 *root);   // copy the kernel half into a user root
+static inline void uvminit_root(uint64 *root) { }
 #endif
 
 // satp: Sv39 mode and the root table's PPN

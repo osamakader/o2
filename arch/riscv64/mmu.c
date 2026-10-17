@@ -4,6 +4,10 @@
 #include "mmu.h"
 #include "proc.h"
 #include "cpu.h"
+#include "defs.h"
+#include "console.h"
+
+extern char trampoline[];  // trampoline.S
 
 // Map the qemu virt devices the kernel drives: UART, PLIC, virtio.
 void kvmmap_devices(pagetable_t pagetable) {
@@ -11,6 +15,7 @@ void kvmmap_devices(pagetable_t pagetable) {
            VIRTIO_MMIO_COUNT * VIRTIO_MMIO_STRIDE, PTE_KERN_DEVICE);
     kvmmap(pagetable, P2V(UART0), UART0, PGSIZE, PTE_KERN_DEVICE);
     kvmmap(pagetable, P2V(PLIC), PLIC, PLIC_SIZE, PTE_KERN_DEVICE);
+    kvmmap(pagetable, TRAMPOLINE, V2P(trampoline), PGSIZE, PTE_R | PTE_X);
 }
 
 // Switch this hart from the boot page table (entry.S) to
@@ -25,49 +30,52 @@ void kvminithart(void) {
     asm volatile("sfence.vma zero, zero");
 }
 
-// A new user root table shares the kernel's upper-half entries: Sv39
-// has a single root (satp), so the kernel stays mapped in every user
-// address space. All kernel mappings exist before the first process.
-void uvminit_root(uint64 *root) {
-    for (int i = UVM_ROOT_ENTRIES; i < 512; i++)
-        root[i] = kernel_pagetable[i];
-}
-
 // Make code the kernel wrote visible to instruction fetch. fence.i
-// only covers this hart, so uvmswitch() repeats it on every return to
+// only covers this hart, so usertrapret() repeats it on every return to
 // user mode, wherever the process runs.
 void sync_icache(uint64 va, uint64 len) {
     asm volatile("fence.i" ::: "memory");
 }
 
-// Install a user page table on this hart. Its upper half is the
-// kernel's, so the kernel keeps running on it until kvmswitch(). Drop
-// stale translations, and make code loaded by exec() on any hart
-// visible to this hart's instruction fetch.
-void uvmswitch(pagetable_t pagetable) {
-    asm volatile("sfence.vma zero, zero");
-    csr_write(satp, MAKE_SATP(V2P(pagetable)));
-    asm volatile("sfence.vma zero, zero; fence.i" ::: "memory");
-}
-
-// Leave a user address space: back to kernel_pagetable, so a page
-// table about to be freed isn't in use.
+// The kernel always runs on kernel_pagetable (uservec switches to it),
+// so there is no user address space to leave.
 void kvmswitch(void) {
-    csr_write(satp, MAKE_SATP(V2P(kernel_pagetable)));
-    asm volatile("sfence.vma zero, zero");
 }
 
-// A user page table: nothing beyond the user's own memory yet.
+
+// A user page table mapping, besides the user's memory, only the
+// trampoline and p's trap frame page; neither is user-accessible.
 pagetable_t proc_pagetable(struct proc *p) {
-    return uvmcreate();
+    pagetable_t pagetable = uvmcreate();
+    if (pagetable == 0)
+        return 0;
+
+    if (mappages(pagetable, TRAMPOLINE, PGSIZE, V2P(trampoline), PTE_R | PTE_X) < 0) {
+        uvmfree(pagetable, 0);
+        return 0;
+    }
+    if (mappages(pagetable, TRAPFRAME, PGSIZE, V2P(p->trapframe), PTE_R | PTE_W) < 0) {
+        uvmunmap(pagetable, TRAMPOLINE, 1, 0);
+        uvmfree(pagetable, 0);
+        return 0;
+    }
+    return pagetable;
 }
 
+// Free a user page table and the memory it maps; the trampoline and
+// trap frame pages aren't the process's to free.
 void proc_freepagetable(pagetable_t pagetable, uint64 sz) {
+    uvmunmap(pagetable, TRAMPOLINE, 1, 0);
+    uvmunmap(pagetable, TRAPFRAME, 1, 0);
     uvmfree(pagetable, sz);
 }
 
-// Traps from user mode save registers at the top of the (otherwise
-// empty) kernel stack.
+// Each ptable slot gets its own trap frame page, mapped at TRAPFRAME in
+// its process's page tables.
 struct trapframe *trapframe_alloc(uint64 kstack) {
-    return (struct trapframe *)(kstack + PGSIZE) - 1;
+    struct trapframe *tf = kalloc();
+    if (tf == 0)
+        panic("trapframe_alloc");
+    memset(tf, 0, PGSIZE);
+    return tf;
 }
