@@ -114,6 +114,18 @@ static void overflow_stack(void)
   recurse(0);
 }
 
+// the start of kernel text on each arch
+#if defined(__aarch64__)
+#define KERNEL_TEXT 0xffffffc040080000UL
+#else
+#define KERNEL_TEXT 0xffffffc080200000UL
+#endif
+
+static void read_kernel(void)
+{
+  (void)*(volatile char *)KERNEL_TEXT;
+}
+
 // Faulting children are killed (status -1); the parent carries on.
 static void test_faults(void)
 {
@@ -122,6 +134,7 @@ static void test_faults(void)
     { "load past sz", load_past_sz },
     { "freed heap", touch_freed_heap },
     { "stack overflow", overflow_stack },
+    { "read kernel text", read_kernel },
   };
   for(int i = 0; i < sizeof(cases) / sizeof(cases[0]); i++)
     if(run_child(cases[i].fn) != -1)
