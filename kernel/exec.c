@@ -9,6 +9,7 @@
 #include "vm.h"
 #include "elf.h"
 #include "exec.h"
+#include "cpu.h"
 
 static int memread(struct elfsrc *src, uint64 off, void *dst, uint64 n) {
     if (off > src->len || n > src->len - off)
@@ -65,7 +66,7 @@ int exec(struct proc *p, const char *name, struct elfsrc *src, char **argv) {
     // Check ELF header
     if (src->read(src, 0, &elf, sizeof(elf)) != sizeof(elf))
         goto bad;
-    if (elf.magic != ELF_MAGIC || elf.machine != EM_AARCH64)
+    if (elf.magic != ELF_MAGIC || elf.machine != ELF_MACHINE)
         goto bad;
 
     // Load program into memory.
@@ -124,8 +125,8 @@ int exec(struct proc *p, const char *name, struct elfsrc *src, char **argv) {
         goto bad;
 
     // arguments to user main(argc, argv)
-    p->trapframe->x[0] = argc;
-    p->trapframe->x[1] = sp;
+    TF_ARG(p->trapframe, 0) = argc;
+    TF_ARG(p->trapframe, 1) = sp;
 
     // Save program name for debugging.
     safestrcpy(p->name, name, sizeof(p->name));
@@ -135,9 +136,7 @@ int exec(struct proc *p, const char *name, struct elfsrc *src, char **argv) {
     uint64 oldsz = p->sz;
     p->pagetable = pagetable;
     p->sz = sz;
-    p->trapframe->elr = elf.entry;  // initial program counter = _start
-    p->trapframe->sp = sp;          // initial stack pointer
-    p->trapframe->spsr = 0;         // EL0t, interrupts unmasked
+    tf_init_user(p->trapframe, elf.entry, sp);  // start at _start
     if (oldpagetable)
         uvmfree(oldpagetable, oldsz);
 

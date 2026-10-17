@@ -20,6 +20,15 @@ _Static_assert(sizeof(struct trapframe) == 288, "exceptions.S TF_SIZE");
 #define TF_ARG(tf, n)  ((tf)->x[n])
 #define TF_RET(tf)     ((tf)->x[0])
 
+// Set up tf to start a user program at pc with stack pointer sp:
+// EL0t with interrupts unmasked.
+static inline void tf_init_user(struct trapframe *tf, uint64 pc, uint64 sp)
+{
+    tf->elr = pc;
+    tf->sp = sp;
+    tf->spsr = 0;
+}
+
 void fiq_handler(struct trapframe *tf);
 void serr_handler(struct trapframe *tf);
 void sync_handler(struct trapframe *tf);

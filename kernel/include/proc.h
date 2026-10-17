@@ -6,24 +6,10 @@
 #include "param.h"
 #include "spinlock.h"
 #include "trap.h"
+#include "context.h"
 
 enum procstate { UNUSED, USED, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 
-struct context {
-    uint64 ra;   // x30
-    uint64 sp;
-    uint64 x19;
-    uint64 x20;
-    uint64 x21;
-    uint64 x22;
-    uint64 x23;
-    uint64 x24;
-    uint64 x25;
-    uint64 x26;
-    uint64 x27;
-    uint64 x28;
-    uint64 x29;
-};
 
 struct proc {
     struct spinlock lock;

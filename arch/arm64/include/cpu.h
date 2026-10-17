@@ -3,6 +3,9 @@
 
 #include "types.h"
 
+// ELF e_machine of programs this kernel runs
+#define ELF_MACHINE 183   // EM_AARCH64
+
 // This core's index: MPIDR_EL1 Aff0, which qemu virt numbers 0..ncpu-1.
 // Only stable while interrupts are off; a thread may migrate otherwise.
 static inline int cpuid(void) {

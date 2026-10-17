@@ -9,11 +9,6 @@
 #include "spinlock.h"
 #include "exec.h"
 
-// Entry point for a freshly created kernel thread (arch/arm64/swtch.S).
-// swtch() restores x19/x20 as callee-saved registers, so kthread_create()
-// stashes arg/fn there to hand them off once the thread starts running.
-extern void kthread_trampoline(void);
-
 // Fixed-size process table. BSS is zeroed at boot (arch/arm64/entry.S),
 // and UNUSED == 0, so every slot starts out free.
 static struct proc ptable[NPROC];
@@ -125,10 +120,7 @@ struct proc *kthread_create(void (*fn)(void *), void *arg) {
     if (!p)
         return 0;
 
-    p->ctx.ra = (uint64)kthread_trampoline;
-    p->ctx.sp = p->kstack + PGSIZE;
-    p->ctx.x19 = (uint64)arg;
-    p->ctx.x20 = (uint64)fn;
+    context_kthread(&p->ctx, fn, arg, p->kstack + PGSIZE);
     safestrcpy(p->name, "kthread", sizeof(p->name));
     p->state = RUNNABLE;
     release(&p->lock);
