@@ -142,4 +142,8 @@ QEMUOPTS += -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0
 qemu: $(KERNEL) $(FSIMG)
 	$(QEMU) $(QEMUOPTS)
 
-.PHONY: all clean qemu
+# the QEMU command line, for tools/run.sh
+print-qemu:
+	@echo $(QEMU) $(QEMUOPTS)
+
+.PHONY: all clean qemu print-qemu
