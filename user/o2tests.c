@@ -894,6 +894,12 @@ static void test_script(void)
   if(run_script("#!/echo", argv, out, sizeof(out)) < 0 ||
      strcmp(out, "script.tmp a1 a2\n") != 0)
     fail("script", "no newline");
+  // a shell script, with comments
+  char *shargv[] = { "myscript", 0 };
+  if(run_script("#!/sh\n# comment\necho one # two\n\necho  three ; echo four\n",
+                shargv, out, sizeof(out)) < 0 ||
+     strcmp(out, "one\nthree\nfour\n") != 0)
+    fail("script", "shell script");
   if(run_script("#!/nonexistent\n", argv, out, sizeof(out)) != -1 ||
      run_script("#!\n", argv, out, sizeof(out)) != -1 ||
      run_script("#!/script.tmp\n", argv, out, sizeof(out)) != -1 ||

@@ -140,22 +140,41 @@ runcmd(struct cmd *cmd)
   exit(0);
 }
 
+// Read a command line from fd into buf, prompting if interactive, and
+// drop a "#" comment from it. Returns -1 at end of input.
 int
-getcmd(char *buf, int nbuf)
+getcmd(int fd, int interactive, char *buf, int nbuf)
 {
-  write(2, "$ ", 2);
+  int i = 0;
+  char c;
+
+  if(interactive)
+    write(2, "$ ", 2);
   memset(buf, 0, nbuf);
-  gets(buf, nbuf);
+  while(i + 1 < nbuf && read(fd, &c, 1) == 1){
+    buf[i++] = c;
+    if(c == '\n' || c == '\r')
+      break;
+  }
   if(buf[0] == 0) // EOF
     return -1;
+  for(i = 0; buf[i]; i++){
+    if(buf[i] == '#' && (i == 0 || strchr(" \t", buf[i-1]))){
+      buf[i] = '\n';
+      buf[i+1] = 0;
+      break;
+    }
+  }
   return 0;
 }
 
+// sh [script [args]]: with a script, run its commands (#!/sh in a
+// file makes it one), otherwise read commands from the console.
 int
-main(void)
+main(int argc, char *argv[])
 {
   static char buf[100];
-  int fd;
+  int fd, in = 0;
 
   // Ensure that three file descriptors are open.
   while((fd = open("console", O_RDWR)) >= 0){
@@ -165,8 +184,13 @@ main(void)
     }
   }
 
+  if(argc > 1 && (in = open(argv[1], O_RDONLY)) < 0){
+    fprintf(2, "sh: cannot open %s\n", argv[1]);
+    exit(1);
+  }
+
   // Read and run input commands.
-  while(getcmd(buf, sizeof(buf)) >= 0){
+  while(getcmd(in, in == 0, buf, sizeof(buf)) >= 0){
     if(buf[0] == 'c' && buf[1] == 'd' &&
        (buf[2] == ' ' || buf[2] == '\n' || buf[2] == 0)){
       // Chdir must be called by the parent, not the child.
@@ -181,8 +205,11 @@ main(void)
         fprintf(2, "cannot cd %s\n", dir);
       continue;
     }
-    if(fork1() == 0)
+    if(fork1() == 0){
+      if(in != 0)
+        close(in);
       runcmd(parsecmd(buf));
+    }
     wait(0);
   }
   exit(0);
