@@ -128,6 +128,14 @@ endif
 
 LDFLAGS = -z max-page-size=4096
 
+# Objects depend on $(B)/flags, which is rewritten whenever the compiler
+# flags change, so a flag change rebuilds everything.
+FLAGS := $(CC) $(CFLAGS)
+ifneq ($(FLAGS),$(file < $(B)/flags))
+$(shell mkdir -p $(B))
+$(file > $(B)/flags,$(FLAGS))
+endif
+
 all: $(KERNEL) $(FSIMG)
 
 # The kernel carries its own symbol table, for backtraces. Link once
@@ -153,7 +161,7 @@ $(B)/kernel.nosyms.elf: $(OBJS) $(B)/ksyms0.o arch/$(ARCH)/kernel.ld
 $(B)/ksyms.S: $(B)/kernel.nosyms.elf
 	$(call KSYMS_GEN,$<) > $@
 
-$(B)/ksyms0.o $(B)/ksyms.o: $(B)/%.o: $(B)/%.S
+$(B)/ksyms0.o $(B)/ksyms.o: $(B)/%.o: $(B)/%.S $(B)/flags
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 $(KERNEL): $(OBJS) $(B)/ksyms.o arch/$(ARCH)/kernel.ld
@@ -164,11 +172,11 @@ $(KERNEL): $(OBJS) $(B)/ksyms.o arch/$(ARCH)/kernel.ld
 	$(OBJDUMP) -S $@ > $(B)/kernel.asm
 	$(OBJDUMP) -t $@ | sed '1,/SYMBOL TABLE/d; s/ .* / /; /^$$/d' > $(B)/kernel.sym
 
-$(B)/%.o: %.S
+$(B)/%.o: %.S $(B)/flags
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -g -c -o $@ $<
 
-$(B)/%.o: %.c
+$(B)/%.o: %.c $(B)/flags
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -g -c -o $@ $<
 
