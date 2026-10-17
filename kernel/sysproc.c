@@ -68,3 +68,15 @@ uint64 sys_uptime(void) {
     release(&tickslock);
     return xticks;
 }
+
+// getprocs(struct procinfo *buf, int max): list processes, for ps.
+uint64 sys_getprocs(void) {
+    uint64 buf;
+    int max;
+
+    argaddr(0, &buf);
+    argint(1, &max);
+    if (max < 0)
+        return -1;
+    return getprocs(buf, max);
+}

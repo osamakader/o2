@@ -4,6 +4,7 @@
 #include "types.h"
 
 struct stat;
+struct procinfo;
 
 // system calls
 int fork(void);
@@ -27,6 +28,7 @@ int link(const char *, const char *);
 int mkdir(const char *);
 int chdir(const char *);
 int dup(int);
+int getprocs(struct procinfo *, int);
 
 // ulib.c
 char *strcpy(char *, const char *);

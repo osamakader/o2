@@ -8,6 +8,7 @@
 #include "mmu.h"
 #include "spinlock.h"
 #include "exec.h"
+#include "procinfo.h"
 
 // Fixed-size process table. BSS is zeroed at boot (arch/<arch>/entry.S),
 // and UNUSED == 0, so every slot starts out free.
@@ -566,4 +567,48 @@ void procdump(void) {
             printf(" chan=%p", p->chan);
         printf("\n");
     }
+}
+
+// Copy a struct procinfo for each process and kernel thread, up to
+// max, to the user array at addr. Returns the number copied, or -1 if
+// addr isn't writable.
+int getprocs(uint64 addr, int max) {
+    static const int codes[] = {
+        [USED]     PS_USED,
+        [SLEEPING] PS_SLEEPING,
+        [RUNNABLE] PS_RUNNABLE,
+        [RUNNING]  PS_RUNNING,
+        [ZOMBIE]   PS_ZOMBIE,
+    };
+    struct proc *me = myproc();
+    int n = 0;
+
+    for (int i = 0; i < NPROC && n < max; i++) {
+        struct proc *p = &ptable[i];
+        struct procinfo pi;
+
+        memset(&pi, 0, sizeof(pi));
+
+        // wait_lock keeps p->parent (and the parent itself) stable.
+        acquire(&wait_lock);
+        acquire(&p->lock);
+        if (p->state == UNUSED) {
+            release(&p->lock);
+            release(&wait_lock);
+            continue;
+        }
+        pi.pid = p->pid;
+        pi.ppid = p->parent ? p->parent->pid : 0;
+        pi.state = codes[p->state];
+        pi.kthread = p->pagetable == 0;
+        pi.sz = p->sz;
+        safestrcpy(pi.name, p->name, sizeof(pi.name));
+        release(&p->lock);
+        release(&wait_lock);
+
+        if (copyout(me->pagetable, addr + n * sizeof(pi), (char *)&pi, sizeof(pi)) < 0)
+            return -1;
+        n++;
+    }
+    return n;
 }
