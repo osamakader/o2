@@ -10,6 +10,7 @@
 #include "psci.h"
 #include "param.h"
 #include "cpu.h"
+#include "uart.h"
 
 void check_level() {
     uint64 el;
@@ -71,7 +72,7 @@ int main() {
         gic_inithart();
 
         // console input: UART receive interrupts, handled on CPU 0
-        pl011_enable_rx_irq();
+        uart_enable_rx_irq();
         gic_enable_spi(UART0_IRQ, 0);
 
         userinit();   // first, so init is pid 1

@@ -1,6 +1,7 @@
 #include <stdarg.h>
 
 #include "console.h"
+#include "uart.h"
 #include "spinlock.h"
 #include "cpu.h"
 #include "proc.h"
@@ -39,16 +40,24 @@ static void cons_end(int locked) {
         release(&cons_lock);
 }
 
+static void cons_puts(const char *s);
+
 void log_msg(const char *msg) {
     int locked = cons_begin();
-    pl011_send(msg);
+    cons_puts(msg);
     cons_end(locked);
 }
 
-// pl011_send() turns '\n' into "\r\n".
+// Send a character, turning '\n' into "\r\n" for the terminal.
 static void cons_putc(char c) {
-    char s[2] = { c, '\0' };
-    pl011_send(s);
+    if (c == '\n')
+        uartputc_sync('\r');
+    uartputc_sync(c);
+}
+
+static void cons_puts(const char *s) {
+    while (*s)
+        cons_putc(*s++);
 }
 
 static void printint(uint64 x, int base, int sign) {
@@ -104,7 +113,7 @@ static void vprintf(const char *fmt, va_list ap) {
             break;
         case 's': {
             const char *s = va_arg(ap, const char *);
-            pl011_send(s ? s : "(null)");
+            cons_puts(s ? s : "(null)");
             break;
         }
         case 'c':

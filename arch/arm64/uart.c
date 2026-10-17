@@ -1,5 +1,28 @@
+// ARM PL011 UART: the console on qemu virt (arm64).
+
+#include "types.h"
+#include "memlayout.h"
 #include "uart.h"
 #include "console.h"
+
+struct pl011 {
+    uint64 base_address;
+    uint64 base_clock;
+    uint32 baudrate;
+    uint32 data_bits;
+    uint32 stop_bits;
+};
+
+static const uint32 DR_OFFSET = 0x000;
+static const uint32 FR_OFFSET = 0x018;
+static const uint32 IBRD_OFFSET = 0x024;
+static const uint32 FBRD_OFFSET = 0x028;
+static const uint32 LCR_OFFSET = 0x02c;
+static const uint32 CR_OFFSET = 0x030;
+static const uint32 IMSC_OFFSET = 0x038;
+static const uint32 ICR_OFFSET = 0x044;
+static const uint32 DMACR_OFFSET = 0x048;
+
 
 static const uint32 CR_RXEN = (1 << 9);
 static const uint32 CR_TXEN = (1 << 8);
@@ -50,7 +73,7 @@ static void calculate_divisors(
     *integer = (div >> 6) & 0xffff;
 }
 
-int pl011_reset(const struct pl011 *dev)
+static int pl011_reset(const struct pl011 *dev)
 {
     uint32 lcr = read_reg(dev, LCR_OFFSET);
     uint32 ibrd, fbrd;
@@ -95,7 +118,7 @@ int pl011_reset(const struct pl011 *dev)
     return 0;
 }
 
-int pl011_setup(struct pl011 *dev, uint64 base_address, uint64 base_clock)
+static int pl011_setup(struct pl011 *dev, uint64 base_address, uint64 base_clock)
 {
     dev->base_address = base_address;
     dev->base_clock = base_clock;
@@ -106,29 +129,22 @@ int pl011_setup(struct pl011 *dev, uint64 base_address, uint64 base_clock)
     return pl011_reset(dev);
 }
 
-int pl011_send(const char *data)
+// Send one byte, polling until the transmit FIFO has room.
+void uartputc_sync(int c)
 {
     struct pl011 *dev = &sdev;
+
     wait_tx_ready(dev);
-
-    for (uint32 i = 0; data[i] != '\0'; ++i) {
-        if (data[i] == '\n') {
-            write_reg(dev, DR_OFFSET, '\r');
-            wait_tx_ready(dev);
-        }
-        write_reg(dev, DR_OFFSET, data[i]);
-        wait_tx_ready(dev);
-    }
-
-    return 0;
+    write_reg(dev, DR_OFFSET, c);
 }
 
-void pl011_init(uint64 base_address, uint64 base_clock) {
-    pl011_setup(&sdev, base_address, base_clock);
+// Set up the console UART: qemu virt's PL011 runs off a 24MHz clock.
+void uartinit(void) {
+    pl011_setup(&sdev, P2V(UART0), 24000000);
 }
 
 // Read one input character, or -1 if the RX FIFO is empty.
-int pl011_getc(void)
+int uartgetc(void)
 {
     struct pl011 *dev = &sdev;
 
@@ -139,7 +155,7 @@ int pl011_getc(void)
 
 // Unmask the receive interrupts. The UART's SPI must also be enabled
 // in the GIC.
-void pl011_enable_rx_irq(void)
+void uart_enable_rx_irq(void)
 {
     struct pl011 *dev = &sdev;
 
@@ -152,7 +168,7 @@ void uartintr(void)
 {
     int c;
 
-    while ((c = pl011_getc()) >= 0)
+    while ((c = uartgetc()) >= 0)
         consoleintr(c);
 
     // reading the FIFO empty already deasserts RX/RT; clear any left

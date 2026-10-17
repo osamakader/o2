@@ -1,7 +1,7 @@
 #ifndef CONSOLE_H
 #define CONSOLE_H
 
-#include <uart.h>
+#include "types.h"
 
 void log_msg(const char *msg);
 void consoleintr(int c);

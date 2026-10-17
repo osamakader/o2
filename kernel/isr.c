@@ -5,6 +5,7 @@
 #include "cpu.h"
 #include "spinlock.h"
 #include "memlayout.h"
+#include "uart.h"
 
 // Timer interrupts seen by CPU 0. Every CPU has its own timer, so
 // counting on all of them would advance ticks ncpu times per tick.
