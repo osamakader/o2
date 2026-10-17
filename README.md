@@ -33,6 +33,15 @@ under the OpenSBI firmware QEMU loads by default.
 With `SELFTEST=1` the kernel runs its self-tests (`kernel/selftest.c`)
 at boot; user-mode tests are `usertests`, run from the shell.
 
+## Isolation
+
+User page tables don't map the kernel. On riscv64, as in xv6, each
+maps only the process's memory, a trampoline page and its trap frame;
+traps switch `satp` to the kernel page table in the trampoline. On
+arm64 (KPTI), TTBR1 holds a table with just the trampoline while user
+code runs, and the trampoline vectors switch it back on entry. Both
+flush the TLB on the way out, since there are no ASIDs yet.
+
 ## Credits
 
 Much of the arch-independent kernel (file system, log, buffer cache,
