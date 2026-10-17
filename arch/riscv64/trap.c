@@ -7,6 +7,8 @@
 #include "proc.h"
 #include "cpu.h"
 #include "trap.h"
+#include "timer.h"
+#include "uart.h"
 
 #define SCAUSE_INTR (1UL << 63)
 
@@ -38,11 +40,59 @@ void kernel_fatal(struct trapframe *tf)
           cause_name(tf->cause), tf->cause, (void *)tf->epc, (void *)tf->tval);
 }
 
-// Interrupt in the kernel, on the current kernel stack.
+void timer_rearm(void);
+int plic_claim(void);
+void plic_complete(int irq);
+
+#define DEV_NONE  0
+#define DEV_TIMER 1
+#define DEV_OTHER 2
+
+// Handle a device interrupt; returns which kind it was.
+static int devintr(uint64 cause)
+{
+    if (cause == (SCAUSE_INTR | 5)) {
+        // supervisor timer interrupt
+        clockintr();
+        timer_rearm();
+        return DEV_TIMER;
+    }
+
+    if (cause == (SCAUSE_INTR | 9)) {
+        // supervisor external interrupt, via the PLIC
+        int irq = plic_claim();
+
+        if (irq == UART0_IRQ)
+            uartintr();
+        else if (irq)
+            printf("unexpected interrupt irq=%d\n", irq);
+
+        // the PLIC allows each device to raise at most one interrupt
+        // at a time; tell the PLIC the device is now allowed to
+        // interrupt again.
+        if (irq)
+            plic_complete(irq);
+        return DEV_OTHER;
+    }
+
+    return DEV_NONE;
+}
+
+// Interrupt in the kernel, on the current kernel stack. sepc and
+// sstatus are saved in tf, so yielding here is safe.
 void kerneltrap(struct trapframe *tf)
 {
     if ((tf->status & SSTATUS_SPP) == 0)
         panic("kerneltrap: not from supervisor mode");
+    if (intr_get())
+        panic("kerneltrap: interrupts enabled");
 
-    printf("unexpected interrupt scause 0x%lx on cpu %d\n", tf->cause, cpuid());
+    int dev = devintr(tf->cause);
+    if (dev == DEV_NONE)
+        panic("kerneltrap: unexpected scause 0x%lx", tf->cause);
+
+    // Preempt the running thread on each tick.
+    struct proc *p = myproc();
+    if (dev == DEV_TIMER && p && p->state == RUNNING)
+        yield();
 }

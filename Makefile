@@ -36,8 +36,12 @@ AOBJS = \
   entry.o \
   trapvec.o \
   trap.o \
+  swtch.o \
   uart.o \
   mmu.o \
+  sbi.o \
+  timer.o \
+  plic.o \
   stubs.o \
 
 QEMUOPTS = -machine virt -bios default

@@ -21,3 +21,18 @@ void kvminithart(void) {
     // flush stale entries from the TLB.
     asm volatile("sfence.vma zero, zero");
 }
+
+// A new user root table shares the kernel's upper-half entries: Sv39
+// has a single root (satp), so the kernel stays mapped in every user
+// address space. All kernel mappings exist before the first process.
+void uvminit_root(uint64 *root) {
+    for (int i = UVM_ROOT_ENTRIES; i < 512; i++)
+        root[i] = kernel_pagetable[i];
+}
+
+// Make code the kernel wrote visible to instruction fetch. fence.i
+// only covers this hart, so uvmswitch() repeats it on every return to
+// user mode, wherever the process runs.
+void sync_icache(uint64 va, uint64 len) {
+    asm volatile("fence.i" ::: "memory");
+}
