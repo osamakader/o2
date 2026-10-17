@@ -298,6 +298,54 @@ void userinit(void) {
     release(&p->lock);
 }
 
+// Create a new process, copying the parent. Sets up the child's
+// kernel stack to return as if from the fork() system call, with 0 in
+// the return register.
+int fork(void) {
+    struct proc *p = myproc();
+
+    // Allocate process.
+    struct proc *np = allocproc();
+    if (np == 0)
+        return -1;
+
+    // Copy user memory from parent to child.
+    if ((np->pagetable = uvmcreate()) == 0 ||
+        uvmcopy(p->pagetable, np->pagetable, p->sz) < 0) {
+        freeproc(np);
+        release(&np->lock);
+        return -1;
+    }
+    np->sz = p->sz;
+
+    // copy saved user registers.
+    *(np->trapframe) = *(p->trapframe);
+
+    // Cause fork to return 0 in the child.
+    TF_RET(np->trapframe) = 0;
+
+    safestrcpy(np->name, p->name, sizeof(p->name));
+
+    // The child starts in forkret, on its kernel stack below the
+    // trapframe.
+    np->ctx.ra = (uint64)forkret;
+    np->ctx.sp = (uint64)np->trapframe;
+
+    int pid = np->pid;
+
+    release(&np->lock);
+
+    acquire(&wait_lock);
+    np->parent = p;
+    release(&wait_lock);
+
+    acquire(&np->lock);
+    np->state = RUNNABLE;
+    release(&np->lock);
+
+    return pid;
+}
+
 // Pass p's abandoned children to init.
 // Caller must hold wait_lock.
 static void reparent(struct proc *p) {

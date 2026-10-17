@@ -25,3 +25,7 @@ uint64 sys_kill(void) {
     argint(0, &pid);
     return kill(pid);
 }
+
+uint64 sys_fork(void) {
+    return fork();
+}

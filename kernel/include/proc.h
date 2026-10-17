@@ -63,6 +63,7 @@ struct cpu *mycpu(void);
 
 void procinit(void);
 void userinit(void);
+int fork(void);
 void exit(int status) __attribute__((noreturn));
 int wait(uint64 addr);
 int kill(int pid);
