@@ -28,7 +28,17 @@ CFLAGS = -Wall -Werror -O -fno-omit-frame-pointer -ggdb -gdwarf-2
 ifeq ($(ARCH), riscv64)
 QEMU = qemu-system-riscv64
 TOOLPREFIX = riscv64-linux-gnu-
-CFLAGS += -march=rv64gc
+# no floating point in the kernel (like -mgeneral-regs-only on arm64);
+# medany keeps addressing PC-relative, so code runs both at its
+# physical and its high-half address.
+CFLAGS += -march=rv64imac_zicsr_zifencei -mabi=lp64 -mcmodel=medany -mno-relax
+AOBJS = \
+  entry.o \
+  uart.o \
+  mmu.o \
+  stubs.o \
+
+QEMUOPTS = -machine virt -bios default
 else
 QEMU = qemu-system-aarch64
 TOOLPREFIX = aarch64-linux-gnu-
