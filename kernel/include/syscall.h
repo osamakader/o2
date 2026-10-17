@@ -2,7 +2,8 @@
 #define SYSCALL_H
 
 // System call numbers, shared with user space (user/usys.S).
-// arm64 convention: number in x8, arguments in x0-x5, result in x0.
+// The registers used are the arch's (TF_SYSNUM/TF_ARG/TF_RET in trap.h,
+// stubs in user/<arch>/usys.S).
 #define SYS_fork    1
 #define SYS_exit    2
 #define SYS_wait    3

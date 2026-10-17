@@ -18,7 +18,7 @@ static int panic_cpu = -1;
 
 static void __attribute__((noreturn)) park(void) {
     for (;;)
-        asm volatile("wfi");
+        wfi();
 }
 
 // Start a piece of console output. Returns whether cons_lock was taken.

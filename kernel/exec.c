@@ -107,7 +107,7 @@ int exec(struct proc *p, const char *name, struct elfsrc *src, char **argv) {
         if (argc >= MAXARG)
             goto bad;
         sp -= strlen(argv[argc]) + 1;
-        sp -= sp % 16;  // the arm64 ABI wants a 16-byte aligned sp
+        sp -= sp % 16;  // arm64 and riscv64 ABIs want a 16-byte aligned sp
         if (sp < stackbase)
             goto bad;
         if (copyout(pagetable, sp, argv[argc], strlen(argv[argc]) + 1) < 0)

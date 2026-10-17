@@ -14,6 +14,12 @@ static inline int cpuid(void) {
     return mpidr & 0xff;
 }
 
+// Wait for an interrupt (low-power idle). Wakes on a pending IRQ even
+// while IRQs are masked.
+static inline void wfi(void) {
+    asm volatile("wfi");
+}
+
 // IRQ mask helpers for the current core (PSTATE.I).
 
 static inline void intr_on(void) {

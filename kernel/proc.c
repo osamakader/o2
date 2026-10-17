@@ -9,7 +9,7 @@
 #include "spinlock.h"
 #include "exec.h"
 
-// Fixed-size process table. BSS is zeroed at boot (arch/arm64/entry.S),
+// Fixed-size process table. BSS is zeroed at boot (arch/<arch>/entry.S),
 // and UNUSED == 0, so every slot starts out free.
 static struct proc ptable[NPROC];
 
@@ -66,7 +66,7 @@ static struct proc *allocproc(void) {
             p->pid = allocpid();
             p->state = USED;
             memset(&p->ctx, 0, sizeof(p->ctx));
-            // Traps from EL0 save registers at the top of the
+            // Traps from user mode save registers at the top of the
             // (otherwise empty) kernel stack; see exceptions.S.
             p->trapframe = (struct trapframe *)(p->kstack + PGSIZE) - 1;
             return p;
@@ -262,7 +262,7 @@ void scheduler(void) {
         // nothing to run: sleep until the next interrupt. wfi wakes on a
         // pending IRQ even while masked; intr_on() above then takes it.
         if (!found)
-            asm volatile("wfi");
+            wfi();
     }
 }
 
