@@ -5,6 +5,7 @@
 #include "user.h"
 #include "stat.h"
 #include "fcntl.h"
+#include "procinfo.h"
 
 #define PGSIZE 4096
 
@@ -246,6 +247,54 @@ static void test_pipe(void)
     fail("pipe", "length");
 }
 
+// getprocs() reports this process running and a sleeping child.
+static void test_ps(void)
+{
+  static struct procinfo procs[64];
+  int me = getpid(), seen_me = 0, seen_child = 0;
+
+  // The child blocks reading an empty pipe: unlike sleep(), which
+  // wakes on every tick to recheck, nothing wakes it until we close
+  // the write end.
+  int fds[2];
+  if(pipe(fds) < 0){
+    fail("ps", "pipe");
+    return;
+  }
+  int pid = fork();
+  if(pid == 0){
+    char c;
+    close(fds[1]);
+    read(fds[0], &c, 1);
+    exit(0);
+  }
+  close(fds[0]);
+  sleep(5);  // let the child block
+
+  int n = getprocs(procs, 64);
+  if(n <= 0)
+    fail("ps", "getprocs");
+  for(int i = 0; i < n; i++){
+    if(procs[i].pid == me){
+      seen_me = 1;
+      if(procs[i].state != PS_RUNNING || procs[i].kthread || strcmp(procs[i].name, "usertests") != 0)
+        fail("ps", "self");
+    }
+    if(procs[i].pid == pid){
+      seen_child = 1;
+      if(procs[i].state != PS_SLEEPING || procs[i].ppid != me)
+        fail("ps", "child");
+    }
+  }
+  if(!seen_me || !seen_child)
+    fail("ps", "missing");
+  if(getprocs((struct procinfo *)0x7000000000UL, 64) != -1)
+    fail("ps", "bad buffer");
+
+  close(fds[1]);  // EOF for the child
+  wait(0);
+}
+
 static void usertests(void)
 {
   struct { const char *name; void (*fn)(void); } tests[] = {
@@ -257,6 +306,7 @@ static void usertests(void)
     { "files", test_files },
     { "dirs", test_dirs },
     { "pipe", test_pipe },
+    { "ps", test_ps },
   };
   for(int i = 0; i < sizeof(tests) / sizeof(tests[0]); i++){
     int before = failed;
