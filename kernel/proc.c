@@ -55,6 +55,10 @@ void proc_mapstacks(pagetable_t pagetable) {
             panic("proc_mapstacks: map");
         ptable[i].kstack = KSTACK(i);
         ptable[i].trapframe = trapframe_alloc(KSTACK(i));
+        // ASID 0 is the kernel's. A slot's ASID is flushed whenever
+        // its address space is freed or replaced, so the next one to
+        // use it starts with no stale translations.
+        ptable[i].asid = i + 1;
     }
 }
 
@@ -124,8 +128,10 @@ static void forkret(void) {
 // pages. p->lock must be held. The kernel stack stays mapped for the
 // slot's next user.
 static void freeproc(struct proc *p) {
-    if (p->pagetable)
+    if (p->pagetable) {
         proc_freepagetable(p->pagetable, p->sz);
+        asid_flush(p->asid);
+    }
     p->pagetable = 0;
     p->sz = 0;
     p->pid = 0;
@@ -338,6 +344,10 @@ int growproc(int n) {
         sz = uvmdealloc(p->pagetable, sz, sz + n);
     }
     p->sz = sz;
+    // Drop stale translations for unmapped pages; on riscv64 new
+    // mappings need a fence too.
+    if (n != 0)
+        asid_flush(p->asid);
     return 0;
 }
 

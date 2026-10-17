@@ -49,6 +49,9 @@ pagetable_t proc_pagetable(struct proc *p);
 void proc_freepagetable(pagetable_t pagetable, uint64 sz);
 void uvmswitch(pagetable_t pagetable);   // arch: install a user page table
 void kvmswitch(void);                    // arch: back to no user page table
+// arch: drop every hart's cached translations tagged with asid, after
+// that address space changed or before the ASID is reused
+void asid_flush(int asid);
 void sync_icache(uint64 va, uint64 len); // arch: make written code executable
 
 extern pagetable_t kernel_pagetable;

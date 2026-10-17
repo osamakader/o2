@@ -27,6 +27,7 @@ struct proc {
     // these are private to the process, so p->lock need not be held.
     struct context ctx;
     uint64 kstack;                // VA of the kernel stack, KSTACK(slot)
+    int asid;                     // TLB tag of this slot's address spaces
     uint64 sz;                    // size of process memory (bytes)
     pagetable_t pagetable;        // user page table; 0 for kernel threads
     struct trapframe *trapframe;  // user registers, at the top of kstack

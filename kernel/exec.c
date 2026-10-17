@@ -157,6 +157,8 @@ int exec(struct proc *p, const char *name, struct elfsrc *src, char **argv) {
         if (p == myproc())
             kvmswitch();
         proc_freepagetable(oldpagetable, oldsz);
+        // the new page table reuses p's ASID
+        asid_flush(p->asid);
     }
 
     return argc;

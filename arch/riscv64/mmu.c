@@ -79,3 +79,8 @@ struct trapframe *trapframe_alloc(uint64 kstack) {
     memset(tf, 0, PGSIZE);
     return tf;
 }
+
+// Every return to user mode flushes this hart's TLB, so there are no
+// tagged translations to drop yet.
+void asid_flush(int asid) {
+}

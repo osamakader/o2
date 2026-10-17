@@ -111,3 +111,8 @@ void proc_freepagetable(pagetable_t pagetable, uint64 sz) {
 struct trapframe *trapframe_alloc(uint64 kstack) {
     return (struct trapframe *)(kstack + PGSIZE) - 1;
 }
+
+// Every return to user mode flushes this hart's TLB, so there are no
+// tagged translations to drop yet.
+void asid_flush(int asid) {
+}
