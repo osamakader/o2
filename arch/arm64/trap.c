@@ -41,3 +41,15 @@ void serr_handler(struct trapframe *tf)
 {
     panic("SError: esr %p elr %p", (void *)tf->esr, (void *)tf->elr);
 }
+
+// Synchronous exception from EL0. Not reachable until there are user
+// processes.
+void usertrap(struct trapframe *tf)
+{
+    panic("usertrap: esr %p elr %p", (void *)tf->esr, (void *)tf->elr);
+}
+
+// Prepare to return to EL0 through tf.
+void usertrapret(struct trapframe *tf)
+{
+}

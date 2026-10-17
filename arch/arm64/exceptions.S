@@ -6,6 +6,7 @@
 .equ TF_SPSR, 256
 .equ TF_ESR,  264
 .equ TF_FAR,  272
+.equ TF_SP,   280   // user SP_EL0, only valid for traps from EL0
 .equ TF_SIZE, 288
 
 .macro SAVE_TRAPFRAME
@@ -87,22 +88,22 @@ _vectors:
     b el1_serr  /* SError/vSError */
     .balign 128
     /* Lower EL with Aarch64 */
-    b sync_addr /* Synchronous */
+    b el0_sync  /* Synchronous */
     .balign 128
-    b irq_addr  /* IRQ/vIRQ */
+    b el0_irq   /* IRQ/vIRQ */
     .balign 128
-    b fiq_addr  /* FIQ/vFIQ */
+    b el1_fiq   /* FIQ/vFIQ */
     .balign 128
-    b serr_addr /* SError/vSError */
+    b el1_serr  /* SError/vSError */
     .balign 128
-    /* Lower EL with Aarch32 */
-    b sync_addr /* Synchronous */
+    /* Lower EL with Aarch32: not supported, fatal */
+    b el1_sync  /* Synchronous */
     .balign 128
-    b irq_addr  /* IRQ/vIRQ */
+    b el1_sync  /* IRQ/vIRQ */
     .balign 128
-    b fiq_addr  /* FIQ/vFIQ */
+    b el1_fiq   /* FIQ/vFIQ */
     .balign 128
-    b serr_addr /* SError/vSError */
+    b el1_serr  /* SError/vSError */
     .balign 128
 
 .section .text, "ax"
@@ -127,24 +128,50 @@ el1_fiq:
 el1_serr:
     FATAL_ENTRY serr_handler
 
-
-sync_addr:
-    SAVE_TRAPFRAME
-    bl sync_handler
-    RESTORE_TRAPFRAME
-    eret
+// IRQ taken from EL1, on the current kernel stack.
 irq_addr:
     SAVE_TRAPFRAME
     bl handle_irq
     RESTORE_TRAPFRAME
-	eret
-fiq_addr:
-    SAVE_TRAPFRAME
-    bl fiq_handler
-    RESTORE_TRAPFRAME
     eret
-serr_addr:
+
+// Exceptions from EL0 arrive on SP_EL1, which is the top of the
+// running process's kernel stack (the kernel stack is empty while user
+// code runs), so the trapframe lands at a fixed place on it. SP_EL0
+// holds the user stack pointer: save it in the trapframe and point
+// SP_EL0 back at this CPU's emergency stack while in the kernel.
+.macro EL0_ENTRY
     SAVE_TRAPFRAME
-    bl serr_handler
+    mrs x1, sp_el0
+    str x1, [sp, #TF_SP]
+    mrs x1, mpidr_el1
+    and x1, x1, #0xff
+    add x1, x1, #1
+    lsl x1, x1, #12
+    ldr x2, =estack
+    add x1, x1, x2
+    msr sp_el0, x1
+    mov x0, sp
+.endm
+
+el0_sync:
+    EL0_ENTRY
+    bl usertrap
+    b ret_to_user
+
+el0_irq:
+    EL0_ENTRY
+    bl handle_irq
+    b ret_to_user
+
+// Return to EL0 with sp pointing at the process's trapframe.
+// usertrapret() leaves interrupts off and installs the user page
+// table; eret restores the user's PSTATE (interrupts on) from SPSR.
+.global ret_to_user
+ret_to_user:
+    mov x0, sp
+    bl usertrapret
+    ldr x1, [sp, #TF_SP]
+    msr sp_el0, x1
     RESTORE_TRAPFRAME
     eret
