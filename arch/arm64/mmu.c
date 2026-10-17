@@ -5,8 +5,10 @@
 #include "defs.h"
 #include "console.h"
 
-// Map the qemu virt devices the kernel drives: UART, GIC.
+// Map the qemu virt devices the kernel drives: UART, GIC, virtio.
 void kvmmap_devices(pagetable_t pagetable) {
+    kvmmap(pagetable, P2V(VIRTIO_MMIO), VIRTIO_MMIO,
+           VIRTIO_MMIO_COUNT * VIRTIO_MMIO_STRIDE, PTE_KERN_DEVICE);
     kvmmap(pagetable, P2V(UART0), UART0, PGSIZE, PTE_KERN_DEVICE);
     kvmmap(pagetable, P2V(GICD), GICD, GICD_SIZE, PTE_KERN_DEVICE);
     kvmmap(pagetable, P2V(GICR), GICR, GICR_SIZE, PTE_KERN_DEVICE);

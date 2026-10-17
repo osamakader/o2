@@ -4,8 +4,10 @@
 #include "mmu.h"
 #include "cpu.h"
 
-// Map the qemu virt devices the kernel drives: UART, PLIC.
+// Map the qemu virt devices the kernel drives: UART, PLIC, virtio.
 void kvmmap_devices(pagetable_t pagetable) {
+    kvmmap(pagetable, P2V(VIRTIO_MMIO), VIRTIO_MMIO,
+           VIRTIO_MMIO_COUNT * VIRTIO_MMIO_STRIDE, PTE_KERN_DEVICE);
     kvmmap(pagetable, P2V(UART0), UART0, PGSIZE, PTE_KERN_DEVICE);
     kvmmap(pagetable, P2V(PLIC), PLIC, PLIC_SIZE, PTE_KERN_DEVICE);
 }

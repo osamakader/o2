@@ -14,6 +14,13 @@
 #define PLIC 0x0c000000
 #define PLIC_SIZE 0x400000
 
+// virtio-mmio transports: VIRTIO_MMIO_COUNT slots, VIRTIO_MMIO_STRIDE
+// apart; slot i interrupts on PLIC source VIRTIO_MMIO_IRQ0 + i.
+#define VIRTIO_MMIO        0x10001000
+#define VIRTIO_MMIO_STRIDE 0x1000
+#define VIRTIO_MMIO_COUNT  8
+#define VIRTIO_MMIO_IRQ0   1
+
 // RAM starts here. OpenSBI occupies the first 2MB; qemu loads the
 // kernel at 0x80200000.
 #define KERNBASE 0x80000000

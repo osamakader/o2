@@ -20,6 +20,13 @@
 #define GICR      (GICv3 + 0xA0000)
 #define GICR_SIZE (NCPU * 0x20000)
 
+// virtio-mmio transports: VIRTIO_MMIO_COUNT slots, VIRTIO_MMIO_STRIDE
+// apart; slot i interrupts on VIRTIO_MMIO_IRQ0 + i (SPI 16 + i).
+#define VIRTIO_MMIO        0x0a000000
+#define VIRTIO_MMIO_STRIDE 0x200
+#define VIRTIO_MMIO_COUNT  32
+#define VIRTIO_MMIO_IRQ0   48
+
 // RAM starts here; qemu loads the kernel at 0x40080000 and puts the
 // DTB below it.
 #define KERNBASE 0x40000000

@@ -88,7 +88,7 @@ endif
 
 LDFLAGS = -z max-page-size=4096
 
-all: $(KERNEL)
+all: $(KERNEL) $(FSIMG)
 
 $(KERNEL): $(OBJS) arch/$(ARCH)/kernel.ld
 	$(LD) $(LDFLAGS) -T arch/$(ARCH)/kernel.ld -o $@ $(OBJS)
@@ -127,9 +127,19 @@ ifndef CPUS
 CPUS := 3
 endif
 
-QEMUOPTS += -kernel $(KERNEL) -m 128M -smp $(CPUS) -nographic
+# Disk image for the virtio block device (a blank scratch disk for now).
+FSIMG = $(B)/fs.img
 
-qemu: $(KERNEL)
+$(FSIMG):
+	@mkdir -p $(dir $@)
+	dd if=/dev/zero of=$@ bs=1024 count=2000 status=none
+
+QEMUOPTS += -kernel $(KERNEL) -m 128M -smp $(CPUS) -nographic
+QEMUOPTS += -global virtio-mmio.force-legacy=false
+QEMUOPTS += -drive file=$(FSIMG),if=none,format=raw,id=x0
+QEMUOPTS += -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0
+
+qemu: $(KERNEL) $(FSIMG)
 	$(QEMU) $(QEMUOPTS)
 
 .PHONY: all clean qemu
