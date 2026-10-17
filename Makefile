@@ -22,6 +22,7 @@ KOBJS = \
   kernel/vm.o \
   kernel/exec.o \
   kernel/virtio_disk.o \
+  kernel/bio.o \
   kernel/syscall.o \
   kernel/sysproc.o \
   kernel/sysfile.o \

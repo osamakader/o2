@@ -26,6 +26,15 @@ void *kalloc(void);
 void kfree(void *pa);
 uint64 kfreepages(void);
 
+// bio.c
+struct buf;
+void binit(void);
+struct buf *bread(uint dev, uint blockno);
+void brelse(struct buf *b);
+void bwrite(struct buf *b);
+void bpin(struct buf *b);
+void bunpin(struct buf *b);
+
 // virtio_disk.c
 void virtio_disk_init(void);
 int virtio_disk_present(void);

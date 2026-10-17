@@ -39,6 +39,7 @@ int main(int boot) {
         irq_register(UART0_IRQ, uartintr, cpuid());
 
         virtio_disk_init();
+        binit();
 
         userinit();   // first, so init is pid 1
         selftest();   // before any CPU schedules: init hasn't run yet
