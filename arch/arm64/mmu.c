@@ -15,6 +15,30 @@ void kvmmap_devices(pagetable_t pagetable) {
     kvmmap(pagetable, P2V(GICR), GICR, GICR_SIZE, PTE_KERN_DEVICE);
 }
 
+// KPTI: while user code runs, TTBR1 holds tramp_pagetable, which maps
+// only the trampoline page (tramp.S) and tramp_data, at the same
+// addresses as kernel_pagetable does. tramp_data gives the trampoline
+// the two TTBR1 values; it sits alone in its page.
+extern char tramp_vectors[];
+__attribute__((aligned(PGSIZE))) uint64 tramp_data[PGSIZE / sizeof(uint64)];
+static pagetable_t tramp_pagetable;
+
+static void tramp_init(void) {
+    tramp_pagetable = kalloc();
+    if (tramp_pagetable == 0)
+        panic("tramp_init");
+    memset(tramp_pagetable, 0, PGSIZE);
+
+    if (mappages(tramp_pagetable, (uint64)tramp_vectors, PGSIZE,
+                 V2P(tramp_vectors), PTE_KERN_TEXT) != 0 ||
+        mappages(tramp_pagetable, (uint64)tramp_data, PGSIZE,
+                 V2P(tramp_data), PTE_KERN_RODATA) != 0)
+        panic("tramp_init: map");
+
+    tramp_data[0] = V2P(kernel_pagetable);  // TTBR1 in the kernel
+    tramp_data[1] = V2P(tramp_pagetable);   // TTBR1 in user mode
+}
+
 // An all-invalid table for TTBR0 when no user page table is
 // installed, so stray kernel accesses to low addresses still fault.
 static pagetable_t empty_pagetable;
@@ -24,6 +48,9 @@ static pagetable_t empty_pagetable;
 // The low half (TTBR0) is for user page tables; until uvmswitch()
 // installs one it points at an empty table.
 void kvminithart(void) {
+    if (tramp_pagetable == 0)
+        tramp_init();
+
     if (empty_pagetable == 0) {
         empty_pagetable = kalloc();
         if (empty_pagetable == 0)
@@ -39,13 +66,13 @@ void kvminithart(void) {
     asm volatile("dsb ishst; tlbi vmalle1; dsb ish; isb" ::: "memory");
 }
 
-// Install a user page table in TTBR0 on this core. There are no ASIDs
-// yet, so drop all of this core's translations: entries from the
-// previous process, or from pages since unmapped from this one.
-// Call with interrupts off, right before returning to EL0.
+// Install a user page table in TTBR0 on this core. Call with
+// interrupts off, right before returning to EL0: tramp_exit (tramp.S)
+// then drops all of this core's translations (no ASIDs yet), so stale
+// entries of the previous process or of pages since unmapped, and all
+// kernel entries, are gone before user code runs.
 void uvmswitch(pagetable_t pagetable) {
-    asm volatile("msr ttbr0_el1, %0" : : "r"(V2P(pagetable)));
-    asm volatile("isb; tlbi vmalle1; dsb nsh; isb" ::: "memory");
+    asm volatile("msr ttbr0_el1, %0; isb" : : "r"(V2P(pagetable)) : "memory");
 }
 
 // The instruction cache is not coherent with data writes: after the

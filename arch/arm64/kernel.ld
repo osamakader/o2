@@ -31,7 +31,13 @@ SECTIONS
      * rest of the code so everything below etext can be mapped RX. */
     . = ALIGN(2048);
     KEEP(*(.vectors .vectors.*))
+    /* the trampoline: exactly one page, the only kernel text mapped
+     * while user code runs */
     . = ALIGN(0x1000);
+    _trampoline = .;
+    KEEP(*(trampsec))
+    . = ALIGN(0x1000);
+    ASSERT(. - _trampoline == 0x1000, "error: trampoline larger than one page");
     PROVIDE(etext = .);
   } :text
 

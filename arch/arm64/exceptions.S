@@ -87,10 +87,11 @@ _vectors:
     .balign 128
     b el1_serr  /* SError/vSError */
     .balign 128
-    /* Lower EL with Aarch64 */
-    b el0_sync  /* Synchronous */
+    /* Lower EL with Aarch64: EL0 runs with VBAR_EL1 = tramp_vectors
+     * (tramp.S), so these can only be taken by mistake: fatal. */
+    b el1_sync  /* Synchronous */
     .balign 128
-    b el0_irq   /* IRQ/vIRQ */
+    b el1_sync  /* IRQ/vIRQ */
     .balign 128
     b el1_fiq   /* FIQ/vFIQ */
     .balign 128
@@ -121,6 +122,7 @@ _vectors:
     b 1b
 .endm
 
+.global el1_sync, el1_fiq, el1_serr
 el1_sync:
     FATAL_ENTRY sync_handler
 el1_fiq:
@@ -135,13 +137,20 @@ irq_addr:
     RESTORE_TRAPFRAME
     eret
 
-// Exceptions from EL0 arrive on SP_EL1, which is the top of the
-// running process's kernel stack (the kernel stack is empty while user
-// code runs), so the trapframe lands at a fixed place on it. SP_EL0
-// holds the user stack pointer: save it in the trapframe and point
-// SP_EL0 back at this CPU's emergency stack while in the kernel.
+// Exceptions from EL0 come through tramp_vectors (tramp.S), which has
+// switched TTBR1 back to the kernel page table and left the user's x30
+// in TPIDR_EL1. They arrive on SP_EL1, which is the top of the running
+// process's kernel stack (the kernel stack is empty while user code
+// runs), so the trapframe lands at a fixed place on it. SP_EL0 holds
+// the user stack pointer: save it in the trapframe and point SP_EL0
+// back at this CPU's emergency stack while in the kernel. Exceptions
+// from here on go to the kernel's vectors.
 .macro EL0_ENTRY
+    mrs x30, tpidr_el1
     SAVE_TRAPFRAME
+    ldr x1, =_vectors
+    msr vbar_el1, x1
+    isb
     mrs x1, sp_el0
     str x1, [sp, #TF_SP]
     mrs x1, mpidr_el1
@@ -154,6 +163,7 @@ irq_addr:
     mov x0, sp
 .endm
 
+.global el0_sync, el0_irq
 el0_sync:
     EL0_ENTRY
     bl usertrap
@@ -172,8 +182,11 @@ userret:
     b ret_to_user
 
 // Return to EL0 with sp pointing at the process's trapframe.
-// usertrapret() leaves interrupts off and installs the user page
-// table; eret restores the user's PSTATE (interrupts on) from SPSR.
+// usertrapret() leaves interrupts off and installs the user page table
+// in TTBR0; tramp_exit (tramp.S) then hides the kernel by switching
+// TTBR1 to the trampoline page table, and erets, which restores the
+// user's PSTATE (interrupts on) from SPSR. Exceptions from EL0 go to
+// tramp_vectors from now on.
 .global ret_to_user
 ret_to_user:
     mov x0, sp
@@ -181,4 +194,9 @@ ret_to_user:
     ldr x1, [sp, #TF_SP]
     msr sp_el0, x1
     RESTORE_TRAPFRAME
-    eret
+    msr tpidr_el1, x30
+    ldr x30, =tramp_vectors
+    msr vbar_el1, x30
+    isb
+    ldr x30, =tramp_exit
+    br x30

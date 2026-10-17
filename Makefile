@@ -69,6 +69,7 @@ CFLAGS += -march=armv8-a -mgeneral-regs-only -mno-outline-atomics
 AOBJS = \
   entry.o \
   exceptions.o \
+  tramp.o \
   swtch.o \
   irq.o \
   uart.o \
