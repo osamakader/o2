@@ -30,6 +30,7 @@
 #define SYS_klog   24     // o2 extension
 #define SYS_getppid 25
 #define SYS_dup2    26
+#define SYS_lseek   27
 
 // sbrk(n, type): allocate now, or only on first touch (page fault)
 #define SBRK_EAGER 1

@@ -769,6 +769,63 @@ static void test_dup2(void)
   unlink("dup2.other");
 }
 
+// lseek() moves the offset; writing past the end leaves zeros in the
+// gap.
+static void test_lseek(void)
+{
+  char buf[16];
+  int fd = open("lseek.tmp", O_CREATE | O_RDWR | O_TRUNC);
+  if(fd < 0){
+    fail("lseek", "create");
+    return;
+  }
+  write(fd, "0123456789", 10);
+  if(lseek(fd, 2, SEEK_SET) != 2 || read(fd, buf, 3) != 3 || memcmp(buf, "234", 3) != 0)
+    fail("lseek", "SEEK_SET");
+  if(lseek(fd, -2, SEEK_CUR) != 3 || read(fd, buf, 1) != 1 || buf[0] != '3')
+    fail("lseek", "SEEK_CUR");
+  if(lseek(fd, -1, SEEK_END) != 9 || read(fd, buf, 2) != 1 || buf[0] != '9')
+    fail("lseek", "SEEK_END");
+  if(lseek(fd, -11, SEEK_END) != -1 || lseek(fd, 0, 7) != -1 || lseek(fd, 0, SEEK_CUR) != 10)
+    fail("lseek", "bad offsets accepted");
+  if(lseek(fd, 0, SEEK_SET) != 0 || write(fd, "ab", 2) != 2)
+    fail("lseek", "overwrite");
+
+  // a gap of more than a block, ending mid-block
+  int gap = 3000;
+  if(lseek(fd, gap, SEEK_END) != 10 + gap || write(fd, "end", 3) != 3)
+    fail("lseek", "write past the end");
+  struct stat st;
+  if(fstat(fd, &st) < 0 || st.size != 10 + gap + 3)
+    fail("lseek", "size after the gap");
+  lseek(fd, 0, SEEK_SET);
+  int bad = 0;
+  char c;
+  for(int i = 0; i < 10 + gap + 3; i++){
+    if(read(fd, &c, 1) != 1){
+      bad = 1;
+      break;
+    }
+    if(i < 10)
+      bad |= c != "ab23456789"[i];
+    else if(i < 10 + gap)
+      bad |= c != 0;
+    else
+      bad |= c != "end"[i - 10 - gap];
+  }
+  if(bad)
+    fail("lseek", "file contents");
+  close(fd);
+  unlink("lseek.tmp");
+
+  int fds[2];
+  pipe(fds);
+  if(lseek(fds[0], 0, SEEK_SET) != -1 || lseek(1, 0, SEEK_SET) != -1)
+    fail("lseek", "seek on a pipe or the console");
+  close(fds[0]);
+  close(fds[1]);
+}
+
 static void o2tests(void)
 {
   struct { const char *name; void (*fn)(void); } tests[] = {
@@ -784,6 +841,7 @@ static void o2tests(void)
     { "klog", test_klog },
     { "getppid", test_getppid },
     { "dup2", test_dup2 },
+    { "lseek", test_lseek },
     { "fp math", test_fp_math },
     { "fp regs", test_fp_regs },
     { "fp fork", test_fp_fork },

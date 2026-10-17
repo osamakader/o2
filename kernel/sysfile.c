@@ -113,6 +113,18 @@ uint64 sys_write(void)
     return filewrite(f, p, n);
 }
 
+uint64 sys_lseek(void)
+{
+    struct file *f;
+    int off, whence;
+
+    argint(1, &off);
+    argint(2, &whence);
+    if (argfd(0, 0, &f) < 0)
+        return -1;
+    return fileseek(f, off, whence);
+}
+
 uint64 sys_close(void)
 {
     int fd;

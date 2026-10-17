@@ -44,6 +44,7 @@ void fileinit(void);
 int fileread(struct file *f, uint64 addr, int n);
 int filestat(struct file *f, uint64 addr);
 int filewrite(struct file *f, uint64 addr, int n);
+int fileseek(struct file *f, int off, int whence);
 
 // pipe.c
 struct pipe;
