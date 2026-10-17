@@ -237,7 +237,141 @@ static void kthread_fs_read(void *arg) {
     printf("fs read ok: %d entries, README.md %d bytes\n", n, size);
 }
 
+// Free data blocks (bitmap) and free inodes, read from disk.
+static void fs_count_free(int *blocks, int *inodes) {
+    *blocks = *inodes = 0;
+    for (uint b = 0; b < sb.size; b++) {
+        struct buf *bp = bread(ROOTDEV, BBLOCK(b, sb));
+        if ((bp->data[(b % BPB) / 8] & (1 << (b % 8))) == 0)
+            (*blocks)++;
+        brelse(bp);
+    }
+    for (uint inum = 1; inum < sb.ninodes; inum++) {
+        struct buf *bp = bread(ROOTDEV, IBLOCK(inum, sb));
+        if (((struct dinode *)bp->data + inum % IPB)->type == 0)
+            (*inodes)++;
+        brelse(bp);
+    }
+}
+
+#define FSW_THREADS 2
+#define FSW_BLOCKS  20   // past NDIRECT: needs the indirect block
+#define FSW_CHUNK   (3 * BSIZE)   // bytes per transaction
+
+static struct {
+    struct spinlock lock;
+    int done;
+} fsw = { .lock = { .name = "fsw" } };
+
+// Create /ktN, write it in several transactions, read it back, unlink
+// it (freeing its inode and blocks in iput()).
+static void kthread_fs_write(void *arg) {
+    long t = (long)arg;
+    char path[] = "/kt0", *name = path + 1;
+    uchar *buf = kalloc();
+    struct inode *dp, *ip;
+
+    name[2] = '0' + t;
+    if (!buf)
+        panic("fs write test: kalloc");
+
+    begin_op();
+    dp = namei("/");
+    ilock(dp);
+    if ((ip = ialloc(ROOTDEV, T_FILE)) == 0)
+        panic("fs write test: ialloc");
+    ilock(ip);
+    ip->nlink = 1;
+    iupdate(ip);
+    if (dirlink(dp, name, ip->inum) < 0)
+        panic("fs write test: dirlink %s", name);
+    iunlockput(dp);
+    iunlock(ip);
+    end_op();
+
+    // write FSW_BLOCKS blocks of a pattern, a few blocks per transaction
+    for (uint off = 0; off < FSW_BLOCKS * BSIZE; off += FSW_CHUNK) {
+        for (int k = 0; k < FSW_CHUNK; k++)
+            buf[k] = (uchar)(t * 101 + off + k);
+        begin_op();
+        ilock(ip);
+        if (writei(ip, 0, (uint64)buf, off, FSW_CHUNK) != FSW_CHUNK)
+            panic("fs write test: writei");
+        iunlock(ip);
+        end_op();
+    }
+
+    // read it back through a fresh lookup
+    begin_op();
+    struct inode *ip2 = namei(path);
+    if (ip2 != ip)
+        panic("fs write test: namei %s", name);
+    ilock(ip2);
+    if (ip2->size < FSW_BLOCKS * BSIZE)
+        panic("fs write test: size %d", ip2->size);
+    for (uint off = 0; off < FSW_BLOCKS * BSIZE; off += FSW_CHUNK) {
+        if (readi(ip2, 0, (uint64)buf, off, FSW_CHUNK) != FSW_CHUNK)
+            panic("fs write test: readi");
+        for (int k = 0; k < FSW_CHUNK; k++)
+            if (buf[k] != (uchar)(t * 101 + off + k))
+                panic("fs write test: %s byte %d", name, off + k);
+    }
+    iunlockput(ip2);
+    end_op();
+
+    // unlink: clear the directory entry, drop the link; the last iput()
+    // truncates and frees the inode.
+    begin_op();
+    uint off;
+    struct dirent de;
+    dp = namei("/");
+    ilock(dp);
+    struct inode *victim = dirlookup(dp, name, &off);
+    if (victim != ip)
+        panic("fs write test: dirlookup %s", name);
+    memset(&de, 0, sizeof(de));
+    if (writei(dp, 0, (uint64)&de, off, sizeof(de)) != sizeof(de))
+        panic("fs write test: unlink writei");
+    iunlockput(dp);
+    ilock(victim);
+    victim->nlink--;
+    iupdate(victim);
+    iunlockput(victim);
+    iput(ip);
+    end_op();
+
+    kfree(buf);
+
+    acquire(&fsw.lock);
+    fsw.done++;
+    wakeup(&fsw.done);
+    release(&fsw.lock);
+}
+
+// Run the writers concurrently; afterwards the free block and inode
+// counts must be back where they started.
+static void kthread_fs_writes(void *arg) {
+    int blocks0, inodes0, blocks1, inodes1;
+
+    fs_count_free(&blocks0, &inodes0);
+    for (long i = 0; i < FSW_THREADS; i++)
+        spawn(kthread_fs_write, (void *)i);
+
+    acquire(&fsw.lock);
+    while (fsw.done < FSW_THREADS)
+        sleep(&fsw.done, &fsw.lock);
+    release(&fsw.lock);
+
+    fs_count_free(&blocks1, &inodes1);
+    if (blocks1 != blocks0 || inodes1 != inodes0)
+        panic("fs write test: free blocks %d -> %d, inodes %d -> %d",
+              blocks0, blocks1, inodes0, inodes1);
+    printf("fs write ok: %d free blocks, %d free inodes before and after\n",
+           blocks0, inodes0);
+}
+
 // Called once the file system is up (first forkret).
 void selftest_fs(void) {
     spawn(kthread_fs_read, 0);
+    spawn(kthread_fs_writes, 0);
 }
