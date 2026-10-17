@@ -34,6 +34,7 @@ int dup(int);
 int getprocs(struct procinfo *, int);
 int klog(char *, int);
 int getppid(void);
+int dup2(int, int);
 
 // ulib.c
 char *strcpy(char *, const char *);

@@ -65,6 +65,27 @@ uint64 sys_dup(void)
     return fd;
 }
 
+// dup2(old, new): make new refer to old's file, closing whatever new
+// had open first.
+uint64 sys_dup2(void)
+{
+    struct proc *p = myproc();
+    struct file *f, *prev;
+    int oldfd, newfd;
+
+    argint(1, &newfd);
+    if (argfd(0, &oldfd, &f) < 0 || newfd < 0 || newfd >= NOFILE)
+        return -1;
+    if (newfd == oldfd)
+        return newfd;
+    filedup(f);
+    prev = p->ofile[newfd];
+    p->ofile[newfd] = f;
+    if (prev)
+        fileclose(prev);
+    return newfd;
+}
+
 uint64 sys_read(void)
 {
     struct file *f;

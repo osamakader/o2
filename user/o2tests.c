@@ -721,6 +721,54 @@ static void test_getppid(void)
     fail("getppid", "o2tests has no parent");
 }
 
+// dup2() replaces the target descriptor, sharing the file offset.
+static void test_dup2(void)
+{
+  int fd = open("dup2.tmp", O_CREATE | O_RDWR);
+  int other = open("dup2.other", O_CREATE | O_RDWR);
+  if(fd < 0 || other < 0){
+    fail("dup2", "create");
+    return;
+  }
+  if(dup2(fd, other) != other || dup2(fd, fd) != fd)
+    fail("dup2", "return value");
+  if(dup2(fd, -1) != -1 || dup2(fd, 1000) != -1 || dup2(99, 3) != -1)
+    fail("dup2", "bad descriptors accepted");
+  write(fd, "ab", 2);
+  write(other, "cd", 2);      // same file now, appended after "ab"
+  close(fd);
+  close(other);
+  char buf[8] = { 0 };
+  fd = open("dup2.tmp", O_RDONLY);
+  if(read(fd, buf, sizeof(buf)) != 4 || strcmp(buf, "abcd") != 0)
+    fail("dup2", "descriptors don't share the file");
+  close(fd);
+  struct stat st;
+  fd = open("dup2.other", O_RDONLY);
+  if(fstat(fd, &st) < 0 || st.size != 0)
+    fail("dup2", "wrote to the replaced file");
+  close(fd);
+
+  // the shell's redirection idiom: dup2 onto stdout in a child
+  int fds[2];
+  pipe(fds);
+  if(fork() == 0){
+    close(fds[0]);
+    dup2(fds[1], 1);
+    close(fds[1]);
+    printf("hi\n");
+    exit(0);
+  }
+  close(fds[1]);
+  wait(0);
+  memset(buf, 0, sizeof(buf));
+  if(read(fds[0], buf, sizeof(buf)) != 3 || strcmp(buf, "hi\n") != 0)
+    fail("dup2", "stdout not redirected");
+  close(fds[0]);
+  unlink("dup2.tmp");
+  unlink("dup2.other");
+}
+
 static void o2tests(void)
 {
   struct { const char *name; void (*fn)(void); } tests[] = {
@@ -735,6 +783,7 @@ static void o2tests(void)
     { "ps", test_ps },
     { "klog", test_klog },
     { "getppid", test_getppid },
+    { "dup2", test_dup2 },
     { "fp math", test_fp_math },
     { "fp regs", test_fp_regs },
     { "fp fork", test_fp_fork },

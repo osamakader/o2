@@ -77,6 +77,7 @@ extern uint64 sys_sync(void);
 extern uint64 sys_getprocs(void);
 extern uint64 sys_klog(void);
 extern uint64 sys_getppid(void);
+extern uint64 sys_dup2(void);
 
 // An array mapping syscall numbers from syscall.h to the function that
 // handles the system call.
@@ -106,6 +107,7 @@ static uint64 (*syscalls[])(void) = {
     [SYS_getprocs] sys_getprocs,
     [SYS_klog]   sys_klog,
     [SYS_getppid]  sys_getppid,
+    [SYS_dup2]     sys_dup2,
 };
 
 void syscall(void) {
