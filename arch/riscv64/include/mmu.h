@@ -32,10 +32,13 @@
 #define MKPAGE(pa, attrs) (PA2PTE(pa) | (attrs) | PTE_A | PTE_D | PTE_VALID)
 
 // Sv39 has no memory types; device vs memory comes from the PMAs.
-#define PTE_KERN_TEXT   (PTE_R | PTE_X | PTE_G)
-#define PTE_KERN_RODATA (PTE_R | PTE_G)
-#define PTE_KERN_DATA   (PTE_R | PTE_W | PTE_G)
-#define PTE_KERN_DEVICE (PTE_R | PTE_W | PTE_G)
+// Kernel mappings are not global (G): global translations match every
+// ASID, which would make them usable while user code runs. They are
+// tagged with the kernel's ASID 0 instead.
+#define PTE_KERN_TEXT   (PTE_R | PTE_X)
+#define PTE_KERN_RODATA (PTE_R)
+#define PTE_KERN_DATA   (PTE_R | PTE_W)
+#define PTE_KERN_DEVICE (PTE_R | PTE_W)
 
 // user mappings: readable; writable/executable per PERM_W/PERM_X.
 #define PTE_USER(perm) (PTE_U | PTE_R | \
@@ -63,8 +66,11 @@
 static inline void uvminit_root(uint64 *root) { }
 #endif
 
-// satp: Sv39 mode and the root table's PPN
+// satp: Sv39 mode, address-space ID and the root table's PPN
 #define SATP_SV39 (_UL(8) << 60)
+#define SATP_ASID_SHIFT 44
+#define SATP_ASID_MASK  (_UL(0xffff) << SATP_ASID_SHIFT)
 #define MAKE_SATP(pa) (SATP_SV39 | (((uint64)(pa)) >> 12))
+#define SATP_ASID(asid) ((uint64)(asid) << SATP_ASID_SHIFT)
 
 #endif

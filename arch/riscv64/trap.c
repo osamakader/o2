@@ -190,9 +190,10 @@ void usertrapret(void)
 
     // jump to tramp_userret at its TRAMPOLINE alias, which switches to
     // the user page table, restores user registers, and srets.
-    uint64 satp = MAKE_SATP(V2P(p->pagetable));
+    extern int asids;
+    uint64 satp = MAKE_SATP(V2P(p->pagetable)) | SATP_ASID(asids ? p->asid : 0);
     uint64 fn = TRAMPOLINE + (tramp_userret - trampoline);
-    ((void (*)(uint64))fn)(satp);
+    ((void (*)(uint64, uint64))fn)(satp, !asids);
     __builtin_unreachable();
 }
 

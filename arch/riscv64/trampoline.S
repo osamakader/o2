@@ -63,22 +63,26 @@ uservec:
         ld tp, 24(a0)
         ld t0, 16(a0)
 
-        // switch to the kernel page table; drop the user's translations
+        // switch to the kernel page table. Its translations are tagged
+        // with the kernel's ASID, so no fence is needed: the user's and
+        // the kernel's live side by side in the TLB.
         ld t1, 0(a0)
-        sfence.vma zero, zero
         csrw satp, t1
-        sfence.vma zero, zero
 
         // usertrap() doesn't return
         jr t0
 
-// tramp_userret(satp): called by usertrapret() at its TRAMPOLINE alias
-// to switch to the user page table and return to user mode.
+// tramp_userret(satp, flush): called by usertrapret() at its
+// TRAMPOLINE alias to switch to the user page table and return to user
+// mode. With per-process ASIDs, the kernel's translations stay in the
+// TLB under ASID 0, out of the user's reach; without, flush is set and
+// they're dropped here.
 .global tramp_userret
 tramp_userret:
-        sfence.vma zero, zero
         csrw satp, a0
+        beqz a1, 1f
         sfence.vma zero, zero
+1:
 
         li a0, TRAPFRAME
 

@@ -11,25 +11,34 @@
 
 #define SBI_EXT_TIME 0x54494D45   // "TIME"
 #define SBI_EXT_HSM  0x48534D     // "HSM"
+#define SBI_EXT_RFNC 0x52464E43   // "RFNC"
 
 struct sbiret {
     long error;
     long value;
 };
 
-static struct sbiret sbi_call(long ext, long fid, uint64 arg0, uint64 arg1, uint64 arg2)
+static struct sbiret sbi_call5(long ext, long fid, uint64 arg0, uint64 arg1,
+                               uint64 arg2, uint64 arg3, uint64 arg4)
 {
     register uint64 a0 asm("a0") = arg0;
     register uint64 a1 asm("a1") = arg1;
     register uint64 a2 asm("a2") = arg2;
+    register uint64 a3 asm("a3") = arg3;
+    register uint64 a4 asm("a4") = arg4;
     register uint64 a6 asm("a6") = fid;
     register uint64 a7 asm("a7") = ext;
 
     asm volatile("ecall"
                  : "+r"(a0), "+r"(a1)
-                 : "r"(a2), "r"(a6), "r"(a7)
+                 : "r"(a2), "r"(a3), "r"(a4), "r"(a6), "r"(a7)
                  : "memory");
     return (struct sbiret){ .error = a0, .value = a1 };
+}
+
+static struct sbiret sbi_call(long ext, long fid, uint64 arg0, uint64 arg1, uint64 arg2)
+{
+    return sbi_call5(ext, fid, arg0, arg1, arg2, 0, 0);
 }
 
 // Program this hart's next timer interrupt for time value stime; also
@@ -61,4 +70,11 @@ void start_cpus(void)
         if (r != SBI_SUCCESS && r != SBI_ERR_INVALID_PARAM)
             printf("cpu %d: sbi_hart_start failed: %ld\n", i, r);
     }
+}
+
+// sfence.vma for every address in ASID asid, on all harts (this one
+// included): RFENCE remote_sfence_vma_asid with hart_mask_base = -1.
+long sbi_remote_sfence_vma_asid_all(uint64 asid)
+{
+    return sbi_call5(SBI_EXT_RFNC, 2, 0, -1UL, 0, -1UL, asid).error;
 }

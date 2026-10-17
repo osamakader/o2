@@ -11,5 +11,6 @@
 
 void sbi_set_timer(uint64 stime);
 long sbi_hart_start(uint64 hartid, uint64 start_addr, uint64 opaque);
+long sbi_remote_sfence_vma_asid_all(uint64 asid);
 
 #endif
