@@ -4,6 +4,9 @@
 #include "types.h"
 #include "trap.h"
 #include "console.h"
+#include "proc.h"
+#include "cpu.h"
+#include "vm.h"
 
 #define ESR_EC(esr) (((esr) >> 26) & 0x3f)
 
@@ -42,14 +45,20 @@ void serr_handler(struct trapframe *tf)
     panic("SError: esr %p elr %p", (void *)tf->esr, (void *)tf->elr);
 }
 
-// Synchronous exception from EL0. Not reachable until there are user
-// processes.
+// Synchronous exception from EL0. Syscalls are not dispatched yet.
 void usertrap(struct trapframe *tf)
 {
-    panic("usertrap: esr %p elr %p", (void *)tf->esr, (void *)tf->elr);
+    if (ESR_EC(tf->esr) == 0x15)
+        panic("usertrap: syscall %ld from pid %d", (long)tf->x[8], myproc()->pid);
+    panic("usertrap: %s esr %p elr %p far %p", ec_name(ESR_EC(tf->esr)),
+          (void *)tf->esr, (void *)tf->elr, (void *)tf->far);
 }
 
-// Prepare to return to EL0 through tf.
+// Last step before returning to EL0 through tf: with interrupts off
+// (until eret restores the user's PSTATE), install this process's
+// page table on this core.
 void usertrapret(struct trapframe *tf)
 {
+    intr_off();
+    uvmswitch(myproc()->pagetable);
 }

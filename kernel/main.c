@@ -74,6 +74,7 @@ int main() {
         pl011_enable_rx_irq();
         gic_enable_spi(UART0_IRQ, 0);
 
+        userinit();   // first, so init is pid 1
         selftest();
 
         init_timer();

@@ -22,6 +22,7 @@ OBJS = \
   kernel/selftest.o \
   kernel/vm.o \
   kernel/exec.o \
+  kernel/initcode.o \
 
 CFLAGS = -Wall -Werror -O -fno-omit-frame-pointer -ggdb -gdwarf-2
 
@@ -71,6 +72,9 @@ kernel.elf: $(OBJS) arch/$(ARCH)/kernel.ld
 -include arch/$(ARCH)/*.d
 -include kernel/*.d
 -include user/*.d
+
+# initcode.S embeds user/_init with .incbin, which -MD doesn't track.
+kernel/initcode.o: user/_init
 
 # User programs: linked at VA 0 against a tiny libc (ulib, printf, usys).
 ULIB = user/ulib.o user/usys.o user/printf.o

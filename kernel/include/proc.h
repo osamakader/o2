@@ -62,6 +62,7 @@ void swtch(struct context *old, struct context *new);
 struct cpu *mycpu(void);
 
 void procinit(void);
+void userinit(void);
 void proc_mapstacks(pagetable_t pagetable);
 struct proc *kthread_create(void (*fn)(void *), void *arg);
 void yield(void);

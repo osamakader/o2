@@ -7,6 +7,7 @@
 #include "vm.h"
 #include "mmu.h"
 #include "spinlock.h"
+#include "exec.h"
 
 // Entry point for a freshly created kernel thread (arch/arm64/swtch.S).
 // swtch() restores x19/x20 as callee-saved registers, so kthread_create()
@@ -78,6 +79,23 @@ static struct proc *allocproc(void) {
         release(&p->lock);
     }
     return 0;
+}
+
+// the first user process; orphans are reparented to it.
+struct proc *initproc;
+
+// Assembly in exceptions.S: switch to tf and return to user mode.
+extern void userret(struct trapframe *tf) __attribute__((noreturn));
+
+// A fork child's (or the first process's) very first scheduling by
+// scheduler() will swtch to forkret.
+static void forkret(void) {
+    struct proc *p = myproc();
+
+    // Still holding p->lock from scheduler.
+    release(&p->lock);
+
+    userret(p->trapframe);
 }
 
 // Free a proc structure and the data hanging from it, including user
@@ -249,4 +267,28 @@ void scheduler(void) {
         if (!found)
             asm volatile("wfi");
     }
+}
+
+// Set up the first user process, running the embedded init program.
+void userinit(void) {
+    extern uchar initcode[], initcode_end[];
+    struct elfsrc src;
+    char *argv[] = { "init", 0 };
+
+    struct proc *p = allocproc();
+    if (p == 0)
+        panic("userinit: allocproc");
+    initproc = p;
+
+    memset(p->trapframe, 0, sizeof(*p->trapframe));
+    elfsrc_mem(&src, initcode, initcode_end - initcode);
+    if (exec(p, "init", &src, argv) < 0)
+        panic("userinit: exec");
+
+    // forkret runs on the kernel stack just below the trapframe.
+    p->ctx.ra = (uint64)forkret;
+    p->ctx.sp = (uint64)p->trapframe;
+
+    p->state = RUNNABLE;
+    release(&p->lock);
 }

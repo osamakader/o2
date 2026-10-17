@@ -164,6 +164,13 @@ el0_irq:
     bl handle_irq
     b ret_to_user
 
+// userret(tf): enter user mode for the first time (forkret), from the
+// trapframe at the top of the kernel stack.
+.global userret
+userret:
+    mov sp, x0
+    b ret_to_user
+
 // Return to EL0 with sp pointing at the process's trapframe.
 // usertrapret() leaves interrupts off and installs the user page
 // table; eret restores the user's PSTATE (interrupts on) from SPSR.
