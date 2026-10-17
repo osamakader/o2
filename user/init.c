@@ -32,7 +32,13 @@ int main(void)
     printf("init: sbrk ok, sum %d, size back to %p\n", sum, sbrk(0));
   }
 
-  // nothing else to do yet; reap orphans forever
-  for(;;)
-    wait(0);
+  int t0 = uptime();
+  sleep(25);
+  printf("init: slept %d ticks\n", uptime() - t0);
+
+  // nothing else to do yet: reap orphans, idle in sleep()
+  for(;;){
+    if(wait(0) < 0)
+      sleep(100);
+  }
 }

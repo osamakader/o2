@@ -2,6 +2,8 @@
 #include "param.h"
 #include "defs.h"
 #include "proc.h"
+#include "spinlock.h"
+#include "timer.h"
 
 uint64 sys_getpid(void) {
     return myproc()->pid;
@@ -37,4 +39,32 @@ uint64 sys_sbrk(void) {
     if (growproc(n) < 0)
         return -1;
     return addr;
+}
+
+// Sleep for n ticks; returns -1 early if the process is killed.
+uint64 sys_sleep(void) {
+    int n;
+    argint(0, &n);
+    if (n < 0)
+        n = 0;
+
+    acquire(&tickslock);
+    uint64 ticks0 = ticks;
+    while (ticks - ticks0 < n) {
+        if (killed(myproc())) {
+            release(&tickslock);
+            return -1;
+        }
+        sleep(&ticks, &tickslock);
+    }
+    release(&tickslock);
+    return 0;
+}
+
+// return how many clock tick interrupts have occurred since start.
+uint64 sys_uptime(void) {
+    acquire(&tickslock);
+    uint64 xticks = ticks;
+    release(&tickslock);
+    return xticks;
 }
