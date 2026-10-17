@@ -41,8 +41,9 @@ uint64 sys_sbrk(void) {
     return addr;
 }
 
-// Sleep for n ticks; returns -1 early if the process is killed.
-uint64 sys_sleep(void) {
+// pause(n): sleep for n ticks; returns -1 early if the process is
+// killed. (xv6 renamed sleep to pause.)
+uint64 sys_pause(void) {
     int n;
     argint(0, &n);
     if (n < 0)

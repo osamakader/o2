@@ -43,6 +43,7 @@ struct log {
     int start;
     int outstanding; // how many FS sys calls are executing.
     int committing;  // in commit(), please wait.
+    int ncommit;     // number of completed commits
     int dev;
     struct logheader lh;
 };
@@ -157,6 +158,7 @@ void end_op(void)
         commit();
         acquire(&log.lock);
         log.committing = 0;
+        log.ncommit++;
         wakeup(&log);
         release(&log.lock);
     }
@@ -215,4 +217,18 @@ void log_write(struct buf *b)
         log.lh.n++;
     }
     release(&log.lock);
+}
+
+// sync(): wait until file system operations in progress (or being
+// committed) when called are on disk. Returns 0.
+uint64 sys_sync(void)
+{
+    acquire(&log.lock);
+    if (log.committing || log.outstanding > 0) {
+        int n = log.ncommit + 1;
+        while (log.ncommit < n)
+            sleep(&log, &log.lock);
+    }
+    release(&log.lock);
+    return 0;
 }

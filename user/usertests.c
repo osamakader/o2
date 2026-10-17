@@ -165,7 +165,7 @@ static void test_kill(void)
   int pid = fork();
   if(pid == 0)
     spin();
-  sleep(5);
+  pause(5);
   if(kill(pid) != 0)
     fail("kill", "kill");
   int status;
@@ -266,7 +266,7 @@ static void test_ps(void)
   static struct procinfo procs[64];
   int me = getpid(), seen_me = 0, seen_child = 0;
 
-  // The child blocks reading an empty pipe: unlike sleep(), which
+  // The child blocks reading an empty pipe: unlike pause(), which
   // wakes on every tick to recheck, nothing wakes it until we close
   // the write end.
   int fds[2];
@@ -282,7 +282,7 @@ static void test_ps(void)
     exit(0);
   }
   close(fds[0]);
-  sleep(5);  // let the child block
+  pause(5);  // let the child block
 
   int n = getprocs(procs, 64);
   if(n <= 0)
