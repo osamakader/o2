@@ -370,8 +370,10 @@ static void kthread_fs_writes(void *arg) {
            blocks0, inodes0);
 }
 
-// Called once the file system is up (first forkret).
+// Called once the file system is up, by the first process in forkret()
+// before it enters user mode: nothing else uses the file system until
+// these return, so the free counts in the write test are exact.
 void selftest_fs(void) {
-    spawn(kthread_fs_read, 0);
-    spawn(kthread_fs_writes, 0);
+    kthread_fs_read(0);
+    kthread_fs_writes(0);
 }
