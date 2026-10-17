@@ -13,6 +13,7 @@ int strlen(const char *s);
 void kinit(void);
 void *kalloc(void);
 void kfree(void *pa);
+uint64 kfreepages(void);
 
 // selftest.c
 void selftest(void);
