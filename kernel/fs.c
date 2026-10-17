@@ -613,6 +613,12 @@ static struct inode *namex(char *path, int nameiparent, char *name)
             iunlockput(ip);
             return 0;
         }
+        if (ip->nlink == 0) {
+            // an unlinked directory (e.g. a removed cwd): its ".." may
+            // name an inode that has since been freed.
+            iunlockput(ip);
+            return 0;
+        }
         if (nameiparent && *path == '\0') {
             // Stop one level early.
             iunlock(ip);
