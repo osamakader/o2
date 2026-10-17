@@ -9,6 +9,7 @@
 #include "spinlock.h"
 #include "exec.h"
 #include "procinfo.h"
+#include "fpu.h"
 
 // Fixed-size process table. BSS is zeroed at boot (arch/<arch>/entry.S),
 // and UNUSED == 0, so every slot starts out free.
@@ -179,6 +180,8 @@ static void sched(void) {
         panic("sched running");
     if (intr_get())
         panic("sched interruptible");
+
+    fp_switch_out(p);
 
     int intena = mycpu()->intena;
     swtch(&p->ctx, &mycpu()->context);
@@ -373,6 +376,8 @@ int fork(void) {
 
     // copy saved user registers.
     *(np->trapframe) = *(p->trapframe);
+
+    fp_fork(p, np);
 
     // Cause fork to return 0 in the child.
     TF_RET(np->trapframe) = 0;

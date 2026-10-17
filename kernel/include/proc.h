@@ -7,6 +7,7 @@
 #include "spinlock.h"
 #include "trap.h"
 #include "context.h"
+#include "fpstate.h"
 
 enum procstate { UNUSED, USED, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 
@@ -31,6 +32,7 @@ struct proc {
     uint64 sz;                    // size of process memory (bytes)
     pagetable_t pagetable;        // user page table; 0 for kernel threads
     struct trapframe *trapframe;  // user registers, at the top of kstack
+    struct fpstate fp;            // user FP registers, when not live (fpu.h)
     struct file *ofile[NOFILE];   // open files
     struct inode *cwd;            // current directory
     char name[16];                // process name (debugging)

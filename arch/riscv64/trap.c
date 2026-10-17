@@ -5,6 +5,10 @@
 #include "memlayout.h"
 #include "console.h"
 #include "backtrace.h"
+#include "fpu.h"
+
+int fp_trap(struct proc *p);
+uint64 fp_fixup_status(uint64 status);
 #include "proc.h"
 #include "cpu.h"
 #include "trap.h"
@@ -101,6 +105,10 @@ void kerneltrap(struct trapframe *tf)
     struct proc *p = myproc();
     if (dev == DEV_TIMER && p && p->state == RUNNING)
         yield();
+
+    // kernelvec restores sstatus from tf. If yield() ran another process
+    // meanwhile, FS was switched for it: keep the current FS.
+    tf->status = fp_fixup_status(tf->status);
 }
 
 extern char trampoline[], uservec[], tramp_userret[];  // trampoline.S
@@ -142,6 +150,8 @@ void usertrap(void)
         syscall();
     } else if ((dev = devintr(tf->cause)) != DEV_NONE) {
         // ok
+    } else if (tf->cause == 2 && fp_trap(p)) {
+        // illegal instruction with FP off: first FP use on this hart
     } else if ((tf->cause == 13 || tf->cause == 15) &&
                vmfault(p->pagetable, tf->tval) != 0) {
         // load/store page fault on lazily allocated memory

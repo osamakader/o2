@@ -13,6 +13,7 @@
 #include "file.h"
 #include "cpu.h"
 #include "mmu.h"
+#include "fpu.h"
 
 static int memread(struct elfsrc *src, uint64 off, void *dst, uint64 n) {
     if (off > src->len || n > src->len - off)
@@ -150,6 +151,7 @@ int exec(struct proc *p, const char *name, struct elfsrc *src, char **argv) {
     p->pagetable = pagetable;
     p->sz = sz;
     tf_init_user(p->trapframe, elf.entry, sp);  // start at _start
+    fp_exec(p);
     if (oldpagetable) {
         // This hart may still be translating through the old table (on
         // riscv64 its upper half maps the kernel itself); leave it before

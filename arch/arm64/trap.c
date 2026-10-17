@@ -5,6 +5,9 @@
 #include "trap.h"
 #include "console.h"
 #include "backtrace.h"
+#include "fpu.h"
+
+void fp_trap(struct proc *p);
 #include "proc.h"
 #include "cpu.h"
 #include "vm.h"
@@ -51,6 +54,7 @@ void serr_handler(struct trapframe *tf)
     panic("SError: esr %p elr %p", (void *)tf->esr, (void *)tf->elr);
 }
 
+#define EC_FP_LOW    0x07   // SIMD/FP access from EL0
 #define EC_SVC64     0x15
 #define EC_DABT_LOW  0x24   // data abort from EL0
 
@@ -72,6 +76,9 @@ void usertrap(struct trapframe *tf)
         intr_on();
 
         syscall();
+    } else if (ESR_EC(tf->esr) == EC_FP_LOW) {
+        // first FP/SIMD use since this process got the CPU
+        fp_trap(p);
     } else if (ESR_EC(tf->esr) == EC_DABT_LOW && (tf->esr & 0x3c) == 0x04 &&
                vmfault(p->pagetable, tf->far) != 0) {
         // translation fault (DFSC 0b0001xx) on lazily allocated memory

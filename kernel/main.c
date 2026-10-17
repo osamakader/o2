@@ -9,6 +9,7 @@
 #include "param.h"
 #include "cpu.h"
 #include "uart.h"
+#include "fpu.h"
 
 // Every CPU enters here from arch/<arch>/entry.S with the MMU on, on its
 // boot stack. boot is set on the one CPU that does the global setup
@@ -29,6 +30,7 @@ int main(int boot) {
         procinit();
         kvminit();
         kvminithart();
+        fpinithart();
         log_msg("Kernel page table installed\n");
 
         intc_init();
@@ -54,6 +56,7 @@ int main(int boot) {
         start_cpus();
     } else {
         kvminithart();
+        fpinithart();
         intc_inithart();
         timerinithart();
         printf("cpu %d starting\n", cpuid());

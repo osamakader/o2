@@ -66,6 +66,8 @@ AOBJS = \
   swtch.o \
   uart.o \
   mmu.o \
+  fpu.o \
+  fpsave.o \
   sbi.o \
   timer.o \
   plic.o \
@@ -84,6 +86,8 @@ AOBJS = \
   uart.o \
   gicv3.o \
   mmu.o \
+  fpu.o \
+  fpsave.o \
   psci.o \
   trap.o \
   timer.o \
