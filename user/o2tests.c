@@ -850,6 +850,57 @@ static void test_waitpid(void)
     fail("waitpid", "no such child");
 }
 
+// Write a script and run it with argv; returns what it printed (into
+// out, up to n-1 bytes), or -1 if exec failed.
+static int run_script(const char *text, char **argv, char *out, int n)
+{
+  int fd = open("script.tmp", O_CREATE | O_WRONLY | O_TRUNC);
+  write(fd, text, strlen(text));
+  close(fd);
+  int fds[2];
+  pipe(fds);
+  if(fork() == 0){
+    close(fds[0]);
+    dup2(fds[1], 1);
+    close(fds[1]);
+    exec("script.tmp", argv);
+    exit(7);
+  }
+  close(fds[1]);
+  int got = 0, r;
+  while(got < n - 1 && (r = read(fds[0], out + got, n - 1 - got)) > 0)
+    got += r;
+  out[got] = 0;
+  close(fds[0]);
+  int status;
+  wait(&status);
+  unlink("script.tmp");
+  return status == 7 ? -1 : got;
+}
+
+// exec() of a "#!" script runs its interpreter.
+static void test_script(void)
+{
+  char out[128];
+  char *argv[] = { "myscript", "a1", "a2", 0 };
+
+  // echo shows the argv it got
+  if(run_script("#!/echo\nignored\n", argv, out, sizeof(out)) < 0 ||
+     strcmp(out, "script.tmp a1 a2\n") != 0)
+    fail("script", "plain interpreter");
+  if(run_script("#! /echo  one arg \n", argv, out, sizeof(out)) < 0 ||
+     strcmp(out, "one arg script.tmp a1 a2\n") != 0)
+    fail("script", "interpreter with an argument");
+  if(run_script("#!/echo", argv, out, sizeof(out)) < 0 ||
+     strcmp(out, "script.tmp a1 a2\n") != 0)
+    fail("script", "no newline");
+  if(run_script("#!/nonexistent\n", argv, out, sizeof(out)) != -1 ||
+     run_script("#!\n", argv, out, sizeof(out)) != -1 ||
+     run_script("#!/script.tmp\n", argv, out, sizeof(out)) != -1 ||
+     run_script("echo hi\n", argv, out, sizeof(out)) != -1)
+    fail("script", "bad scripts ran");
+}
+
 static void o2tests(void)
 {
   struct { const char *name; void (*fn)(void); } tests[] = {
@@ -867,6 +918,7 @@ static void o2tests(void)
     { "dup2", test_dup2 },
     { "lseek", test_lseek },
     { "waitpid", test_waitpid },
+    { "script", test_script },
     { "fp math", test_fp_math },
     { "fp regs", test_fp_regs },
     { "fp fork", test_fp_fork },

@@ -170,11 +170,63 @@ bad:
     return -1;
 }
 
+// A script starts with "#!interpreter [arg]". Running it runs the
+// interpreter instead, with argv: interpreter, arg (if any), the
+// script's path, then the script's argv[1..]. The interpreter itself
+// must be an ELF program. Parses ip's first line into line and fills
+// in nargv; returns 0 if ip isn't a script, 1 if it is, -1 if it is
+// one we can't run.
+static int script(struct inode *ip, char *line, int max, char *path,
+                  char **argv, char **nargv) {
+    int n = readi(ip, 0, (uint64)line, 0, max - 1);
+    if (n < 2 || line[0] != '#' || line[1] != '!')
+        return 0;
+    line[n] = 0;
+    char *s = line + 2, *interp, *arg = 0;
+    while (*s == ' ' || *s == '\t')
+        s++;
+    interp = s;
+    while (*s && *s != ' ' && *s != '\t' && *s != '\n')
+        s++;
+    if (*s == ' ' || *s == '\t') {
+        // the rest of the line is one argument, as on Linux
+        *s++ = 0;
+        while (*s == ' ' || *s == '\t')
+            s++;
+        if (*s && *s != '\n')
+            arg = s;
+        while (*s && *s != '\n')
+            s++;
+    }
+    if (*s != '\n' && n == max - 1)
+        return -1;   // no end of line within max: too long
+    *s = 0;
+    // trailing blanks after arg
+    while (arg && s > arg && (s[-1] == ' ' || s[-1] == '\t'))
+        *--s = 0;
+    if (*interp == 0)
+        return -1;
+
+    int i = 0;
+    nargv[i++] = interp;
+    if (arg)
+        nargv[i++] = arg;
+    nargv[i++] = path;
+    for (int j = 1; argv[0] && argv[j]; j++) {
+        if (i >= MAXARG)
+            return -1;
+        nargv[i++] = argv[j];
+    }
+    nargv[i] = 0;
+    return 1;
+}
+
 // exec() system call: replace the current process's image with the
 // program at path, read from the file system.
 int kexec(char *path, char **argv) {
     struct elfsrc src = { .read = inoderead };
     char *name, *s;
+    char line[MAXPATH], *nargv[MAXARG + 1];
 
     begin_op();
     if ((src.ip = namei(path)) == 0) {
@@ -183,12 +235,24 @@ int kexec(char *path, char **argv) {
     }
     ilock(src.ip);
 
-    // program name for debugging: the last path element
+    // program name for debugging: the last path element (of the
+    // script, not its interpreter)
     for (name = s = path; *s; s++)
         if (*s == '/')
             name = s + 1;
 
-    int r = exec(myproc(), name, &src, argv);
+    int r = script(src.ip, line, sizeof(line), path, argv, nargv);
+    if (r != 0) {
+        iunlockput(src.ip);
+        if (r < 0 || (src.ip = namei(nargv[0])) == 0) {
+            end_op();
+            return -1;
+        }
+        ilock(src.ip);
+        argv = nargv;
+    }
+
+    r = exec(myproc(), name, &src, argv);
 
     iunlockput(src.ip);
     end_op();
