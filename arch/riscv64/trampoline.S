@@ -69,7 +69,8 @@ uservec:
         ld t1, 0(a0)
         csrw satp, t1
 
-        // usertrap() doesn't return
+        // usertrap() doesn't return; the user's s0 is no frame of ours
+        li s0, 0
         jr t0
 
 // tramp_userret(satp, flush): called by usertrapret() at its

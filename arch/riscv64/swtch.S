@@ -42,10 +42,13 @@ swtch:
 
 // Entry point for a brand-new kernel thread. swtch() lands here via ra
 // with s0 = arg and s1 = fn, as context_kthread() set them up.
+// (x29/s0 is zeroed so backtraces stop at the thread's first frame.)
 // kthread_start() drops the p->lock scheduler() switched in with.
 kthread_trampoline:
+        mv s2, s0               // arg; s0 is the frame pointer:
+        li s0, 0                // end the frame chain (backtraces)
         call kthread_start
-        mv a0, s0
+        mv a0, s2
         jalr s1
         // fn returned: tear the thread down. kthread_exit() never returns.
         call kthread_exit

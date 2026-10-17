@@ -63,6 +63,7 @@ _entry_secondary:
 
         // main(boot) in main.c
         mv a0, s1
+        li s0, 0                // end of the frame chain (backtraces)
         call main
 6:      wfi
         j 6b

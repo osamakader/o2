@@ -20,6 +20,10 @@ static inline void wfi(void) {
     asm volatile("wfi");
 }
 
+// Frame records (AAPCS64): x29 points at {previous x29, return address}.
+#define FRAME_FP_SLOT(fp) ((fp) + 0)
+#define FRAME_RA_SLOT(fp) ((fp) + 8)
+
 // IRQ mask helpers for the current core (PSTATE.I).
 
 static inline void intr_on(void) {

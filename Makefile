@@ -30,6 +30,7 @@ KOBJS = \
   kernel/console.o \
   kernel/clock.o \
   kernel/irq.o \
+  kernel/backtrace.o \
   kernel/string.o \
   kernel/kalloc.o \
   kernel/proc.o \
@@ -125,8 +126,37 @@ LDFLAGS = -z max-page-size=4096
 
 all: $(KERNEL) $(FSIMG)
 
-$(KERNEL): $(OBJS) arch/$(ARCH)/kernel.ld
-	$(LD) $(LDFLAGS) -T arch/$(ARCH)/kernel.ld -o $@ $(OBJS)
+# The kernel carries its own symbol table, for backtraces. Link once
+# with an empty table, generate ksyms.S from that kernel's text
+# symbols, and link again with it. ksyms goes last, in .rodata, so
+# function addresses can't move between the two links; the build checks
+# they didn't.
+NM = $(TOOLPREFIX)nm
+KSYMS_GEN = $(NM) -n $(1) | awk ' \
+  BEGIN { print ".section .rodata"; print ".balign 8"; print ".global ksyms"; print "ksyms:" } \
+  $$2 ~ /^[tT]$$/ && $$3 !~ /^\$$/ { n++; printf ".quad 0x%s, .Lname%d\n", $$1, n; names[n] = $$3 } \
+  END { print ".global nksyms"; printf "nksyms: .quad %d\n", n; \
+        print ".section .rodata.str1.1, \"aMS\", @progbits, 1"; \
+        for (i = 1; i <= n; i++) printf ".Lname%d: .asciz \"%s\"\n", i, names[i] }'
+
+$(B)/ksyms0.S:
+	@mkdir -p $(dir $@)
+	printf '.section .rodata\n.balign 8\n.global ksyms, nksyms\nksyms:\nnksyms: .quad 0\n' > $@
+
+$(B)/kernel.nosyms.elf: $(OBJS) $(B)/ksyms0.o arch/$(ARCH)/kernel.ld
+	$(LD) $(LDFLAGS) -T arch/$(ARCH)/kernel.ld -o $@ $(OBJS) $(B)/ksyms0.o
+
+$(B)/ksyms.S: $(B)/kernel.nosyms.elf
+	$(call KSYMS_GEN,$<) > $@
+
+$(B)/ksyms0.o $(B)/ksyms.o: $(B)/%.o: $(B)/%.S
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+$(KERNEL): $(OBJS) $(B)/ksyms.o arch/$(ARCH)/kernel.ld
+	$(LD) $(LDFLAGS) -T arch/$(ARCH)/kernel.ld -o $@ $(OBJS) $(B)/ksyms.o
+	@$(NM) -n $(B)/kernel.nosyms.elf | awk '$$2 ~ /^[tT]$$/' > $(B)/text0.sym
+	@$(NM) -n $@ | awk '$$2 ~ /^[tT]$$/' > $(B)/text1.sym
+	@cmp -s $(B)/text0.sym $(B)/text1.sym || { echo "ksyms: text moved between links"; rm -f $@; exit 1; }
 	$(OBJDUMP) -S $@ > $(B)/kernel.asm
 	$(OBJDUMP) -t $@ | sed '1,/SYMBOL TABLE/d; s/ .* / /; /^$$/d' > $(B)/kernel.sym
 

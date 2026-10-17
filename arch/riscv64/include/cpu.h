@@ -27,6 +27,11 @@ static inline int cpuid(void) {
     return x;
 }
 
+// With frame pointers, s0 points just above the saved return address
+// and previous s0.
+#define FRAME_FP_SLOT(fp) ((fp) - 16)
+#define FRAME_RA_SLOT(fp) ((fp) - 8)
+
 // Wait for an interrupt. Wakes on a pending interrupt even while
 // sstatus.SIE is clear.
 static inline void wfi(void) {

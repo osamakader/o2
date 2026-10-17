@@ -4,6 +4,7 @@
 #include "param.h"
 #include "memlayout.h"
 #include "console.h"
+#include "backtrace.h"
 #include "proc.h"
 #include "cpu.h"
 #include "trap.h"
@@ -39,8 +40,12 @@ static const char *cause_name(uint64 cause)
 // emergency stack.
 void kernel_fatal(struct trapframe *tf)
 {
-    panic("kernel trap: %s (scause 0x%lx)\n  sepc %p stval %p",
-          cause_name(tf->cause), tf->cause, (void *)tf->epc, (void *)tf->tval);
+    uint64 off = 0;
+    const char *fn = ksym_lookup(tf->epc, &off);
+
+    panic("kernel trap: %s (scause 0x%lx)\n  sepc %p (%s+0x%lx) stval %p",
+          cause_name(tf->cause), tf->cause, (void *)tf->epc, fn ? fn : "?", off,
+          (void *)tf->tval);
 }
 
 void timer_rearm(void);

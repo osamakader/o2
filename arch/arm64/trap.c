@@ -4,6 +4,7 @@
 #include "types.h"
 #include "trap.h"
 #include "console.h"
+#include "backtrace.h"
 #include "proc.h"
 #include "cpu.h"
 #include "vm.h"
@@ -32,9 +33,12 @@ static const char *ec_name(uint64 ec)
 
 void sync_handler(struct trapframe *tf)
 {
-    panic("sync exception: %s (ec 0x%lx)\n  esr %p elr %p far %p",
+    uint64 off = 0;
+    const char *fn = ksym_lookup(tf->elr, &off);
+
+    panic("sync exception: %s (ec 0x%lx)\n  esr %p elr %p (%s+0x%lx) far %p",
           ec_name(ESR_EC(tf->esr)), ESR_EC(tf->esr), (void *)tf->esr,
-          (void *)tf->elr, (void *)tf->far);
+          (void *)tf->elr, fn ? fn : "?", off, (void *)tf->far);
 }
 
 void fiq_handler(struct trapframe *tf)

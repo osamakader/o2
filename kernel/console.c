@@ -8,6 +8,7 @@
 #include "vm.h"
 #include "fs.h"
 #include "file.h"
+#include "backtrace.h"
 
 // Serializes output from different CPUs, one log_msg()/printf() at a
 // time.
@@ -179,6 +180,7 @@ void panic(const char *fmt, ...)
   vprintf(fmt, ap);
   va_end(ap);
   printf("\n");
+  backtrace();
   park();
 }
 // Write n bytes from src, a user address if user_src is set, to the

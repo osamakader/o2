@@ -55,6 +55,7 @@ _entry:
         // main(boot) in main.c; CPU 0 is the boot CPU
         cmp x19, #0
         cset w0, eq
+        mov x29, xzr            // end of the frame chain (backtraces)
         bl main
         b .
 

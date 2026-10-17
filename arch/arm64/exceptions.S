@@ -148,6 +148,7 @@ irq_addr:
 .macro EL0_ENTRY
     mrs x30, tpidr_el1
     SAVE_TRAPFRAME
+    mov x29, xzr            // the user's x29 is no frame of ours
     ldr x1, =_vectors
     msr vbar_el1, x1
     isb
