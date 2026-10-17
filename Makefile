@@ -163,6 +163,7 @@ UPROGS = \
   $(B)/user/_ln \
   $(B)/user/_ls \
   $(B)/user/_mkdir \
+  $(B)/user/_pwd \
   $(B)/user/_rm \
   $(B)/user/_sh \
   $(B)/user/_usertests \

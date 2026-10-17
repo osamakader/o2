@@ -11,7 +11,7 @@ Minimal xv6-like kernel for arm64 and riscv64.
     make SELFTEST=1 qemu # with the kernel self-tests at boot
 
 The kernel boots into xv6's shell; programs live in `/` (`ls`, `cat`,
-`echo`, `grep`, `wc`, `mkdir`, `rm`, `ln`, `kill`, `usertests`).
+`echo`, `grep`, `wc`, `mkdir`, `rm`, `ln`, `kill`, `pwd`, `usertests`).
 `fs.img` persists between runs: `rm build/<arch>/fs.img` to start over.
 `tools/run.sh` boots non-interactively for testing (see its header).
 
