@@ -26,6 +26,8 @@ KOBJS = \
   kernel/bio.o \
   kernel/log.o \
   kernel/fs.o \
+  kernel/file.o \
+  kernel/pipe.o \
   kernel/syscall.o \
   kernel/sysproc.o \
   kernel/sysfile.o \

@@ -300,6 +300,8 @@ void userinit(void) {
     if (exec(p, "init", &src, argv) < 0)
         panic("userinit: exec");
 
+    p->cwd = namei("/");
+
     // forkret runs on the kernel stack just below the trapframe.
     p->ctx.ra = (uint64)forkret;
     p->ctx.sp = (uint64)p->trapframe;
@@ -354,6 +356,12 @@ int fork(void) {
     // Cause fork to return 0 in the child.
     TF_RET(np->trapframe) = 0;
 
+    // increment reference counts on open file descriptors.
+    for (int i = 0; i < NOFILE; i++)
+        if (p->ofile[i])
+            np->ofile[i] = filedup(p->ofile[i]);
+    np->cwd = idup(p->cwd);
+
     safestrcpy(np->name, p->name, sizeof(p->name));
 
     // The child starts in forkret, on its kernel stack below the
@@ -395,6 +403,20 @@ void exit(int status) {
 
     if (p == initproc)
         panic("init exiting");
+
+    // Close all open files.
+    for (int fd = 0; fd < NOFILE; fd++) {
+        if (p->ofile[fd]) {
+            struct file *f = p->ofile[fd];
+            fileclose(f);
+            p->ofile[fd] = 0;
+        }
+    }
+
+    begin_op();
+    iput(p->cwd);
+    end_op();
+    p->cwd = 0;
 
     acquire(&wait_lock);
 

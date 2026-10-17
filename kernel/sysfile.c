@@ -32,5 +32,5 @@ uint64 sys_write(void) {
         return -1;
     if (n < 0)
         return -1;
-    return consolewrite(p, n);
+    return consolewrite(1, p, n);
 }

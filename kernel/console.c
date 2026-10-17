@@ -6,6 +6,8 @@
 #include "cpu.h"
 #include "proc.h"
 #include "vm.h"
+#include "fs.h"
+#include "file.h"
 
 // Serializes output from different CPUs, one log_msg()/printf() at a
 // time.
@@ -179,16 +181,16 @@ void panic(const char *fmt, ...)
   printf("\n");
   park();
 }
-// Write n bytes from user address src to the console. Returns the
-// number of bytes written, short if src runs into unmapped memory.
-int consolewrite(uint64 src, int n) {
-    struct proc *p = myproc();
+// Write n bytes from src, a user address if user_src is set, to the
+// console. Returns the number of bytes written, short if src runs into
+// unmapped memory.
+int consolewrite(int user_src, uint64 src, int n) {
     char buf[64];
     int i = 0;
 
     while (i < n) {
         int m = n - i < (int)sizeof(buf) ? n - i : (int)sizeof(buf);
-        if (copyin(p->pagetable, buf, src + i, m) < 0)
+        if (either_copyin(buf, user_src, src + i, m) < 0)
             break;
         int locked = cons_begin();
         for (int k = 0; k < m; k++)
@@ -321,4 +323,10 @@ int consoleread(int user_dst, uint64 dst, int n) {
     release(&cons_in.lock);
 
     return target - n;
+}
+
+// Make the console device CONSOLE (major 1) in the device switch.
+void consoleinit(void) {
+    devsw[CONSOLE].read = consoleread;
+    devsw[CONSOLE].write = consolewrite;
 }

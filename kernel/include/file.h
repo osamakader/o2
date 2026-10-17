@@ -5,6 +5,19 @@
 #include "sleeplock.h"
 #include "fs.h"
 
+struct pipe;
+
+struct file {
+    enum { FD_NONE, FD_PIPE, FD_INODE, FD_DEVICE } type;
+    int ref; // reference count
+    char readable;
+    char writable;
+    struct pipe *pipe; // FD_PIPE
+    struct inode *ip;  // FD_INODE and FD_DEVICE
+    uint off;          // FD_INODE
+    short major;       // FD_DEVICE
+};
+
 // in-memory copy of an inode
 struct inode {
     uint dev;           // Device number
@@ -20,5 +33,15 @@ struct inode {
     uint size;
     uint addrs[NDIRECT+1];
 };
+
+// map major device number to device functions.
+struct devsw {
+    int (*read)(int user_dst, uint64 dst, int n);
+    int (*write)(int user_src, uint64 src, int n);
+};
+
+extern struct devsw devsw[];
+
+#define CONSOLE 1
 
 #endif

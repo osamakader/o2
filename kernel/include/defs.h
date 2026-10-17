@@ -35,6 +35,23 @@ void bwrite(struct buf *b);
 void bpin(struct buf *b);
 void bunpin(struct buf *b);
 
+// file.c
+struct file;
+struct file *filealloc(void);
+void fileclose(struct file *f);
+struct file *filedup(struct file *f);
+void fileinit(void);
+int fileread(struct file *f, uint64 addr, int n);
+int filestat(struct file *f, uint64 addr);
+int filewrite(struct file *f, uint64 addr, int n);
+
+// pipe.c
+struct pipe;
+int pipealloc(struct file **f0, struct file **f1);
+void pipeclose(struct pipe *pi, int writable);
+int piperead(struct pipe *pi, uint64 addr, int n);
+int pipewrite(struct pipe *pi, uint64 addr, int n);
+
 // fs.c
 struct inode;
 struct stat;
