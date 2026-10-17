@@ -4,6 +4,8 @@ ARCH ?= arm64
 # from the same tree without cleaning in between.
 B = build/$(ARCH)
 KERNEL = $(B)/kernel.elf
+# disk image for the virtio block device (a blank scratch disk for now)
+FSIMG = $(B)/fs.img
 
 KOBJS = \
   kernel/start.o \
@@ -126,9 +128,6 @@ clean:
 ifndef CPUS
 CPUS := 3
 endif
-
-# Disk image for the virtio block device (a blank scratch disk for now).
-FSIMG = $(B)/fs.img
 
 $(FSIMG):
 	@mkdir -p $(dir $@)
