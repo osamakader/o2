@@ -55,7 +55,10 @@
     sd t0, TF_TVAL(sp)
 .endm
 
-// Restore sepc/sstatus and x1, x3-x31 from the frame at sp.
+// Restore sepc/sstatus and x1, x3, x5-x31 from the frame at sp. Not
+// tp (x4): in the kernel it holds this hart's id, and a thread
+// preempted in kerneltrap() may resume on another hart. The return to
+// user mode restores the user's tp itself.
 .macro RESTORE_REGS
     ld t0, TF_EPC(sp)
     csrw sepc, t0
@@ -63,7 +66,6 @@
     csrw sstatus, t0
     ld x1, 8(sp)
     ld x3, 24(sp)
-    ld x4, 32(sp)
     ld x5, 40(sp)
     ld x6, 48(sp)
     ld x7, 56(sp)
@@ -161,6 +163,7 @@ ret_to_user:
     mv a0, sp
     call usertrapret
     RESTORE_REGS
+    ld tp, 32(sp)               // user tp
     csrw sscratch, sp           // where the next trap from user mode saves
     ld sp, 16(sp)               // user sp, last
     sret
