@@ -58,7 +58,7 @@ int mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, uint64 at
     return 0;
 }
 
-static void kvmmap(pagetable_t pagetable, uint64 va, uint64 pa, uint64 size, uint64 attrs) {
+void kvmmap(pagetable_t pagetable, uint64 va, uint64 pa, uint64 size, uint64 attrs) {
     if (mappages(pagetable, va, size, pa, attrs) != 0)
         panic("kvmmap");
 }
@@ -69,11 +69,10 @@ static pagetable_t kvmmake(void) {
         panic("kvmmake");
     memset(pagetable, 0, PGSIZE);
 
-    kvmmap(pagetable, P2V(UART0), UART0, PGSIZE, PTE_KERN_DEVICE);
-    kvmmap(pagetable, P2V(GICD), GICD, GICD_SIZE, PTE_KERN_DEVICE);
-    kvmmap(pagetable, P2V(GICR), GICR, GICR_SIZE, PTE_KERN_DEVICE);
+    // device registers
+    kvmmap_devices(pagetable);
 
-    // RAM below the kernel image (qemu puts the DTB here)
+    // RAM below the kernel image (DTB, firmware)
     kvmmap(pagetable, P2V(KERNBASE), KERNBASE, V2P(stext) - KERNBASE, PTE_KERN_DATA);
 
     // kernel text: read-only, executable

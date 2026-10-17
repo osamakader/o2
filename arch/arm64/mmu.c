@@ -5,6 +5,13 @@
 #include "defs.h"
 #include "console.h"
 
+// Map the qemu virt devices the kernel drives: UART, GIC.
+void kvmmap_devices(pagetable_t pagetable) {
+    kvmmap(pagetable, P2V(UART0), UART0, PGSIZE, PTE_KERN_DEVICE);
+    kvmmap(pagetable, P2V(GICD), GICD, GICD_SIZE, PTE_KERN_DEVICE);
+    kvmmap(pagetable, P2V(GICR), GICR, GICR_SIZE, PTE_KERN_DEVICE);
+}
+
 // An all-invalid table for TTBR0 when no user page table is
 // installed, so stray kernel accesses to low addresses still fault.
 static pagetable_t empty_pagetable;

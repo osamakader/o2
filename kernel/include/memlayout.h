@@ -1,27 +1,14 @@
-// Physical memory layout. Kept free of C-only syntax in the plain
-// constants so assembly can include it.
+// Memory layout. Kept free of C-only syntax in the plain constants so
+// assembly can include it.
 
 #include "param.h"
 
-// qemu puts UART registers here in physical memory.
-#define UART0 0x9000000
-#define UART0_IRQ 33     // SPI 1
-
-// qemu puts interrupt controller (GICv3) here.
-#define GICv3 0x08000000
-
-// GICv3 distributor, and one 128KB redistributor (RD + SGI frames)
-// per CPU starting at GICR.
-#define GICD      GICv3
-#define GICD_SIZE 0x10000
-#define GICR      (GICv3 + 0xA0000)
-#define GICR_SIZE (NCPU * 0x20000)
-
+// device addresses, IRQs and KERNBASE (start of RAM) for this machine
+#include "platform.h"
 
 // the kernel expects there to be RAM
 // for use by the kernel and user pages
-// from physical address 0x40000000 to PHYSTOP.
-#define KERNBASE 0x40000000
+// from physical address KERNBASE to PHYSTOP.
 #define PHYSTOP (KERNBASE + 128*1024*1024)
 
 
