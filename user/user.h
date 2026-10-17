@@ -32,6 +32,7 @@ int mkdir(const char *);
 int chdir(const char *);
 int dup(int);
 int getprocs(struct procinfo *, int);
+int klog(char *, int);
 
 // ulib.c
 char *strcpy(char *, const char *);

@@ -308,6 +308,35 @@ static void test_ps(void)
   wait(0);
 }
 
+// klog() returns the kernel's boot messages, oldest first, but not
+// what user programs wrote to the console.
+static void test_klog(void)
+{
+  static char buf[16384];
+  printf("o2tests: user output, not for klog\n");
+  int n = klog(buf, sizeof(buf) - 1);
+  if(n <= 0){
+    fail("klog", "klog");
+    return;
+  }
+  buf[n] = 0;
+  char *boot = 0, *disk = 0;
+  for(int i = 0; i < n; i++){
+    if(!boot && memcmp(buf + i, "starting kernel", 15) == 0)
+      boot = buf + i;
+    if(!disk && memcmp(buf + i, "virtio_disk:", 12) == 0)
+      disk = buf + i;
+    if(memcmp(buf + i, "not for klog", 12) == 0)
+      fail("klog", "user output in the kernel log");
+  }
+  if(!boot || !disk || disk < boot)
+    fail("klog", "boot messages missing or out of order");
+  if(klog(buf, 10) != 10 || klog(buf, -1) != -1)
+    fail("klog", "sizes");
+  if(klog((char *)0x7000000000UL, 10) != -1)
+    fail("klog", "bad buffer");
+}
+
 static void o2tests(void)
 {
   struct { const char *name; void (*fn)(void); } tests[] = {
@@ -320,6 +349,7 @@ static void o2tests(void)
     { "dirs", test_dirs },
     { "pipe", test_pipe },
     { "ps", test_ps },
+    { "klog", test_klog },
   };
   for(int i = 0; i < sizeof(tests) / sizeof(tests[0]); i++){
     int before = failed;

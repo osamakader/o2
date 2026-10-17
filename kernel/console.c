@@ -9,6 +9,7 @@
 #include "fs.h"
 #include "file.h"
 #include "backtrace.h"
+#include "defs.h"
 
 // Serializes output from different CPUs, one log_msg()/printf() at a
 // time.
@@ -58,9 +59,49 @@ static void cons_putc(char c) {
     uartputc_sync(c);
 }
 
+// The kernel's message log: the last KLOG_SIZE characters the kernel
+// printed (not user output or input echo), for dmesg. Written under
+// cons_lock, or by the panicking CPU.
+#define KLOG_SIZE 16384
+static char klogbuf[KLOG_SIZE];
+static uint64 klog_end;   // characters ever logged
+
+// A character of kernel output: log it, then print it.
+static void kputc(char c) {
+    klogbuf[klog_end++ % KLOG_SIZE] = c;
+    cons_putc(c);
+}
+
+// klog(buf, n): copy the most recent n characters (at most) of the
+// kernel log to user address buf, oldest first. Returns the count.
+uint64 sys_klog(void) {
+    uint64 dst;
+    int n;
+
+    argaddr(0, &dst);
+    argint(1, &n);
+    if (n < 0)
+        return -1;
+
+    acquire(&cons_lock);
+    uint64 avail = klog_end < KLOG_SIZE ? klog_end : KLOG_SIZE;
+    if (n > avail)
+        n = avail;
+    uint64 start = klog_end - n;
+    // the ring wraps at most once over these n characters
+    uint64 first = KLOG_SIZE - start % KLOG_SIZE;
+    if (first > n)
+        first = n;
+    int r = copyout(myproc()->pagetable, dst, klogbuf + start % KLOG_SIZE, first);
+    if (r == 0 && n > first)
+        r = copyout(myproc()->pagetable, dst + first, klogbuf, n - first);
+    release(&cons_lock);
+    return r < 0 ? -1 : n;
+}
+
 static void cons_puts(const char *s) {
     while (*s)
-        cons_putc(*s++);
+        kputc(*s++);
 }
 
 static void printint(uint64 x, int base, int sign) {
@@ -81,14 +122,14 @@ static void printint(uint64 x, int base, int sign) {
         buf[i++] = '-';
 
     while (--i >= 0)
-        cons_putc(buf[i]);
+        kputc(buf[i]);
 }
 
 static void vprintf(const char *fmt, va_list ap) {
     for (int i = 0; fmt[i]; i++) {
         char c = fmt[i];
         if (c != '%') {
-            cons_putc(c);
+            kputc(c);
             continue;
         }
 
@@ -110,8 +151,8 @@ static void vprintf(const char *fmt, va_list ap) {
             printint(lng ? va_arg(ap, uint64) : va_arg(ap, uint32), 16, 0);
             break;
         case 'p':
-            cons_putc('0');
-            cons_putc('x');
+            kputc('0');
+            kputc('x');
             printint(va_arg(ap, uint64), 16, 0);
             break;
         case 's': {
@@ -120,18 +161,18 @@ static void vprintf(const char *fmt, va_list ap) {
             break;
         }
         case 'c':
-            cons_putc(va_arg(ap, int));
+            kputc(va_arg(ap, int));
             break;
         case '%':
-            cons_putc('%');
+            kputc('%');
             break;
         case 0:
             i--;   // trailing '%': stop at the terminator
             break;
         default:
             // unknown conversion: print it as is
-            cons_putc('%');
-            cons_putc(c);
+            kputc('%');
+            kputc(c);
             break;
         }
     }

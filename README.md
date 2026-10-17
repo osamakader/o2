@@ -12,7 +12,7 @@ Minimal xv6-like kernel for arm64 and riscv64.
     make ARM64_ASID=1 qemu  # arm64: per-process ASIDs (see Isolation)
 
 The kernel boots into xv6's shell; programs live in `/` (`ls`, `cat`,
-`echo`, `grep`, `wc`, `mkdir`, `rm`, `ln`, `kill`, `ps`, `pwd`), plus
+`echo`, `grep`, `wc`, `mkdir`, `rm`, `ln`, `kill`, `ps`, `pwd`, `dmesg`), plus
 xv6's `usertests`, `grind` and `stressfs` (`user/xv6`) and o2's own
 tests, `o2tests`.
 ^P on the console prints the kernel's process list.
