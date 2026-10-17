@@ -9,6 +9,7 @@ Minimal xv6-like kernel for arm64 and riscv64.
     make ARCH=riscv64 qemu
     make CPUS=8 qemu     # number of CPUs (default 3)
     make SELFTEST=1 qemu # with the kernel self-tests at boot
+    make ARM64_ASID=1 qemu  # arm64: per-process ASIDs (see Isolation)
 
 The kernel boots into xv6's shell; programs live in `/` (`ls`, `cat`,
 `echo`, `grep`, `wc`, `mkdir`, `rm`, `ln`, `kill`, `ps`, `pwd`, `usertests`).
@@ -39,12 +40,15 @@ User page tables don't map the kernel. On riscv64, as in xv6, each
 maps only the process's memory, a trampoline page and its trap frame;
 traps switch `satp` to the kernel page table in the trampoline. On
 arm64 (KPTI), TTBR1 holds a table with just the trampoline while user
-code runs, and the trampoline vectors switch it back on entry. Each
-process slot has its own ASID and the kernel uses ASID 0, with all
-mappings non-global, so crossings don't flush the TLB; an ASID is
-flushed on every hart when its address space shrinks, is replaced by
-exec, or is freed. (QEMU's TLB isn't ASID-tagged: it flushes on ASID
-changes itself, so the benefit only shows on hardware.)
+code runs, and the trampoline vectors switch it back on entry.
+
+On riscv64, and on arm64 with `ARM64_ASID=1`, each process slot has its
+own ASID and the kernel uses ASID 0, with all mappings non-global, so
+crossings don't flush the TLB; an ASID is flushed on every hart when
+its address space shrinks, is replaced by exec, or is freed. QEMU's TLB
+isn't ASID-tagged and flushes on ASID changes itself, which makes the
+arm64 ASID path slower under QEMU, so by default arm64 runs everything
+under ASID 0 and flushes the TLB on each return to user mode instead.
 
 ## Credits
 

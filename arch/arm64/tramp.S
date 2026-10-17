@@ -12,6 +12,8 @@
 // process's table and ASID; the kernel always with the empty table and
 // ASID 0. All mappings are non-global, so the TLB keeps kernel and
 // user translations apart and no flush is needed on either crossing.
+// Without ARM64_ASID (the default) user mode runs under ASID 0 too, and
+// tramp_exit flushes the TLB instead.
 
 .section trampsec, "ax"
 .balign 4096
@@ -81,6 +83,12 @@ tramp_exit:
     msr ttbr0_el1, x30
     msr tpidrro_el0, xzr    // EL0 can read it: don't leave the PA there
     isb
+#ifndef ARM64_ASID
+    // one ASID for everything: no kernel translation may survive
+    tlbi vmalle1
+    dsb nsh
+    isb
+#endif
     mrs x30, tpidr_el1
     eret
 .balign 8

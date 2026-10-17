@@ -2,17 +2,18 @@
 # Boot the kernel non-interactively and print its serial output.
 #
 #   tools/run.sh [-a arch] [-c cpus] [-t seconds] [-i input] [-d delay]
-#                [-l line-delay] [-f] [-s]
+#                [-l line-delay] [-f] [-s] [-A]
 #
 # -i feeds the file to the console, -d seconds after boot (default 3);
 # with -l, one line at a time (ending in CR, like a terminal) with
 # line-delay seconds in between, since the console buffers only 128
-# characters of unread input. -s builds with the kernel self-tests.
+# characters of unread input. -s builds with the kernel self-tests, -A
+# with arm64 ASIDs.
 # -f starts from a freshly made fs.img (it otherwise persists).
 # Uses the QEMU command line from the Makefile (make print-qemu).
 
-ARCH=arm64 CPUS=3 TIMEOUT=10 INPUT= DELAY=3 FRESH= LDELAY= SELFTEST=0
-while getopts a:c:t:i:d:l:fs o; do
+ARCH=arm64 CPUS=3 TIMEOUT=10 INPUT= DELAY=3 FRESH= LDELAY= SELFTEST=0 ASID=0
+while getopts a:c:t:i:d:l:fsA o; do
     case $o in
     a) ARCH=$OPTARG ;;
     c) CPUS=$OPTARG ;;
@@ -22,12 +23,13 @@ while getopts a:c:t:i:d:l:fs o; do
     f) FRESH=1 ;;
     l) LDELAY=$OPTARG ;;
     s) SELFTEST=1 ;;
+    A) ASID=1 ;;
     *) exit 2 ;;
     esac
 done
 
 cd "$(dirname "$0")/.." || exit 1
-M="make -s ARCH=$ARCH SELFTEST=$SELFTEST"
+M="make -s ARCH=$ARCH SELFTEST=$SELFTEST ARM64_ASID=$ASID"
 [ -n "$FRESH" ] && rm -f "$($M print-fsimg)"
 $M || exit 1
 CMD=$($M CPUS="$CPUS" print-qemu) || exit 1

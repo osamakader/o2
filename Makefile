@@ -3,13 +3,21 @@ ARCH ?= arm64
 # Boot-time kernel self-tests (kernel/selftest.c): make SELFTEST=1
 SELFTEST ?= 0
 
-# Everything is built under build/$(ARCH) (build/$(ARCH)-selftest with
-# self-tests), so both arches and both settings can be built from the
+# arm64: per-process ASIDs instead of a TLB flush on every return to
+# user mode: make ARM64_ASID=1. Off by default: QEMU's TLB isn't
+# ASID-tagged and flushes on every ASID change, so under emulation the
+# flush-per-return scheme is faster; on hardware ASIDs avoid flushing.
+ARM64_ASID ?= 0
+
+# Everything is built under build/$(ARCH), plus -selftest / -asid for
+# those options, so both arches and all settings can be built from the
 # same tree without cleaning in between.
-ifeq ($(SELFTEST), 1)
-B = build/$(ARCH)-selftest
-else
 B = build/$(ARCH)
+ifeq ($(SELFTEST), 1)
+B := $(B)-selftest
+endif
+ifeq ($(ARCH)$(ARM64_ASID), arm641)
+B := $(B)-asid
 endif
 KERNEL = $(B)/kernel.elf
 # file system image for the virtio block device, made by mkfs
@@ -85,6 +93,10 @@ endif
 ifeq ($(SELFTEST), 1)
 KOBJS += kernel/selftest.o
 CFLAGS += -DSELFTEST
+endif
+
+ifeq ($(ARCH)$(ARM64_ASID), arm641)
+CFLAGS += -DARM64_ASID
 endif
 
 OBJS = $(addprefix $(B)/arch/$(ARCH)/, $(AOBJS)) $(addprefix $(B)/, $(KOBJS))

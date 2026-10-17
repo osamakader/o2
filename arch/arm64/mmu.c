@@ -76,6 +76,9 @@ void kvminithart(void) {
 // the hand-over register; tramp_exit clears it before eret. Call with
 // interrupts off, right before returning to EL0.
 void uvmswitch(pagetable_t pagetable, int asid) {
+#ifndef ARM64_ASID
+    asid = 0;  // like the kernel: tramp_exit flushes instead
+#endif
     asm volatile("msr tpidrro_el0, %0" : : "r"(V2P(pagetable) | TTBR_ASID(asid)));
 }
 
@@ -115,9 +118,13 @@ struct trapframe *trapframe_alloc(uint64 kstack) {
 }
 
 // Drop every CPU's translations for asid (inner-shareable broadcast).
+// Without ARM64_ASID everything runs under ASID 0 and every return to
+// user mode flushes, so there's nothing to drop.
 void asid_flush(int asid) {
+#ifdef ARM64_ASID
     asm volatile("dsb ishst; tlbi aside1is, %0; dsb ish; isb"
                  : : "r"(TTBR_ASID(asid)) : "memory");
+#endif
 }
 
 _Static_assert(NPROC < 256, "ASIDs are slot + 1 and arm64 has 8 bits");
