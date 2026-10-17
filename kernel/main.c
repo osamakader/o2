@@ -75,7 +75,7 @@ int main() {
         gic_enable_spi(UART0_IRQ, 0);
 
         userinit();   // first, so init is pid 1
-        selftest();
+        selftest();   // before any CPU schedules: init hasn't run yet
 
         init_timer();
 

@@ -139,8 +139,9 @@ static void kthread_console(void *arg) {
 
 // User page-table helpers on a scratch address space: grow, copy in
 // and out across page boundaries, fork-style copy, shrink, free, and
-// no pages leaked.
-static void kthread_uvm(void *arg) {
+// no pages leaked. The leak check counts free pages globally, so this
+// runs from main() before anything else can allocate.
+static void uvm_selftest(void) {
     uint64 free0 = kfreepages();
     char buf[64], out[64];
 
@@ -191,10 +192,12 @@ static void spawn(void (*fn)(void *), void *arg) {
         panic("selftest: kthread_create");
 }
 
-// Create the self-test threads. Called once from main() on CPU 0.
+// Run the synchronous tests and create the self-test threads. Called
+// once from main() on CPU 0, before any CPU runs the scheduler.
 void selftest(void) {
+    uvm_selftest();
+
     spawn(kthread_console, 0);
-    spawn(kthread_uvm, 0);
     spawn(kthread_test, "A");
     spawn(kthread_test, "B");
     spawn(kthread_spin, "C");
