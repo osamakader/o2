@@ -4,8 +4,9 @@ ARCH ?= arm64
 # from the same tree without cleaning in between.
 B = build/$(ARCH)
 KERNEL = $(B)/kernel.elf
-# disk image for the virtio block device (a blank scratch disk for now)
+# file system image for the virtio block device, made by mkfs
 FSIMG = $(B)/fs.img
+MKFS = $(B)/mkfs
 
 KOBJS = \
   kernel/start.o \
@@ -131,9 +132,17 @@ ifndef CPUS
 CPUS := 3
 endif
 
-$(FSIMG):
+# mkfs runs on the host
+$(MKFS): mkfs/mkfs.c kernel/include/fs.h kernel/include/param.h kernel/include/stat.h
 	@mkdir -p $(dir $@)
-	dd if=/dev/zero of=$@ bs=1024 count=2000 status=none
+	gcc -Wall -Werror -I kernel/include -o $@ mkfs/mkfs.c
+
+# programs installed in the file system's root directory
+UPROGS = \
+  $(B)/user/_init \
+
+$(FSIMG): $(MKFS) README.md $(UPROGS)
+	$(MKFS) $@ README.md $(UPROGS) > /dev/null
 
 QEMUOPTS += -kernel $(KERNEL) -m 128M -smp $(CPUS) -nographic
 QEMUOPTS += -global virtio-mmio.force-legacy=false
