@@ -42,6 +42,7 @@ int copyin(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len);
 int copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max);
 void kvminithart(void);   // arch: switch this core to kernel_pagetable
 void uvmswitch(pagetable_t pagetable);   // arch: install a user page table
+void kvmswitch(void);                    // arch: back to no user page table
 void sync_icache(uint64 va, uint64 len); // arch: make written code executable
 
 extern pagetable_t kernel_pagetable;

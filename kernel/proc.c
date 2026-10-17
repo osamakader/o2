@@ -251,6 +251,12 @@ void scheduler(void) {
                 c->proc = 0;
                 found = 1;
 
+                // Drop the user address space while still holding
+                // p->lock: once released, the parent's wait() may free
+                // the page table.
+                if (p->pagetable)
+                    kvmswitch();
+
                 // Exited kernel threads have no parent waiting for
                 // them; reclaim the slot now that we're off its stack.
                 if (p->state == ZOMBIE && p->pagetable == 0)

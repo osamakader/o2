@@ -8,9 +8,6 @@
 
 #define STUB(proto) proto { panic("riscv64: %s not yet", __func__); }
 
-STUB(void uvmswitch(pagetable_t pagetable))
-STUB(void usertrap(struct trapframe *tf))
-STUB(void usertrapret(struct trapframe *tf))
 
 // Secondary harts aren't started yet: run on the boot hart only.
 void start_cpus(void) { }

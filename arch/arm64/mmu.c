@@ -59,3 +59,10 @@ void sync_icache(uint64 va, uint64 len) {
         asm volatile("dc cvau, %0" : : "r"(a) : "memory");
     asm volatile("dsb ish; ic ialluis; dsb ish; isb" ::: "memory");
 }
+
+// Leave a user address space: point TTBR0 back at the empty table so
+// a page table about to be freed is never walked, even speculatively.
+// No TLB flush needed: uvmswitch() flushes before user mode runs again.
+void kvmswitch(void) {
+    asm volatile("msr ttbr0_el1, %0; isb" : : "r"(V2P(empty_pagetable)) : "memory");
+}

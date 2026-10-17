@@ -9,6 +9,8 @@
 #include "trap.h"
 #include "timer.h"
 #include "uart.h"
+#include "vm.h"
+#include "defs.h"
 
 #define SCAUSE_INTR (1UL << 63)
 
@@ -95,4 +97,57 @@ void kerneltrap(struct trapframe *tf)
     struct proc *p = myproc();
     if (dev == DEV_TIMER && p && p->state == RUNNING)
         yield();
+}
+
+// Trap from user mode (trapvec.S from_user), on the process's kernel
+// stack with interrupts off.
+void usertrap(struct trapframe *tf)
+{
+    struct proc *p = myproc();
+    int dev = DEV_NONE;
+
+    if (tf->status & SSTATUS_SPP)
+        panic("usertrap: not from user mode");
+
+    if (tf->cause == 8) {
+        // system call
+
+        if (killed(p))
+            exit(-1);
+
+        // sepc points to the ecall instruction, but we want to return
+        // to the next instruction.
+        tf->epc += 4;
+
+        // an interrupt will change sepc, scause, and sstatus, so
+        // enable only now that we're done with those registers.
+        intr_on();
+
+        syscall();
+    } else if ((dev = devintr(tf->cause)) != DEV_NONE) {
+        // ok
+    } else {
+        // a fault in the user program: kill it, not the kernel
+        printf("usertrap(): %s (scause 0x%lx) pid=%d %s\n            sepc=%p stval=%p\n",
+               cause_name(tf->cause), tf->cause, p->pid, p->name,
+               (void *)tf->epc, (void *)tf->tval);
+        setkilled(p);
+    }
+
+    if (killed(p))
+        exit(-1);
+
+    // give up the CPU if this is a timer interrupt.
+    if (dev == DEV_TIMER)
+        yield();
+}
+
+// Last step before returning to user mode through tf: with interrupts
+// off (sret then restores SIE from SPIE), remember this hart's id for
+// the next trap entry and install the process's page table.
+void usertrapret(struct trapframe *tf)
+{
+    intr_off();
+    tf->hartid = cpuid();
+    uvmswitch(myproc()->pagetable);
 }
