@@ -139,7 +139,7 @@ endif
 # mkfs runs on the host
 $(MKFS): mkfs/mkfs.c kernel/include/fs.h kernel/include/param.h kernel/include/stat.h
 	@mkdir -p $(dir $@)
-	gcc -Wall -Werror -I kernel/include -o $@ mkfs/mkfs.c
+	gcc -Wall -Werror -iquote kernel/include -o $@ mkfs/mkfs.c
 
 # programs installed in the file system's root directory
 UPROGS = \
