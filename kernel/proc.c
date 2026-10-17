@@ -17,6 +17,16 @@ extern void kthread_trampoline(void);
 // and UNUSED == 0, so every slot starts out free.
 static struct proc ptable[NPROC];
 
+static int nextpid = 1;
+static struct spinlock pid_lock = { .name = "nextpid" };
+
+static int allocpid(void) {
+    acquire(&pid_lock);
+    int pid = nextpid++;
+    release(&pid_lock);
+    return pid;
+}
+
 void procinit(void) {
     for (int i = 0; i < NPROC; i++)
         initlock(&ptable[i].lock, "proc");
@@ -50,19 +60,41 @@ void proc_mapstacks(pagetable_t pagetable) {
     }
 }
 
-// Find an UNUSED slot and claim it. Returns with p->lock held.
+// Find an UNUSED slot and claim it with a fresh pid. Returns with
+// p->lock held.
 static struct proc *allocproc(void) {
     for (int i = 0; i < NPROC; i++) {
         struct proc *p = &ptable[i];
         acquire(&p->lock);
         if (p->state == UNUSED) {
-            memset(&p->ctx, 0, sizeof(p->ctx));
+            p->pid = allocpid();
             p->state = USED;
+            memset(&p->ctx, 0, sizeof(p->ctx));
+            // Traps from EL0 save registers at the top of the
+            // (otherwise empty) kernel stack; see exceptions.S.
+            p->trapframe = (struct trapframe *)(p->kstack + PGSIZE) - 1;
             return p;
         }
         release(&p->lock);
     }
     return 0;
+}
+
+// Free a proc structure and the data hanging from it, including user
+// pages. p->lock must be held. The kernel stack stays mapped for the
+// slot's next user.
+static void freeproc(struct proc *p) {
+    if (p->pagetable)
+        uvmfree(p->pagetable, p->sz);
+    p->pagetable = 0;
+    p->sz = 0;
+    p->pid = 0;
+    p->parent = 0;
+    p->name[0] = 0;
+    p->chan = 0;
+    p->killed = 0;
+    p->xstate = 0;
+    p->state = UNUSED;
 }
 
 struct proc *kthread_create(void (*fn)(void *), void *arg) {
@@ -74,6 +106,7 @@ struct proc *kthread_create(void (*fn)(void *), void *arg) {
     p->ctx.sp = p->kstack + PGSIZE;
     p->ctx.x19 = (uint64)arg;
     p->ctx.x20 = (uint64)fn;
+    safestrcpy(p->name, "kthread", sizeof(p->name));
     p->state = RUNNABLE;
     release(&p->lock);
     return p;
@@ -203,9 +236,10 @@ void scheduler(void) {
                 c->proc = 0;
                 found = 1;
 
-                // the kstack stays mapped for the slot's next thread
-                if (p->state == ZOMBIE)
-                    p->state = UNUSED;
+                // Exited kernel threads have no parent waiting for
+                // them; reclaim the slot now that we're off its stack.
+                if (p->state == ZOMBIE && p->pagetable == 0)
+                    freeproc(p);
             }
             release(&p->lock);
         }

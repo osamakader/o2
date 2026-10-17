@@ -5,6 +5,7 @@
 #include "vm.h"
 #include "param.h"
 #include "spinlock.h"
+#include "trap.h"
 
 enum procstate { UNUSED, USED, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 
@@ -30,8 +31,20 @@ struct proc {
     // p->lock must be held when using these:
     enum procstate state;
     void *chan;      // if non-zero, sleeping on chan
+    int killed;      // if non-zero, have been killed
+    int xstate;      // exit status to be returned to parent's wait
+    int pid;         // process ID
+
+    // wait_lock must be held when using this:
+    struct proc *parent;
+
+    // these are private to the process, so p->lock need not be held.
     struct context ctx;
-    uint64 kstack;   // VA of the kernel stack, KSTACK(slot)
+    uint64 kstack;                // VA of the kernel stack, KSTACK(slot)
+    uint64 sz;                    // size of process memory (bytes)
+    pagetable_t pagetable;        // user page table; 0 for kernel threads
+    struct trapframe *trapframe;  // user registers, at the top of kstack
+    char name[16];                // process name (debugging)
 };
 
 // Per-CPU state.
