@@ -37,3 +37,18 @@ void uvmswitch(pagetable_t pagetable) {
     asm volatile("msr ttbr0_el1, %0" : : "r"(V2P(pagetable)));
     asm volatile("isb; tlbi vmalle1; dsb nsh; isb" ::: "memory");
 }
+
+// The instruction cache is not coherent with data writes: after the
+// kernel writes code (e.g. loading a program), clean those lines to
+// the point of unification and invalidate the instruction caches.
+// va is a kernel address of the written bytes; the caches are
+// physically indexed, so the user alias sees the result too.
+void sync_icache(uint64 va, uint64 len) {
+    uint64 ctr;
+    asm volatile("mrs %0, ctr_el0" : "=r"(ctr));
+    uint64 line = 4UL << ((ctr >> 16) & 0xf);   // DminLine, in bytes
+
+    for (uint64 a = va & ~(line - 1); a < va + len; a += line)
+        asm volatile("dc cvau, %0" : : "r"(a) : "memory");
+    asm volatile("dsb ish; ic ialluis; dsb ish; isb" ::: "memory");
+}
