@@ -49,10 +49,39 @@ struct backcmd {
   struct cmd *cmd;
 };
 
+// Where commands without a "/" are looked for: directories separated
+// by ":", an empty one meaning the current directory. Set with
+// PATH=dir:dir.
+char path[100] = "/";
+
 int fork1(void);  // Fork but panics on failure.
 void panic(char*) __attribute__((noreturn));
 struct cmd *parsecmd(char*);
 void runcmd(struct cmd*) __attribute__((noreturn));
+
+// Try exec'ing name in each directory of path; returns if none worked.
+void
+execpath(char *name, char **argv)
+{
+  char file[128];
+
+  for(char *dir = path; ; dir++){
+    char *end = strchr(dir, ':');
+    int n = end ? end - dir : strlen(dir);
+    if(n == 0)
+      exec(name, argv);
+    else if(n + 1 + strlen(name) + 1 <= sizeof(file)){
+      memmove(file, dir, n);
+      if(file[n-1] != '/')
+        file[n++] = '/';
+      strcpy(file + n, name);
+      exec(file, argv);
+    }
+    if(end == 0)
+      return;
+    dir = end;
+  }
+}
 
 // Execute cmd.  Never returns.
 void
@@ -76,16 +105,10 @@ runcmd(struct cmd *cmd)
     ecmd = (struct execcmd*)cmd;
     if(ecmd->argv[0] == 0)
       exit(1);
-    exec(ecmd->argv[0], ecmd->argv);
-    if(strchr(ecmd->argv[0], '/') == 0){
-      // not in the current directory: programs live in /
-      char path[64];
-      if(strlen(ecmd->argv[0]) + 2 <= sizeof(path)){
-        path[0] = '/';
-        strcpy(path + 1, ecmd->argv[0]);
-        exec(path, ecmd->argv);
-      }
-    }
+    if(strchr(ecmd->argv[0], '/'))
+      exec(ecmd->argv[0], ecmd->argv);
+    else
+      execpath(ecmd->argv[0], ecmd->argv);
     fprintf(2, "exec %s failed\n", ecmd->argv[0]);
     break;
 
@@ -203,6 +226,15 @@ main(int argc, char *argv[])
         dir = "/";  // plain cd: go to the root
       if(chdir(dir) < 0)
         fprintf(2, "cannot cd %s\n", dir);
+      continue;
+    }
+    if(memcmp(buf, "PATH=", 5) == 0){
+      // to the end of the line, without spaces
+      char *s = buf + 5, *d = path;
+      for(; *s && *s != '\n' && *s != '\r' && d < path + sizeof(path) - 1; s++)
+        if(*s != ' ' && *s != '\t')
+          *d++ = *s;
+      *d = 0;
       continue;
     }
     if(fork1() == 0){

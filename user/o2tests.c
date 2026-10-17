@@ -850,8 +850,8 @@ static void test_waitpid(void)
     fail("waitpid", "no such child");
 }
 
-// Write a script and run it with argv; returns what it printed (into
-// out, up to n-1 bytes), or -1 if exec failed.
+// Write a script and run it with argv; returns what it printed to
+// stdout and stderr (into out, up to n-1 bytes), or -1 if exec failed.
 static int run_script(const char *text, char **argv, char *out, int n)
 {
   int fd = open("script.tmp", O_CREATE | O_WRONLY | O_TRUNC);
@@ -862,6 +862,7 @@ static int run_script(const char *text, char **argv, char *out, int n)
   if(fork() == 0){
     close(fds[0]);
     dup2(fds[1], 1);
+    dup2(fds[1], 2);
     close(fds[1]);
     exec("script.tmp", argv);
     exit(7);
@@ -900,6 +901,17 @@ static void test_script(void)
                 shargv, out, sizeof(out)) < 0 ||
      strcmp(out, "one\nthree\nfour\n") != 0)
     fail("script", "shell script");
+  // the shell's PATH
+  mkdir("pathdir");
+  link("/echo", "pathdir/hello");
+  if(run_script("#!/sh\ncd pathdir\nhello a\nPATH=/:\nhello b\n"
+                "PATH=/nonexistent:/pathdir/\nhello c\necho d\n"
+                "PATH=/\necho e\n/pathdir/hello f\n",
+                shargv, out, sizeof(out)) < 0 ||
+     strcmp(out, "exec hello failed\nb\nc\nexec echo failed\ne\nf\n") != 0)
+    fail("script", "PATH");
+  unlink("pathdir/hello");
+  unlink("pathdir");
   if(run_script("#!/nonexistent\n", argv, out, sizeof(out)) != -1 ||
      run_script("#!\n", argv, out, sizeof(out)) != -1 ||
      run_script("#!/script.tmp\n", argv, out, sizeof(out)) != -1 ||
