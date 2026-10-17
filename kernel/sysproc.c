@@ -29,3 +29,12 @@ uint64 sys_kill(void) {
 uint64 sys_fork(void) {
     return fork();
 }
+
+uint64 sys_sbrk(void) {
+    int n;
+    argint(0, &n);
+    uint64 addr = myproc()->sz;
+    if (growproc(n) < 0)
+        return -1;
+    return addr;
+}
