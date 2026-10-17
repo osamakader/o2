@@ -12,6 +12,7 @@ int wait(int *);
 int read(int, void *, int);
 int write(int, const void *, int);
 int kill(int);
+int exec(const char *, char **);
 int getpid(void);
 char *sbrk(int);
 int sleep(int);

@@ -1,6 +1,6 @@
-// The first user program, user/_init, embedded as an ELF image until
-// there is a file system to load it from. The Makefile passes its
-// path in the build directory as INITCODE.
+// The first user program, user/_initcode, embedded as an ELF image:
+// it execs /init from the file system. The Makefile passes its path in
+// the build directory as INITCODE.
 
 .section .rodata
 .balign 8

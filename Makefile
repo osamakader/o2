@@ -116,8 +116,8 @@ $(B)/%.o: %.c
 
 # initcode.S embeds the init program with .incbin, which -MD doesn't
 # track.
-$(B)/kernel/initcode.o: $(B)/user/_init
-$(B)/kernel/initcode.o: CFLAGS += -DINITCODE='"$(B)/user/_init"'
+$(B)/kernel/initcode.o: $(B)/user/_initcode
+$(B)/kernel/initcode.o: CFLAGS += -DINITCODE='"$(B)/user/_initcode"'
 
 # User programs: linked at VA 0 against a tiny libc (ulib, printf, and
 # the arch's syscall stubs).

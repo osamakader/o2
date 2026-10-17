@@ -9,6 +9,8 @@
 #include "vm.h"
 #include "elf.h"
 #include "exec.h"
+#include "fs.h"
+#include "file.h"
 #include "cpu.h"
 
 static int memread(struct elfsrc *src, uint64 off, void *dst, uint64 n) {
@@ -22,6 +24,12 @@ void elfsrc_mem(struct elfsrc *src, const uchar *img, uint64 len) {
     src->read = memread;
     src->img = img;
     src->len = len;
+}
+
+static int inoderead(struct elfsrc *src, uint64 off, void *dst, uint64 n) {
+    if (off + n > src->ip->size)
+        return -1;
+    return readi(src->ip, 0, (uint64)dst, off, n);
 }
 
 static int flags2perm(int flags) {
@@ -145,4 +153,29 @@ int exec(struct proc *p, const char *name, struct elfsrc *src, char **argv) {
 bad:
     uvmfree(pagetable, sz);
     return -1;
+}
+
+// exec() system call: replace the current process's image with the
+// program at path, read from the file system.
+int kexec(char *path, char **argv) {
+    struct elfsrc src = { .read = inoderead };
+    char *name, *s;
+
+    begin_op();
+    if ((src.ip = namei(path)) == 0) {
+        end_op();
+        return -1;
+    }
+    ilock(src.ip);
+
+    // program name for debugging: the last path element
+    for (name = s = path; *s; s++)
+        if (*s == '/')
+            name = s + 1;
+
+    int r = exec(myproc(), name, &src, argv);
+
+    iunlockput(src.ip);
+    end_op();
+    return r;
 }

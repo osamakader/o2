@@ -284,11 +284,12 @@ void scheduler(void) {
     }
 }
 
-// Set up the first user process, running the embedded init program.
+// Set up the first user process, running the embedded initcode
+// program, which execs /init.
 void userinit(void) {
     extern uchar initcode[], initcode_end[];
     struct elfsrc src;
-    char *argv[] = { "init", 0 };
+    char *argv[] = { "initcode", 0 };
 
     struct proc *p = allocproc();
     if (p == 0)
@@ -297,7 +298,7 @@ void userinit(void) {
 
     memset(p->trapframe, 0, sizeof(*p->trapframe));
     elfsrc_mem(&src, initcode, initcode_end - initcode);
-    if (exec(p, "init", &src, argv) < 0)
+    if (exec(p, "initcode", &src, argv) < 0)
         panic("userinit: exec");
 
     p->cwd = namei("/");
