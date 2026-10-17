@@ -26,5 +26,8 @@ void *kalloc(void);
 void kfree(void *pa);
 uint64 kfreepages(void);
 
+// arch: start the other CPUs; each enters main(0)
+void start_cpus(void);
+
 // selftest.c
 void selftest(void);

@@ -52,8 +52,9 @@ _entry:
         msr vbar_el1, x0
         isb
 
-        // jump to start() in start.c, then main() in main.c
-        bl start
+        // main(boot) in main.c; CPU 0 is the boot CPU
+        cmp x19, #0
+        cset w0, eq
         bl main
         b .
 

@@ -5,6 +5,10 @@
 
 #include "types.h"
 #include "psci.h"
+#include "param.h"
+#include "memlayout.h"
+#include "defs.h"
+#include "console.h"
 
 #define PSCI_CPU_ON_64 0xC4000003
 
@@ -30,4 +34,20 @@ static long psci_call(uint64 fn, uint64 a1, uint64 a2, uint64 a3)
 long psci_cpu_on(uint64 mpidr, uint64 entry)
 {
     return psci_call(PSCI_CPU_ON_64, mpidr, entry, 0);
+}
+
+// Power on the other CPUs. Each enters at the physical _entry with the
+// MMU off and comes up through entry.S into main(). PSCI rejects the
+// first MPIDR that has no CPU behind it.
+void start_cpus(void)
+{
+    extern char _entry[];
+
+    for (int i = 1; i < NCPU; i++) {
+        long r = psci_cpu_on(i, V2P(_entry));
+        if (r == PSCI_INVALID_PARAMETERS)
+            break;
+        if (r != PSCI_SUCCESS)
+            printf("cpu %d: psci_cpu_on failed: %ld\n", i, r);
+    }
 }
