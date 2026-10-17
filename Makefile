@@ -235,6 +235,8 @@ $(FSIMG): $(MKFS) $(B)/README $(UPROGS)
 	$(MKFS) $@ $(B)/README $(UPROGS) > /dev/null
 
 QEMUOPTS += -kernel $(KERNEL) -m 128M -smp $(CPUS) -nographic
+# no network card: none is used, and its boot ROM may not be installed
+QEMUOPTS += -nic none
 QEMUOPTS += -global virtio-mmio.force-legacy=false
 QEMUOPTS += -drive file=$(FSIMG),if=none,format=raw,id=x0
 QEMUOPTS += -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0

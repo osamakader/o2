@@ -1,0 +1,44 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    name: ${{ matrix.arch }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [arm64, riscv64]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install toolchains and QEMU
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            make gcc libc6-dev \
+            gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu \
+            gcc-riscv64-linux-gnu binutils-riscv64-linux-gnu \
+            qemu-system-arm qemu-system-misc qemu-system-data opensbi
+
+      - name: Versions
+        run: |
+          aarch64-linux-gnu-gcc --version | head -1
+          riscv64-linux-gnu-gcc --version | head -1
+          qemu-system-aarch64 --version | head -1
+          qemu-system-riscv64 --version | head -1
+
+      - name: Build and test
+        run: tools/ci.sh ${{ matrix.arch }}
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-${{ matrix.arch }}
+          path: build/ci/

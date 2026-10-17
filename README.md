@@ -17,7 +17,9 @@ xv6's `usertests`, `grind` and `stressfs` (`user/xv6`) and o2's own
 tests, `o2tests`.
 ^P on the console prints the kernel's process list.
 `fs.img` persists between runs: `rm build/<arch>/fs.img` to start over.
-`tools/run.sh` boots non-interactively for testing (see its header).
+`tools/run.sh` boots non-interactively for testing (see its header), and
+`tools/ci.sh <arch> [quick]` runs the whole test suite the way CI does
+(GitHub Actions, `.github/workflows/ci.yml`, on every push).
 
 Needs the `aarch64-linux-gnu-` / `riscv64-linux-gnu-` toolchains and
 QEMU (`qemu-system-arm`, `qemu-system-misc`). riscv64 runs in S-mode
