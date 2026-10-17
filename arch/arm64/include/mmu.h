@@ -55,6 +55,14 @@
 // (TTBR0) or all 1 (TTBR1).
 #define VA_VALID(va)    (((va) >> 39) == 0 || ((va) >> 39) == (~_UL(0) >> 39))
 
+// User space is the whole TTBR0 range, [0, 2^39); the kernel lives in
+// TTBR1, so user root tables hold no kernel entries.
+#define MAXVA            (_UL(1) << 39)
+#define UVM_ROOT_ENTRIES 512
+#ifndef __ASSEMBLER__
+static inline void uvminit_root(uint64 *root) { }
+#endif
+
 // SCTLR_EL1 bits
 #define SCTLR_M (_UL(1) << 0)    // MMU enable
 #define SCTLR_C (_UL(1) << 2)    // data cache enable

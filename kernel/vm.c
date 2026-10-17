@@ -132,6 +132,7 @@ pagetable_t uvmcreate(void) {
     if (pagetable == 0)
         return 0;
     memset(pagetable, 0, PGSIZE);
+    uvminit_root(pagetable);
     return pagetable;
 }
 
@@ -174,9 +175,12 @@ uint64 uvmdealloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz) {
 }
 
 // Recursively free page-table pages below level. All leaf mappings
-// must already have been removed.
+// must already have been removed. In the root, only the user entries:
+// any others are the kernel's, shared by every user root.
 static void freewalk(pagetable_t pagetable, int level) {
-    for (int i = 0; i < 512; i++) {
+    int n = level == 2 ? UVM_ROOT_ENTRIES : 512;
+
+    for (int i = 0; i < n; i++) {
         pte_t pte = pagetable[i];
         if ((pte & PTE_VALID) == 0)
             continue;
