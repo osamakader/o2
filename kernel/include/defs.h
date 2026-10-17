@@ -28,6 +28,9 @@ uint64 kfreepages(void);
 
 // virtio_disk.c
 void virtio_disk_init(void);
+int virtio_disk_present(void);
+struct buf;
+void virtio_disk_rw(struct buf *b, int write);
 
 // arch: start the other CPUs; each enters main(0)
 void start_cpus(void);
