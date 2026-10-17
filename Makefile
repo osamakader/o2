@@ -55,9 +55,12 @@ ifeq ($(ARCH), riscv64)
 QEMU = qemu-system-riscv64
 TOOLPREFIX = riscv64-linux-gnu-
 # no floating point in the kernel (like -mgeneral-regs-only on arm64);
-# medany keeps addressing PC-relative, so code runs both at its
-# physical and its high-half address.
-CFLAGS += -march=rv64imac_zicsr_zifencei -mabi=lp64 -mcmodel=medany -mno-relax
+# user programs get the full rv64gc and the hard-float ABI. medany keeps
+# addressing PC-relative, so code runs both at its physical and its
+# high-half address.
+KARCHFLAGS = -march=rv64imac_zicsr_zifencei -mabi=lp64
+UARCHFLAGS = -march=rv64gc -mabi=lp64d
+CFLAGS += -mcmodel=medany -mno-relax
 AOBJS = \
   entry.o \
   trapvec.o \
@@ -76,7 +79,10 @@ QEMUOPTS = -machine virt -bios default
 else
 QEMU = qemu-system-aarch64
 TOOLPREFIX = aarch64-linux-gnu-
-CFLAGS += -march=armv8-a -mgeneral-regs-only -mno-outline-atomics
+# no FP/SIMD in the kernel; user programs may use them
+KARCHFLAGS = -march=armv8-a -mgeneral-regs-only
+UARCHFLAGS = -march=armv8-a
+CFLAGS += -mno-outline-atomics
 AOBJS = \
   entry.o \
   exceptions.o \
@@ -106,6 +112,12 @@ endif
 
 OBJS = $(addprefix $(B)/arch/$(ARCH)/, $(AOBJS)) $(addprefix $(B)/, $(KOBJS))
 
+# kernel code is built without floating point (see fpu.h), user code
+# with it
+ARCHFLAGS = $(KARCHFLAGS)
+CFLAGS += $(ARCHFLAGS)
+$(B)/user/%.o: ARCHFLAGS = $(UARCHFLAGS)
+
 CC = $(TOOLPREFIX)gcc
 AS = $(TOOLPREFIX)gas
 LD = $(TOOLPREFIX)ld
@@ -130,7 +142,7 @@ LDFLAGS = -z max-page-size=4096
 
 # Objects depend on $(B)/flags, which is rewritten whenever the compiler
 # flags change, so a flag change rebuilds everything.
-FLAGS := $(CC) $(CFLAGS)
+FLAGS := $(CC) $(CFLAGS) $(UARCHFLAGS)
 ifneq ($(FLAGS),$(file < $(B)/flags))
 $(shell mkdir -p $(B))
 $(file > $(B)/flags,$(FLAGS))
