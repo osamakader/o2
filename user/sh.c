@@ -191,6 +191,55 @@ getcmd(int fd, int interactive, char *buf, int nbuf)
   return 0;
 }
 
+// The last NHIST command lines; the n-th line entered (from 1) is
+// hist[(n-1) % NHIST].
+#define NHIST 20
+char hist[NHIST][100];
+int nhist;
+
+// "!!" and "!n" stand for the last and the n-th command line: replace
+// buf with it. Returns -1 if there's no such line.
+int
+histexpand(char *buf)
+{
+  int n;
+  char *s;
+
+  if(buf[0] != '!')
+    return 0;
+  if(buf[1] == '!'){
+    n = nhist;
+    s = buf + 2;
+  } else if(buf[1] >= '0' && buf[1] <= '9'){
+    n = atoi(buf + 1);
+    for(s = buf + 1; *s >= '0' && *s <= '9'; s++)
+      ;
+  } else {
+    return 0;
+  }
+  if(*s != '\n' && *s != '\r' && *s != 0)
+    return 0;   // not just !! or !n: leave the line alone
+  if(n < 1 || n > nhist || n <= nhist - NHIST){
+    fprintf(2, "sh: no such command in history\n");
+    return -1;
+  }
+  strcpy(buf, hist[(n-1) % NHIST]);
+  fprintf(2, "%s", buf);  // show what runs, like other shells
+  return 0;
+}
+
+void
+histadd(char *buf)
+{
+  char *s;
+
+  for(s = buf; *s == ' ' || *s == '\t'; s++)
+    ;
+  if(*s == '\n' || *s == '\r' || *s == 0)
+    return;
+  strcpy(hist[nhist++ % NHIST], buf);
+}
+
 // sh [script [args]]: with a script, run its commands (#!/sh in a
 // file makes it one), otherwise read commands from the console.
 int
@@ -214,6 +263,17 @@ main(int argc, char *argv[])
 
   // Read and run input commands.
   while(getcmd(in, in == 0, buf, sizeof(buf)) >= 0){
+    if(histexpand(buf) < 0)
+      continue;
+    histadd(buf);
+    if(memcmp(buf, "history", 7) == 0 && strchr(" \t\r\n", buf[7])){
+      for(int i = nhist > NHIST ? nhist - NHIST : 0; i < nhist; i++){
+        char *line = hist[i % NHIST];
+        int len = strlen(line);
+        printf("%d  %s%s", i + 1, line, len && line[len-1] == '\n' ? "" : "\n");
+      }
+      continue;
+    }
     if(buf[0] == 'c' && buf[1] == 'd' &&
        (buf[2] == ' ' || buf[2] == '\n' || buf[2] == 0)){
       // Chdir must be called by the parent, not the child.

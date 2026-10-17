@@ -912,6 +912,13 @@ static void test_script(void)
     fail("script", "PATH");
   unlink("pathdir/hello");
   unlink("pathdir");
+  // history
+  if(run_script("#!/sh\necho a\necho b\n!!\n!1\nhistory\n!9\n!x\n",
+                shargv, out, sizeof(out)) < 0 ||
+     strcmp(out, "a\nb\necho b\nb\necho a\na\n"
+                 "1  echo a\n2  echo b\n3  echo b\n4  echo a\n5  history\n"
+                 "sh: no such command in history\nexec !x failed\n") != 0)
+    fail("script", "history");
   if(run_script("#!/nonexistent\n", argv, out, sizeof(out)) != -1 ||
      run_script("#!\n", argv, out, sizeof(out)) != -1 ||
      run_script("#!/script.tmp\n", argv, out, sizeof(out)) != -1 ||
