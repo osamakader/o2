@@ -1,8 +1,16 @@
 ARCH ?= arm64
 
-# Everything is built under build/$(ARCH), so both arches can be built
-# from the same tree without cleaning in between.
+# Boot-time kernel self-tests (kernel/selftest.c): make SELFTEST=1
+SELFTEST ?= 0
+
+# Everything is built under build/$(ARCH) (build/$(ARCH)-selftest with
+# self-tests), so both arches and both settings can be built from the
+# same tree without cleaning in between.
+ifeq ($(SELFTEST), 1)
+B = build/$(ARCH)-selftest
+else
 B = build/$(ARCH)
+endif
 KERNEL = $(B)/kernel.elf
 # file system image for the virtio block device, made by mkfs
 FSIMG = $(B)/fs.img
@@ -19,7 +27,6 @@ KOBJS = \
   kernel/proc.o \
   kernel/spinlock.o \
   kernel/sleeplock.o \
-  kernel/selftest.o \
   kernel/vm.o \
   kernel/exec.o \
   kernel/virtio_disk.o \
@@ -71,6 +78,11 @@ AOBJS = \
   timer.o \
 
 QEMUOPTS = -machine virt,gic-version=3 -cpu cortex-a57
+endif
+
+ifeq ($(SELFTEST), 1)
+KOBJS += kernel/selftest.o
+CFLAGS += -DSELFTEST
 endif
 
 OBJS = $(addprefix $(B)/arch/$(ARCH)/, $(AOBJS)) $(addprefix $(B)/, $(KOBJS))
@@ -167,8 +179,11 @@ QEMUOPTS += -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0
 qemu: $(KERNEL) $(FSIMG)
 	$(QEMU) $(QEMUOPTS)
 
-# the QEMU command line, for tools/run.sh
+# the QEMU command line and disk image, for tools/run.sh
 print-qemu:
 	@echo $(QEMU) $(QEMUOPTS)
 
-.PHONY: all clean qemu print-qemu
+print-fsimg:
+	@echo $(FSIMG)
+
+.PHONY: all clean qemu print-qemu print-fsimg

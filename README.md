@@ -8,6 +8,7 @@ Minimal xv6-like kernel for arm64 and riscv64.
     make ARCH=riscv64    # riscv64: build/riscv64/kernel.elf
     make ARCH=riscv64 qemu
     make CPUS=8 qemu     # number of CPUs (default 3)
+    make SELFTEST=1 qemu # with the kernel self-tests at boot
 
 The kernel boots into xv6's shell; programs live in `/` (`ls`, `cat`,
 `echo`, `grep`, `wc`, `mkdir`, `rm`, `ln`, `kill`, `usertests`).
@@ -28,8 +29,8 @@ under the OpenSBI firmware QEMU loads by default.
   syscall stubs and linker script
 - `mkfs/`: host tool that builds `fs.img`
 
-At boot the kernel runs self-tests (`kernel/selftest.c`); user-mode
-tests are `usertests`, run from the shell.
+With `SELFTEST=1` the kernel runs its self-tests (`kernel/selftest.c`)
+at boot; user-mode tests are `usertests`, run from the shell.
 
 ## Credits
 

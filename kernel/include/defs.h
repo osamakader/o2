@@ -91,6 +91,6 @@ void virtio_disk_rw(struct buf *b, int write);
 // arch: start the other CPUs; each enters main(0)
 void start_cpus(void);
 
-// selftest.c
+// selftest.c (make SELFTEST=1)
 void selftest(void);
 void selftest_fs(void);

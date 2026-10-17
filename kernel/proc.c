@@ -104,7 +104,9 @@ static void forkret(void) {
         first = 0;
         // ensure other cores see first = 0.
         __sync_synchronize();
+#ifdef SELFTEST
         selftest_fs();
+#endif
     }
 
     userret(p->trapframe);

@@ -45,7 +45,9 @@ int main(int boot) {
         consoleinit();
 
         userinit();   // first, so init is pid 1
+#ifdef SELFTEST
         selftest();   // before any CPU schedules: init hasn't run yet
+#endif
 
         timerinithart();
 
