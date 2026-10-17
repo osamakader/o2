@@ -21,6 +21,7 @@ OBJS = \
   kernel/sleeplock.o \
   kernel/selftest.o \
   kernel/vm.o \
+  kernel/exec.o \
 
 CFLAGS = -Wall -Werror -O -fno-omit-frame-pointer -ggdb -gdwarf-2
 
