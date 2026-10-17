@@ -539,3 +539,31 @@ int either_copyin(void *dst, int user_src, uint64 src, uint64 len) {
     memmove(dst, (char *)src, len);
     return 0;
 }
+
+// Print a process listing to the console, for debugging. Runs when a
+// user types ^P on the console. No lock, to avoid wedging a stuck
+// machine further.
+void procdump(void) {
+    static char *states[] = {
+        [UNUSED]   "unused",
+        [USED]     "used",
+        [SLEEPING] "sleep ",
+        [RUNNABLE] "runble",
+        [RUNNING]  "run   ",
+        [ZOMBIE]   "zombie",
+    };
+
+    printf("\n");
+    for (int i = 0; i < NPROC; i++) {
+        struct proc *p = &ptable[i];
+        if (p->state == UNUSED)
+            continue;
+        char *state = "???";
+        if (p->state >= 0 && p->state < NELEM(states) && states[p->state])
+            state = states[p->state];
+        printf("%d %s %s", p->pid, state, p->name);
+        if (p->state == SLEEPING)
+            printf(" chan=%p", p->chan);
+        printf("\n");
+    }
+}

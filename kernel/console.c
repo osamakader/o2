@@ -207,6 +207,7 @@ int consolewrite(int user_src, uint64 src, int n) {
 //   backspace / DEL: erase a character
 //   ^U: kill the line
 //   ^D: end of file
+//   ^P: print the process list (procdump)
 // Characters are echoed; consoleread() returns whole lines.
 //
 
@@ -240,6 +241,9 @@ void consoleintr(int c) {
     acquire(&cons_in.lock);
 
     switch (c) {
+    case C('P'):  // print process list
+        procdump();
+        break;
     case C('U'):  // kill line
         while (cons_in.e != cons_in.w &&
                cons_in.buf[(cons_in.e - 1) % INPUT_BUF_SIZE] != '\n') {
