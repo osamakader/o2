@@ -64,6 +64,7 @@
 #define PTE_ADDR_MASK  _UL(0x0000fffffffff000)
 #define PA2PTE(pa)     ((uint64)(pa) & PTE_ADDR_MASK)
 #define PTE2PA(pte)    ((uint64)(pte) & PTE_ADDR_MASK)
+#define PTE_FLAGS(pte) ((uint64)(pte) & ~PTE_ADDR_MASK)
 
 // descriptor pointing at the next-level table
 #define MKTABLE(pa)    (PA2PTE(pa) | PTE_TABLE | PTE_VALID)
@@ -86,5 +87,7 @@
 #define PTE_AP_MASK      (_UL(3) << 6)
 #define PTE_IS_USER(pte)   (((pte) & PTE_AP_RW_USER) != 0)
 #define PTE_IS_USER_W(pte) (((pte) & PTE_AP_MASK) == PTE_AP_RW_USER)
+// make a user leaf EL1-only (AP = 00), e.g. for the stack guard page
+#define PTE_CLEAR_USER(pte) ((pte) & ~PTE_AP_MASK)
 
 #endif
