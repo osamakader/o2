@@ -34,6 +34,8 @@ TOOLPREFIX = riscv64-linux-gnu-
 CFLAGS += -march=rv64imac_zicsr_zifencei -mabi=lp64 -mcmodel=medany -mno-relax
 AOBJS = \
   entry.o \
+  trapvec.o \
+  trap.o \
   uart.o \
   mmu.o \
   stubs.o \

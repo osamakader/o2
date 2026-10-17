@@ -57,6 +57,11 @@ _entry_secondary:
         slli t0, t0, 12
         add sp, sp, t0
 
+        // traps go to trapvec (trapvec.S); sscratch = 0 means "in the kernel"
+        la t0, trapvec
+        csrw stvec, t0
+        csrw sscratch, zero
+
         // main(boot) in main.c
         mv a0, s1
         call main
