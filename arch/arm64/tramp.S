@@ -7,6 +7,11 @@
 //
 // x30 is the scratch register: the entries stash the user's in
 // TPIDR_EL1 (EL1-only), and el0_* in exceptions.S restore it.
+//
+// ASIDs: TTBR0 supplies the ASID. User mode runs with TTBR0 = the
+// process's table and ASID; the kernel always with the empty table and
+// ASID 0. All mappings are non-global, so the TLB keeps kernel and
+// user translations apart and no flush is needed on either crossing.
 
 .section trampsec, "ax"
 .balign 4096
@@ -17,8 +22,12 @@
     .balign 128
     msr tpidr_el1, x30
     ldr x30, 1f
+    ldr x30, [x30, #16]     // tramp_data[2]: empty TTBR0, ASID 0
+    msr ttbr0_el1, x30      // first leave the user ASID ...
+    isb
+    ldr x30, 1f
     ldr x30, [x30]          // tramp_data[0]: kernel TTBR1
-    msr ttbr1_el1, x30
+    msr ttbr1_el1, x30      // ... then map the kernel, under ASID 0
     isb
     ldr x30, 2f
     br x30
@@ -58,9 +67,9 @@ tramp_vectors:
     TRAMP_ENTRY el1_serr
 
 // Last step of ret_to_user: user registers are restored except x30,
-// which is in TPIDR_EL1, and VBAR_EL1 = tramp_vectors. Switch to the
-// trampoline page table, drop every translation (no ASIDs: kernel
-// entries must not survive into user mode), and return to EL0.
+// which is in TPIDR_EL1, VBAR_EL1 = tramp_vectors, and uvmswitch()
+// staged the user TTBR0 (table and ASID) in TPIDRRO_EL0. Unmap the
+// kernel first, then enter the user ASID, and return to EL0.
 .balign 128
 .global tramp_exit
 tramp_exit:
@@ -68,8 +77,9 @@ tramp_exit:
     ldr x30, [x30, #8]      // tramp_data[1]: trampoline TTBR1
     msr ttbr1_el1, x30
     isb
-    tlbi vmalle1
-    dsb nsh
+    mrs x30, tpidrro_el0
+    msr ttbr0_el1, x30
+    msr tpidrro_el0, xzr    // EL0 can read it: don't leave the PA there
     isb
     mrs x30, tpidr_el1
     eret

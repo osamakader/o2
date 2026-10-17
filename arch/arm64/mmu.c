@@ -3,6 +3,7 @@
 #include "vm.h"
 #include "mmu.h"
 #include "proc.h"
+#include "param.h"
 #include "defs.h"
 #include "console.h"
 
@@ -15,10 +16,14 @@ void kvmmap_devices(pagetable_t pagetable) {
     kvmmap(pagetable, P2V(GICR), GICR, GICR_SIZE, PTE_KERN_DEVICE);
 }
 
+// An all-invalid table for TTBR0 when no user page table is
+// installed, so stray kernel accesses to low addresses still fault.
+static pagetable_t empty_pagetable;
+
 // KPTI: while user code runs, TTBR1 holds tramp_pagetable, which maps
 // only the trampoline page (tramp.S) and tramp_data, at the same
 // addresses as kernel_pagetable does. tramp_data gives the trampoline
-// the two TTBR1 values; it sits alone in its page.
+// the two TTBR1 values and the kernel TTBR0; it sits alone in its page.
 extern char tramp_vectors[];
 __attribute__((aligned(PGSIZE))) uint64 tramp_data[PGSIZE / sizeof(uint64)];
 static pagetable_t tramp_pagetable;
@@ -37,26 +42,24 @@ static void tramp_init(void) {
 
     tramp_data[0] = V2P(kernel_pagetable);  // TTBR1 in the kernel
     tramp_data[1] = V2P(tramp_pagetable);   // TTBR1 in user mode
+    tramp_data[2] = V2P(empty_pagetable);   // TTBR0 in the kernel, ASID 0
 }
 
-// An all-invalid table for TTBR0 when no user page table is
-// installed, so stray kernel accesses to low addresses still fault.
-static pagetable_t empty_pagetable;
 
 // Switch this core from the boot page table (entry.S) to
 // kernel_pagetable in TTBR1. The MMU, MAIR and TCR are already set up.
 // The low half (TTBR0) is for user page tables; until uvmswitch()
 // installs one it points at an empty table.
 void kvminithart(void) {
-    if (tramp_pagetable == 0)
-        tramp_init();
-
     if (empty_pagetable == 0) {
         empty_pagetable = kalloc();
         if (empty_pagetable == 0)
             panic("kvminithart");
         memset(empty_pagetable, 0, PGSIZE);
     }
+
+    if (tramp_pagetable == 0)
+        tramp_init();
 
     asm volatile("msr ttbr1_el1, %0" : : "r"(V2P(kernel_pagetable)));
     asm volatile("msr ttbr0_el1, %0" : : "r"(V2P(empty_pagetable)));
@@ -66,13 +69,14 @@ void kvminithart(void) {
     asm volatile("dsb ishst; tlbi vmalle1; dsb ish; isb" ::: "memory");
 }
 
-// Install a user page table in TTBR0 on this core. Call with
-// interrupts off, right before returning to EL0: tramp_exit (tramp.S)
-// then drops all of this core's translations (no ASIDs yet), so stale
-// entries of the previous process or of pages since unmapped, and all
-// kernel entries, are gone before user code runs.
-void uvmswitch(pagetable_t pagetable) {
-    asm volatile("msr ttbr0_el1, %0; isb" : : "r"(V2P(pagetable)) : "memory");
+// Stage a user page table and ASID for tramp_exit (tramp.S), which
+// loads them into TTBR0 once TTBR1 holds the trampoline table. The
+// kernel itself always runs with TTBR0 = empty_pagetable, ASID 0, so
+// its translations are never tagged with a user ASID. TPIDRRO_EL0 is
+// the hand-over register; tramp_exit clears it before eret. Call with
+// interrupts off, right before returning to EL0.
+void uvmswitch(pagetable_t pagetable, int asid) {
+    asm volatile("msr tpidrro_el0, %0" : : "r"(V2P(pagetable) | TTBR_ASID(asid)));
 }
 
 // The instruction cache is not coherent with data writes: after the
@@ -90,11 +94,9 @@ void sync_icache(uint64 va, uint64 len) {
     asm volatile("dsb ish; ic ialluis; dsb ish; isb" ::: "memory");
 }
 
-// Leave a user address space: point TTBR0 back at the empty table so
-// a page table about to be freed is never walked, even speculatively.
-// No TLB flush needed: uvmswitch() flushes before user mode runs again.
+// The kernel always runs with TTBR0 = empty_pagetable (tramp.S switches
+// on every entry), so there is no user address space to leave.
 void kvmswitch(void) {
-    asm volatile("msr ttbr0_el1, %0; isb" : : "r"(V2P(empty_pagetable)) : "memory");
 }
 
 // A user page table: nothing beyond the user's own memory yet.
@@ -112,7 +114,10 @@ struct trapframe *trapframe_alloc(uint64 kstack) {
     return (struct trapframe *)(kstack + PGSIZE) - 1;
 }
 
-// Every return to user mode flushes this hart's TLB, so there are no
-// tagged translations to drop yet.
+// Drop every CPU's translations for asid (inner-shareable broadcast).
 void asid_flush(int asid) {
+    asm volatile("dsb ishst; tlbi aside1is, %0; dsb ish; isb"
+                 : : "r"(TTBR_ASID(asid)) : "memory");
 }
+
+_Static_assert(NPROC < 256, "ASIDs are slot + 1 and arm64 has 8 bits");

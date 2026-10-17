@@ -22,6 +22,7 @@
 #define PTE_AP_RO_USER (_UL(3) << 6)   // EL1 and EL0 read-only
 #define PTE_SH_INNER   (_UL(3) << 8)
 #define PTE_AF         (_UL(1) << 10)  // access flag; unset would fault
+#define PTE_NG         (_UL(1) << 11)  // not global: tagged with the ASID
 #define PTE_PXN        (_UL(1) << 53)  // no execute at EL1
 #define PTE_UXN        (_UL(1) << 54)  // no execute at EL0
 
@@ -62,12 +63,17 @@
 #define UVM_ROOT_ENTRIES 512
 #ifndef __ASSEMBLER__
 static inline void uvminit_root(uint64 *root) { }
+void uvmswitch(uint64 *pagetable, int asid);
 #endif
 
 // SCTLR_EL1 bits
 #define SCTLR_M (_UL(1) << 0)    // MMU enable
 #define SCTLR_C (_UL(1) << 2)    // data cache enable
 #define SCTLR_I (_UL(1) << 12)   // instruction cache enable
+
+// TTBR0_EL1.ASID (TCR_EL1.A1 = 0: TTBR0 supplies the ASID; AS = 0: 8
+// bits)
+#define TTBR_ASID(asid) ((uint64)(asid) << 48)
 
 // output address bits [47:12] sit in place in the descriptor
 #define PTE_ADDR_MASK  _UL(0x0000fffffffff000)
@@ -81,14 +87,17 @@ static inline void uvminit_root(uint64 *root) { }
 #define MKPAGE(pa, attrs) (PA2PTE(pa) | (attrs) | PTE_AF | PTE_TABLE | PTE_VALID)
 
 // mapping attributes for kernel mappings
-#define PTE_KERN_TEXT   (PTE_ATTRIDX(MT_NORMAL) | PTE_SH_INNER | PTE_AP_RO | PTE_UXN)
-#define PTE_KERN_RODATA (PTE_ATTRIDX(MT_NORMAL) | PTE_SH_INNER | PTE_AP_RO | PTE_PXN | PTE_UXN)
-#define PTE_KERN_DATA   (PTE_ATTRIDX(MT_NORMAL) | PTE_SH_INNER | PTE_AP_RW | PTE_PXN | PTE_UXN)
-#define PTE_KERN_DEVICE (PTE_ATTRIDX(MT_DEVICE_nGnRE) | PTE_AP_RW | PTE_PXN | PTE_UXN)
+// All mappings are non-global (nG), so the TLB tags them with the ASID
+// in TTBR0: 0 while the kernel runs, the process's in user mode. A
+// global kernel entry would stay usable from EL0.
+#define PTE_KERN_TEXT   (PTE_ATTRIDX(MT_NORMAL) | PTE_SH_INNER | PTE_AP_RO | PTE_UXN | PTE_NG)
+#define PTE_KERN_RODATA (PTE_ATTRIDX(MT_NORMAL) | PTE_SH_INNER | PTE_AP_RO | PTE_PXN | PTE_UXN | PTE_NG)
+#define PTE_KERN_DATA   (PTE_ATTRIDX(MT_NORMAL) | PTE_SH_INNER | PTE_AP_RW | PTE_PXN | PTE_UXN | PTE_NG)
+#define PTE_KERN_DEVICE (PTE_ATTRIDX(MT_DEVICE_nGnRE) | PTE_AP_RW | PTE_PXN | PTE_UXN | PTE_NG)
 
 // user mappings: never executable at EL1; read-only unless PERM_W,
 // not executable at EL0 unless PERM_X.
-#define PTE_USER(perm) (PTE_ATTRIDX(MT_NORMAL) | PTE_SH_INNER | PTE_PXN | \
+#define PTE_USER(perm) (PTE_ATTRIDX(MT_NORMAL) | PTE_SH_INNER | PTE_PXN | PTE_NG | \
                         (((perm) & PERM_W) ? PTE_AP_RW_USER : PTE_AP_RO_USER) | \
                         (((perm) & PERM_X) ? 0 : PTE_UXN))
 

@@ -7,6 +7,7 @@
 #include "proc.h"
 #include "cpu.h"
 #include "vm.h"
+#include "mmu.h"
 #include "defs.h"
 
 #define ESR_EC(esr) (((esr) >> 26) & 0x3f)
@@ -94,5 +95,5 @@ void usertrap_irq(struct trapframe *tf)
 void usertrapret(struct trapframe *tf)
 {
     intr_off();
-    uvmswitch(myproc()->pagetable);
+    uvmswitch(myproc()->pagetable, myproc()->asid);
 }

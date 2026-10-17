@@ -47,7 +47,6 @@ void kvminithart(void);   // arch: switch this core to kernel_pagetable
 struct proc;
 pagetable_t proc_pagetable(struct proc *p);
 void proc_freepagetable(pagetable_t pagetable, uint64 sz);
-void uvmswitch(pagetable_t pagetable);   // arch: install a user page table
 void kvmswitch(void);                    // arch: back to no user page table
 // arch: drop every hart's cached translations tagged with asid, after
 // that address space changed or before the ASID is reused
