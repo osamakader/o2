@@ -1,4 +1,7 @@
-#include "gicv3.h"
+// GICv3 interrupt controller.
+
+#include "types.h"
+#include "intc.h"
 #include "console.h"
 #include "memlayout.h"
 #include "cpu.h"
@@ -95,7 +98,7 @@ static void gicd_wait_rwp(void)
 }
 
 // Global GIC setup, once, on the boot CPU.
-void gic_init() {
+void intc_init(void) {
     log_msg("Initializing GICv3\n");
 
     // Affinity routing first (needed for GICD_IROUTER), then enable
@@ -110,9 +113,9 @@ void gic_init() {
 
 // Configure a level-triggered SPI (INTID 32..1019) as group 1, route it
 // to the CPU with MPIDR Aff0 = cpu, and enable it.
-void gic_enable_spi(uint32 intid, int cpu) {
+void intc_enable(uint32 intid, int cpu) {
     if (intid < 32 || intid >= 1020)
-        panic("gic_enable_spi: bad intid %d", intid);
+        panic("intc_enable: bad SPI %d", intid);
 
     uint32 bit = 1U << (intid % 32);
     uint32 word = 4 * (intid / 32);
@@ -135,7 +138,7 @@ void gic_enable_spi(uint32 intid, int cpu) {
 }
 
 // Per-CPU setup: this CPU's redistributor and CPU interface.
-void gic_inithart() {
+void intc_inithart(void) {
     uint64 rd = gicr_base();
 
     // wake up the redistributor

@@ -2,7 +2,7 @@
 #include "memlayout.h"
 #include "proc.h"
 #include "console.h"
-#include "gicv3.h"
+#include "intc.h"
 #include "timer.h"
 #include "trap.h"
 #include "defs.h"
@@ -68,12 +68,12 @@ int main() {
         kvminithart();
         log_msg("Kernel page table installed\n");
 
-        gic_init();
-        gic_inithart();
+        intc_init();
+        intc_inithart();
 
         // console input: UART receive interrupts, handled on CPU 0
         uart_enable_rx_irq();
-        gic_enable_spi(UART0_IRQ, 0);
+        intc_enable(UART0_IRQ, 0);
 
         userinit();   // first, so init is pid 1
         selftest();   // before any CPU schedules: init hasn't run yet
@@ -83,7 +83,7 @@ int main() {
         start_secondaries();
     } else {
         kvminithart();
-        gic_inithart();
+        intc_inithart();
         timerinithart();
         printf("cpu %d starting\n", cpuid());
     }
