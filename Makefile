@@ -229,6 +229,8 @@ clean:
 ifndef CPUS
 CPUS := 3
 endif
+# RAM for qemu; the kernel finds out how much from the device tree
+MEM ?= 128M
 
 # mkfs runs on the host
 $(MKFS): mkfs/mkfs.c kernel/include/fs.h kernel/include/param.h kernel/include/stat.h
@@ -265,7 +267,7 @@ $(B)/README: README.md
 $(FSIMG): $(MKFS) $(B)/README $(UPROGS)
 	$(MKFS) $@ $(B)/README $(UPROGS) > /dev/null
 
-QEMUOPTS += -kernel $(KERNEL) -m 128M -smp $(CPUS) -nographic
+QEMUOPTS += -kernel $(KERNEL) -m $(MEM) -smp $(CPUS) -nographic
 # no network card: none is used, and its boot ROM may not be installed
 QEMUOPTS += -nic none
 QEMUOPTS += -global virtio-mmio.force-legacy=false

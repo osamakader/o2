@@ -1,6 +1,7 @@
 #include "types.h"
 #include "memlayout.h"
 #include "defs.h"
+#include "board.h"
 #include "console.h"
 #include "vm.h"
 #include "mmu.h"
@@ -82,7 +83,7 @@ static pagetable_t kvmmake(void) {
     kvmmap(pagetable, (uint64)etext, V2P(etext), sdata - etext, PTE_KERN_RODATA);
 
     // kernel data and the rest of RAM: read/write, never executable
-    kvmmap(pagetable, (uint64)sdata, V2P(sdata), PHYSTOP - V2P(sdata), PTE_KERN_DATA);
+    kvmmap(pagetable, (uint64)sdata, V2P(sdata), board.ram_end - V2P(sdata), PTE_KERN_DATA);
 
     // a guarded kernel stack for each ptable slot
     proc_mapstacks(pagetable);

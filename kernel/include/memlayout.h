@@ -6,10 +6,12 @@
 // device addresses, IRQs and KERNBASE (start of RAM) for this machine
 #include "platform.h"
 
-// the kernel expects there to be RAM
-// for use by the kernel and user pages
-// from physical address KERNBASE to PHYSTOP.
-#define PHYSTOP (KERNBASE + 128*1024*1024)
+// RAM starts at KERNBASE; how much there is comes from the device tree
+// (board.ram_end), or else is DEFAULT_RAM. Up to MAX_RAM is used, all
+// of which the boot page tables (entry.S) map, in 1GB blocks.
+#define DEFAULT_RAM (128UL*1024*1024)
+#define BOOT_RAM_GB 16
+#define MAX_RAM     (BOOT_RAM_GB * 1024UL*1024*1024)
 
 
 #define PGSIZE 4096 // bytes per page

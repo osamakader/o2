@@ -96,16 +96,25 @@ mmu_on:
 
 // Coarse boot page table, loaded into both TTBR0 and TTBR1 until
 // kvminithart() installs the real kernel page table. The same first
-// 2GB of physical memory appear at the identity address (low half,
-// needed while the PC is still physical) and at P2V() (high half).
+// The devices and all of RAM (up to MAX_RAM) appear at the identity
+// address (low half, needed while the PC is still physical) and at
+// P2V() (high half).
 #define BOOT_HIGH_IDX ((KVA_OFFSET >> 30) & 0x1ff)
 
 .section .data
 .balign 4096
 boot_pagetable:
         .quad 0x00000000 | BOOT_DEVICE  // [0, 1GB): UART, GIC
-        .quad KERNBASE | BOOT_NORMAL    // [1GB, 2GB): RAM, kernel
-        .fill BOOT_HIGH_IDX - 2, 8, 0
-        .quad 0x00000000 | BOOT_DEVICE  // P2V([0, 1GB))
-        .quad KERNBASE | BOOT_NORMAL    // P2V([1GB, 2GB))
-        .fill 512 - BOOT_HIGH_IDX - 2, 8, 0
+        .set gb, 0                      // [1GB, 1GB + MAX_RAM): RAM
+        .rept BOOT_RAM_GB
+        .quad KERNBASE + (gb << 30) | BOOT_NORMAL
+        .set gb, gb + 1
+        .endr
+        .fill BOOT_HIGH_IDX - 1 - BOOT_RAM_GB, 8, 0
+        .quad 0x00000000 | BOOT_DEVICE  // P2V() of the same
+        .set gb, 0
+        .rept BOOT_RAM_GB
+        .quad KERNBASE + (gb << 30) | BOOT_NORMAL
+        .set gb, gb + 1
+        .endr
+        .fill 512 - BOOT_HIGH_IDX - 1 - BOOT_RAM_GB, 8, 0

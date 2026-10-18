@@ -7,6 +7,7 @@
 #include "defs.h"
 #include "console.h"
 #include "spinlock.h"
+#include "board.h"
 
 extern char end[]; // first address after kernel.
                    // defined by kernel.ld.
@@ -20,8 +21,8 @@ struct {
   struct run *freelist;
   // references to each page of RAM: page tables mapping it (pages
   // shared copy-on-write after fork() have several), or 1 for other
-  // uses. Under lock.
-  ushort ref[(PHYSTOP - KERNBASE) / PGSIZE];
+  // uses. Under lock. In the first pages after the kernel.
+  ushort *ref;
 } kmem;
 
 #define PAGEREF(pa) kmem.ref[(V2P(pa) - KERNBASE) / PGSIZE]
@@ -35,7 +36,7 @@ void kfree(void *pa)
 {
   struct run *r;
 
-  if(((uint64)pa % PGSIZE) != 0 || (char*)pa < end || (uint64)pa >= P2V(PHYSTOP))
+  if(((uint64)pa % PGSIZE) != 0 || (char*)pa < end || (uint64)pa >= P2V(board.ram_end))
     panic("kfree");
 
   acquire(&kmem.lock);
@@ -57,20 +58,29 @@ void kfree(void *pa)
   release(&kmem.lock);
 }
 
+// Give the pages in [pa_start, pa_end) (kernel addresses) to the
+// allocator, but not reserved ones (board_reserved()).
 void freerange(void *pa_start, void *pa_end)
 {
   char *p;
   p = (char*)PGROUNDUP((uint64)pa_start);
   for(; p + PGSIZE <= (char*)pa_end; p += PGSIZE){
+    if(board_reserved(V2P(p), V2P(p) + PGSIZE))
+      continue;
     PAGEREF(p) = 1;
     kfree(p);
   }
 }
 
+// Give all of RAM after the kernel to the allocator, but for the
+// reference counts, which go first.
 void kinit()
 {
   initlock(&kmem.lock, "kmem");
-  freerange(end, (void*)P2V(PHYSTOP));
+  uint64 npages = (board.ram_end - KERNBASE) / PGSIZE;
+  kmem.ref = (ushort*)PGROUNDUP((uint64)end);
+  memset(kmem.ref, 0, npages * sizeof(ushort));
+  freerange(kmem.ref + npages, (void*)P2V(board.ram_end));
 }
 
 

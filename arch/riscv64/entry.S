@@ -70,9 +70,9 @@ _entry_secondary:
 6:      wfi
         j 6b
 
-// Coarse boot page table: the first 1GB (devices) and the 1GB of RAM
-// at 0x80000000, both at their identity address (needed while the PC
-// is still physical) and at P2V(). kvminithart() replaces it.
+// Coarse boot page table: the first 1GB (devices) and RAM (up to
+// MAX_RAM) at 0x80000000, both at their identity address (needed while
+// the PC is still physical) and at P2V(). kvminithart() replaces it.
 #define BOOT_HIGH_IDX ((KVA_OFFSET >> 30) & 0x1ff)
 
 .section .data
@@ -80,9 +80,17 @@ _entry_secondary:
 boot_pagetable:
         .dword GIGA_PTE(0x00000000, BOOT_DEVICE)   // [0, 1GB): devices
         .dword 0
-        .dword GIGA_PTE(KERNBASE, BOOT_NORMAL)     // [2GB, 3GB): RAM
-        .fill BOOT_HIGH_IDX - 3, 8, 0
-        .dword GIGA_PTE(0x00000000, BOOT_DEVICE)   // P2V(devices)
+        .set gb, 0                                 // from 2GB: RAM
+        .rept BOOT_RAM_GB
+        .dword GIGA_PTE(KERNBASE + (gb << 30), BOOT_NORMAL)
+        .set gb, gb + 1
+        .endr
+        .fill BOOT_HIGH_IDX - 2 - BOOT_RAM_GB, 8, 0
+        .dword GIGA_PTE(0x00000000, BOOT_DEVICE)   // P2V() of the same
         .dword 0
-        .dword GIGA_PTE(KERNBASE, BOOT_NORMAL)     // P2V(RAM)
-        .fill 512 - BOOT_HIGH_IDX - 3, 8, 0
+        .set gb, 0
+        .rept BOOT_RAM_GB
+        .dword GIGA_PTE(KERNBASE + (gb << 30), BOOT_NORMAL)
+        .set gb, gb + 1
+        .endr
+        .fill 512 - BOOT_HIGH_IDX - 2 - BOOT_RAM_GB, 8, 0

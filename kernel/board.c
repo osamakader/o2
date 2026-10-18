@@ -8,7 +8,26 @@
 #include "fdt.h"
 #include "board.h"
 
-struct board board;
+struct board board = {
+    .ram_start = KERNBASE,
+    .ram_end = KERNBASE + DEFAULT_RAM,
+};
+
+static void reserve(uint64 addr, uint64 size) {
+    if (board.nreserved < NELEM(board.reserved) && size > 0) {
+        board.reserved[board.nreserved].start = addr;
+        board.reserved[board.nreserved].end = addr + size;
+        board.nreserved++;
+    }
+}
+
+// Is any of physical [a, b) reserved?
+int board_reserved(uint64 a, uint64 b) {
+    for (int i = 0; i < board.nreserved; i++)
+        if (board.reserved[i].start < b && a < board.reserved[i].end)
+            return 1;
+    return 0;
+}
 
 // Read the device tree at physical address dtb (0: look at the start of
 // RAM, where qemu puts it for arm64 ELF kernels). Called first thing at
@@ -23,15 +42,29 @@ void board_init(uint64 dtb) {
     if (model)
         safestrcpy(board.model, model, sizeof(board.model));
 
-    // RAM: the first memory node's first range
+    // RAM: the memory node's range starting at KERNBASE, where the
+    // kernel is linked to run
     for (int n = fdt_next_node(-1, 0); n >= 0; n = fdt_next_node(n, 0)) {
         const char *type = fdt_getprop(n, "device_type", 0);
         uint64 addr, size;
-        if (type && strncmp(type, "memory", 7) == 0 && fdt_reg(n, 0, &addr, &size) == 0) {
-            board.ram_start = addr;
-            board.ram_end = addr + size;
+        if (type && strncmp(type, "memory", 7) == 0 && fdt_reg(n, 0, &addr, &size) == 0 &&
+            addr == KERNBASE) {
+            board.ram_end = addr + (size < MAX_RAM ? size : MAX_RAM);
             break;
         }
+    }
+
+    // memory the firmware keeps for itself
+    uint64 addr, size;
+    for (int i = 0; fdt_memreserve(i, &addr, &size) == 0; i++)
+        reserve(addr, size);
+    int rm = -1;
+    for (int n = fdt_next_node(-1, 0); n >= 0; n = fdt_next_node(n, 0)) {
+        if (strncmp(fdt_name(n), "reserved-memory", 16) == 0)
+            rm = n;
+        else if (rm >= 0 && fdt_parent(n) == rm)
+            for (int i = 0; fdt_reg(n, i, &addr, &size) == 0; i++)
+                reserve(addr, size);
     }
 }
 
@@ -44,4 +77,7 @@ void board_report(void) {
            (void *)board.fdt, fdt_size());
     printf("board: RAM %p-%p (%lu MB)\n", (void *)board.ram_start, (void *)board.ram_end,
            (board.ram_end - board.ram_start) >> 20);
+    for (int i = 0; i < board.nreserved; i++)
+        printf("board: reserved %p-%p\n", (void *)board.reserved[i].start,
+               (void *)board.reserved[i].end);
 }
