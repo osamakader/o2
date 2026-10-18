@@ -46,7 +46,8 @@ What differs from qemu virt: RAM from 0, entry in EL2, a GIC-400
 (SDHCI) for storage, the firmware's framebuffer (mailbox) for the
 screen, and no RTC (the time starts at 1970), network, or keyboard.
 
-On a real Pi 4 (not tried yet: expect rough edges, see below):
+On a real Pi 4 (tried on a Pi 4 Model B Rev 1.5: the shell, gfx and
+the boot animation on HDMI work):
 
 1. You need a micro SD card whose contents may go (all of it is
    erased), a 3.3V USB-serial adapter on the GPIO header (adapter RX
@@ -71,13 +72,15 @@ On a real Pi 4 (not tried yet: expect rough edges, see below):
 
 `config.txt` makes the PL011 (uart0) the console on GPIO 14/15
 (`enable_uart=1`, `dtoverlay=disable-bt`); o2 keeps the baud rate the
-firmware set. If nothing shows up there, check the wiring (TX and RX
-cross) and that the adapter is 3.3V. Things most likely to need work
-on the hardware, since qemu doesn't model them: the SD card's clock
-(o2 assumes a 100MHz base clock for EMMC2 when the controller doesn't
-say), caches around the mailbox and the framebuffer, and the SD card
-controller itself (qemu puts the card on the other one, so on the Pi
-EMMC2 is driven for the first time).
+firmware set. It also has the firmware log there (`uart_2ndstage=1`).
+If nothing shows up, check the wiring (TX and RX cross) and that the
+adapter is 3.3V. To see how far o2 got: it writes A, B, C to the UART
+at entry, in EL1 and with the MMU on, before its own console works, and
+an exception inside the KPTI trampoline prints `!` with ESR, ELR, FAR
+and SPSR instead of hanging. Bringing it up on the real board found
+what qemu doesn't model: a FAT32 boot partition too small for the
+firmware to read, and the Cortex-A72's TLB walk cache, which kept the
+trampoline's page table entries across the switch back to the kernel's.
 
 The Pi 5 isn't supported yet; much of this (EL2 entry, GICv2, CPU
 numbering, the device tree's ranges, SD cards) is meant to carry over.
