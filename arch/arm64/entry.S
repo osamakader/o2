@@ -13,11 +13,54 @@ _entry:
         // mask interrupts
         msr daifset, #0xf
 
-        // qemu passes the device tree's physical address in x0
+        // qemu and the Raspberry Pi firmware pass the device tree's
+        // physical address in x0 (qemu virt: 0, see board_init())
         mov x20, x0
 
-        mrs x19, MPIDR_EL1
-        and x19, x19, #0xff
+        // The Raspberry Pi firmware starts the kernel in EL2 (qemu virt
+        // with virtualization=on too); o2 runs in EL1: drop there.
+        // Entering in EL3 isn't supported.
+        mrs x0, CurrentEL
+        lsr x0, x0, #2
+        cmp x0, #2
+        b.ne 5f
+        // EL2: EL1 runs AArch64, and may use the counters, timers and
+        // FP/SIMD without trapping here
+        ldr x0, =HCR_EL2_RW
+        msr hcr_el2, x0
+        mrs x0, cnthctl_el2
+        orr x0, x0, #3                  // EL1PCTEN, EL1PCEN
+        msr cnthctl_el2, x0
+        msr cntvoff_el2, xzr
+        ldr x0, =CPTR_EL2_VALUE
+        msr cptr_el2, x0
+        msr hstr_el2, xzr
+        // a GICv3 CPU interface: let EL1 use its system registers
+        mrs x0, id_aa64pfr0_el1
+        ubfx x0, x0, #24, #4
+        cbz x0, 6f
+        mov x0, #0xf                    // SRE, DFB, DIB, Enable
+        msr S3_4_C12_C9_5, x0           // ICC_SRE_EL2
+        isb
+6:      mrs x0, midr_el1
+        msr vpidr_el2, x0
+        mrs x0, mpidr_el1
+        msr vmpidr_el2, x0
+        ldr x0, =SCTLR_EL1_RES1         // MMU and caches off
+        msr sctlr_el1, x0
+        mov x0, #SPSR_EL1H_MASKED
+        msr spsr_el2, x0
+        adr x0, 5f
+        msr elr_el2, x0
+        eret
+5:
+        // this CPU's index (cpuid()): Aff0 + Aff1, one of which is 0 on
+        // the machines o2 knows (qemu virt and the Pi 4: Aff0; the Pi 5:
+        // Aff1)
+        mrs x0, MPIDR_EL1
+        and x19, x0, #0xff
+        ubfx x1, x0, #8, #8
+        add x19, x19, x1
         cbnz x19, 2f
 
         // Clear BSS on CPU 0. The MMU is off, so only PC-relative

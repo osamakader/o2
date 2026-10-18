@@ -8,10 +8,12 @@
 
 // This core's index: MPIDR_EL1 Aff0, which qemu virt numbers 0..ncpu-1.
 // Only stable while interrupts are off; a thread may migrate otherwise.
+// This CPU's index: MPIDR's Aff0 + Aff1, one of which is 0 on the
+// machines o2 knows (see entry.S).
 static inline int cpuid(void) {
     uint64 mpidr;
     asm volatile("mrs %0, mpidr_el1" : "=r"(mpidr));
-    return mpidr & 0xff;
+    return (mpidr & 0xff) + ((mpidr >> 8) & 0xff);
 }
 
 // Wait for an interrupt (low-power idle). Wakes on a pending IRQ even

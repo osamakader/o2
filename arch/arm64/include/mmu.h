@@ -67,6 +67,12 @@ void uvmswitch(uint64 *pagetable, int asid);
 #endif
 
 // SCTLR_EL1 bits
+// entering EL1 from EL2 (entry.S)
+#define HCR_EL2_RW         (_UL(1) << 31)   // EL1 is AArch64
+#define CPTR_EL2_VALUE     0x33ff  // RES1 bits; TFP clear: FP/SIMD not trapped
+#define SCTLR_EL1_RES1     0x30d00800
+#define SPSR_EL1H_MASKED   0x3c5   // EL1h, DAIF masked
+
 #define SCTLR_M (_UL(1) << 0)    // MMU enable
 #define SCTLR_C (_UL(1) << 2)    // data cache enable
 #define SCTLR_I (_UL(1) << 12)   // instruction cache enable
