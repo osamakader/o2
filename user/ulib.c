@@ -1,5 +1,6 @@
 #include "types.h"
 #include "user.h"
+#include "time.h"
 #include "stat.h"
 #include "fcntl.h"
 #include "syscall.h"
@@ -152,4 +153,56 @@ sighandler_t
 signal(int sig, sighandler_t handler)
 {
   return sys_signal(sig, handler, sigreturn_tramp);
+}
+
+// Seconds since the epoch.
+uint64
+time(void)
+{
+  struct timespec ts;
+  if(clock_gettime(CLOCK_REALTIME, &ts) < 0)
+    return 0;
+  return ts.tv_sec;
+}
+
+// Days since 1970-01-01 of the given date (proleptic Gregorian
+// calendar; m is 1..12).
+static long
+days_from_civil(long y, int m, int d)
+{
+  y -= m <= 2;
+  long era = (y >= 0 ? y : y - 399) / 400;
+  long yoe = y - era * 400;
+  long doy = (153 * (m > 2 ? m - 3 : m + 9) + 2) / 5 + d - 1;
+  long doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+  return era * 146097 + doe - 719468;
+}
+
+// Break t, seconds since the epoch, into UTC date and time in *tm.
+struct tm *
+gmtime(uint64 t, struct tm *tm)
+{
+  long days = t / 86400, secs = t % 86400;
+
+  tm->tm_hour = secs / 3600;
+  tm->tm_min = secs / 60 % 60;
+  tm->tm_sec = secs % 60;
+  tm->tm_wday = (days + 4) % 7;   // 1970-01-01 was a Thursday
+
+  // civil_from_days, from Howard Hinnant's date algorithms
+  long z = days + 719468;
+  long era = (z >= 0 ? z : z - 146096) / 146097;
+  long doe = z - era * 146097;
+  long yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+  long doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+  long mp = (5 * doy + 2) / 153;
+  int d = doy - (153 * mp + 2) / 5 + 1;
+  int m = mp < 10 ? mp + 3 : mp - 9;
+  long y = yoe + era * 400 + (m <= 2);
+
+  tm->tm_year = y - 1900;
+  tm->tm_mon = m - 1;
+  tm->tm_mday = d;
+  tm->tm_yday = days - days_from_civil(y, 1, 1);
+  return tm;
 }

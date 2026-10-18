@@ -9,6 +9,7 @@
 struct stat;
 struct procinfo;
 struct timespec;
+struct tm;
 
 // system calls
 int fork(void);
@@ -58,6 +59,8 @@ sighandler_t signal(int, sighandler_t);
 int stat(const char *, struct stat *);
 char *strchr(const char *, char c);
 int atoi(const char *);
+uint64 time(void);
+struct tm *gmtime(uint64, struct tm *);
 
 // umalloc.c
 void *malloc(uint);

@@ -235,6 +235,7 @@ $(MKFS): mkfs/mkfs.c kernel/include/fs.h kernel/include/param.h kernel/include/s
 # programs installed in the file system's root directory
 UPROGS = \
   $(B)/user/_cat \
+  $(B)/user/_date \
   $(B)/user/_dmesg \
   $(B)/user/_echo \
   $(B)/user/_grep \

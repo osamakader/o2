@@ -7,6 +7,7 @@
 #include "fcntl.h"
 #include "procinfo.h"
 #include "syscall.h"
+#include "time.h"
 
 #define PGSIZE 4096
 
@@ -1153,6 +1154,43 @@ static void test_printf(void)
   }
 }
 
+// clock_gettime() and gmtime().
+static void test_time(void)
+{
+  struct timespec r0, m0, r1, m1;
+  if(clock_gettime(CLOCK_REALTIME, &r0) < 0 || clock_gettime(CLOCK_MONOTONIC, &m0) < 0 ||
+     clock_gettime(7, &r0) != -1 || clock_gettime(CLOCK_REALTIME, (void *)0x7000000000UL) != -1)
+    fail("time", "clock_gettime");
+  if(r0.tv_sec < 1577836800 || r0.tv_nsec >= 1000000000 || m0.tv_nsec >= 1000000000)
+    fail("time", "the real-time clock says before 2020");
+  pause(10);   // 100 ms
+  clock_gettime(CLOCK_REALTIME, &r1);
+  clock_gettime(CLOCK_MONOTONIC, &m1);
+  uint64 dr = (r1.tv_sec - r0.tv_sec) * 1000000000 + r1.tv_nsec - r0.tv_nsec;
+  uint64 dm = (m1.tv_sec - m0.tv_sec) * 1000000000 + m1.tv_nsec - m0.tv_nsec;
+  if(dm < 90000000 || dm > 2000000000 || dr < 90000000 || dr > 2000000000)
+    fail("time", "clocks don't advance with pause()");
+
+  struct { uint64 t; int y, mon, d, h, min, s, wday, yday; } cases[] = {
+    { 0,          70, 0, 1, 0, 0, 0, 4, 0 },
+    { 951782400,  100, 1, 29, 0, 0, 0, 2, 59 },     // 2000-02-29, a leap day
+    { 1792314711, 126, 9, 18, 9, 11, 51, 0, 290 },  // 2026-10-18
+    { 4107542399, 200, 1, 28, 23, 59, 59, 0, 58 },  // 2100-02-28, not leap
+  };
+  for(int i = 0; i < sizeof(cases) / sizeof(cases[0]); i++){
+    struct tm tm;
+    gmtime(cases[i].t, &tm);
+    if(tm.tm_year != cases[i].y || tm.tm_mon != cases[i].mon || tm.tm_mday != cases[i].d ||
+       tm.tm_hour != cases[i].h || tm.tm_min != cases[i].min || tm.tm_sec != cases[i].s ||
+       tm.tm_wday != cases[i].wday || tm.tm_yday != cases[i].yday){
+      printf("o2tests: gmtime(%lu) = %d-%d-%d %d:%d:%d wday %d yday %d\n", cases[i].t,
+             tm.tm_year, tm.tm_mon, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec,
+             tm.tm_wday, tm.tm_yday);
+      fail("time", "gmtime");
+    }
+  }
+}
+
 static void o2tests(void)
 {
   struct { const char *name; void (*fn)(void); } tests[] = {
@@ -1167,6 +1205,7 @@ static void o2tests(void)
     { "ps", test_ps },
     { "klog", test_klog },
     { "printf", test_printf },
+    { "time", test_time },
     { "getppid", test_getppid },
     { "dup2", test_dup2 },
     { "lseek", test_lseek },
