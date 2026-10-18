@@ -14,6 +14,8 @@ struct board {
     struct { uint64 start, end; } reserved[8];
     int ncpu;                   // CPUs: hart ids (riscv64) or MPIDRs
     uint64 cpu[NCPU];
+    uint64 cpu_release[NCPU];   // arm64 spin table: where to write the
+                                // entry point to start it; 0: PSCI
     uint64 timebase;            // riscv64 timer frequency (Hz), or 0
     int psci_smc;               // arm64: PSCI calls through smc, not hvc
 

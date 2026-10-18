@@ -161,8 +161,14 @@ void board_init(uint64 dtb) {
             continue;
         if (status && strncmp(status, "okay", 5) != 0 && strncmp(status, "ok", 3) != 0)
             continue;
-        if (board.ncpu < NCPU)
+        if (board.ncpu < NCPU) {
             board.cpu[board.ncpu] = id;
+            const char *method = fdt_getprop(n, "enable-method", 0);
+            int len;
+            const char *rel = fdt_getprop(n, "cpu-release-addr", &len);
+            if (method && strncmp(method, "spin-table", 11) == 0 && rel && len == 8)
+                board.cpu_release[board.ncpu] = (uint64)fdt32(rel) << 32 | fdt32(rel + 4);
+        }
         board.ncpu++;
     }
     int cpus = fdt_next_node(-1, 0);
