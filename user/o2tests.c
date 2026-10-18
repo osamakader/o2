@@ -11,6 +11,7 @@
 #include "mman.h"
 #include "lockstat.h"
 #include "socket.h"
+#include "fb.h"
 
 #define PGSIZE 4096
 
@@ -1839,6 +1840,54 @@ static void test_net(void)
     fail("net", "bad arguments accepted");
 }
 
+// The framebuffer device (skipped without a GPU).
+static void test_fb(void)
+{
+  struct fb_info info;
+  int fd = open("/fb", O_RDWR);
+  if(fd < 0 || ioctl(fd, FB_INFO, (uint64)&info) < 0){
+    printf("o2tests: no framebuffer, skipping\n");
+    if(fd >= 0)
+      close(fd);
+    return;
+  }
+  if(info.width == 0 || info.height == 0 || info.stride < info.width * 4 ||
+     info.size < info.stride * info.height)
+    fail("fb", "FB_INFO");
+  uint32 *fb = mmap(0, info.size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+  if(fb == MAP_FAILED){
+    fail("fb", "mmap");
+    close(fd);
+    return;
+  }
+  fb[0] = 0x123456;
+  struct fb_rect r = { 0, 0, 1, 1 }, bad = { info.width, 0, 1, 1 };
+  if(ioctl(fd, FB_FLUSH, (uint64)&r) != 0 || ioctl(fd, FB_FLUSH, 0) != 0 ||
+     ioctl(fd, FB_FLUSH, (uint64)&bad) != -1 || ioctl(fd, 99, 0) != -1)
+    fail("fb", "FB_FLUSH");
+
+  // a child draws in the same framebuffer
+  int pid = fork();
+  if(pid == 0){
+    fb[1] = 0xabcdef;
+    exit(0);
+  }
+  waitpid(pid, 0, 0);
+  if(fb[1] != 0xabcdef || fb[0] != 0x123456)
+    fail("fb", "shared with a child");
+
+  // a second mapping sees the same pixels
+  uint32 *fb2 = mmap(0, 4096, PROT_READ, MAP_SHARED, fd, 0);
+  if(fb2 == MAP_FAILED || fb2[1] != 0xabcdef)
+    fail("fb", "second mapping");
+  if(mmap(0, 4096, PROT_READ, MAP_PRIVATE, fd, 0) != MAP_FAILED ||
+     mmap(0, info.size + 4096, PROT_READ, MAP_SHARED, fd, 0) != MAP_FAILED)
+    fail("fb", "bad mappings allowed");
+  munmap(fb2, 4096);
+  munmap(fb, info.size);
+  close(fd);
+}
+
 static void o2tests(void)
 {
   struct { const char *name; void (*fn)(void); } tests[] = {
@@ -1862,6 +1911,7 @@ static void o2tests(void)
     { "symlink", test_symlink },
     { "lockstat", test_lockstat },
     { "net", test_net },
+    { "fb", test_fb },
     { "getppid", test_getppid },
     { "dup2", test_dup2 },
     { "lseek", test_lseek },
