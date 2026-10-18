@@ -91,6 +91,7 @@ void virtio_disk_init(void);
 int virtio_disk_present(void);
 struct buf;
 void virtio_disk_rw(struct buf *b, int write);
+void virtio_disk_rwv(struct buf **bufs, int n, int write);
 
 // arch: start the other CPUs; each enters main(0)
 void start_cpus(void);

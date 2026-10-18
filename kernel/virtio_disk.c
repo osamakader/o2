@@ -248,32 +248,19 @@ static int alloc3_desc(int *idx)
     return 0;
 }
 
-// Read (write = 0) or write block b->blockno from/to b->data, sleeping
-// until the device is done. The caller must hold b->lock (sleeplock).
-void virtio_disk_rw(struct buf *b, int write)
+// Put a request to read (write = 0) or write block b->blockno from/to
+// b->data in descriptors idx[3] and the avail ring. disk.vdisk_lock
+// held; the caller notifies the device.
+static void submit(struct buf *b, int write, int *idx)
 {
     uint64 sector = b->blockno * (BSIZE / 512);
 
-    if (disk.base == 0)
-        panic("virtio_disk_rw: no disk");
     if (sector + BSIZE / 512 > disk.capacity)
         panic("virtio_disk_rw: block %d out of range", b->blockno);
-
-    acquire(&disk.vdisk_lock);
 
     // the spec's Section 5.2 says that legacy block operations use
     // three descriptors: one for type/reserved/sector, one for the
     // data, one for a 1-byte status result.
-
-    // allocate the three descriptors.
-    int idx[3];
-    while (1) {
-        if (alloc3_desc(idx) == 0)
-            break;
-        sleep(&disk.free[0], &disk.vdisk_lock);
-    }
-
-    // format the three descriptors.
     // qemu's virtio-blk.c reads them.
 
     struct virtio_blk_req *buf0 = &disk.ops[idx[0]];
@@ -318,20 +305,52 @@ void virtio_disk_rw(struct buf *b, int write)
     disk.avail->idx += 1; // not % NUM ...
 
     __sync_synchronize();
+}
 
-    *R(VIRTIO_MMIO_QUEUE_NOTIFY) = 0; // value is queue number
+// Read (write = 0) or write the n blocks bufs[i]->blockno from/to
+// their data, sleeping until the device is done with all of them. The
+// requests go to the device together, up to NUM / 3 at a time. The
+// caller must hold each buffer's lock (sleeplock).
+void virtio_disk_rwv(struct buf **bufs, int n, int write)
+{
+    enum { BATCH = NUM / 3 };
+    int idx[BATCH][3];
 
-    // Wait for virtio_disk_intr() to say request has finished.
-    while (b->disk == 1)
-        sleep(b, &disk.vdisk_lock);
+    if (disk.base == 0)
+        panic("virtio_disk_rw: no disk");
 
-    if (disk.info[idx[0]].status != 0)
-        panic("virtio_disk_rw: status %d", disk.info[idx[0]].status);
+    acquire(&disk.vdisk_lock);
+    for (int done = 0; done < n; ) {
+        int m = n - done < BATCH ? n - done : BATCH;
+        for (int i = 0; i < m; i++) {
+            // wait for descriptors that others' requests hold; ours
+            // are only freed below
+            while (alloc3_desc(idx[i]) != 0)
+                sleep(&disk.free[0], &disk.vdisk_lock);
+            submit(bufs[done + i], write, idx[i]);
+        }
+        *R(VIRTIO_MMIO_QUEUE_NOTIFY) = 0; // value is queue number
 
-    disk.info[idx[0]].b = 0;
-    free_chain(idx[0]);
-
+        // Wait for virtio_disk_intr() to say the requests have finished.
+        for (int i = 0; i < m; i++) {
+            struct buf *b = bufs[done + i];
+            while (b->disk == 1)
+                sleep(b, &disk.vdisk_lock);
+            if (disk.info[idx[i][0]].status != 0)
+                panic("virtio_disk_rw: status %d", disk.info[idx[i][0]].status);
+            disk.info[idx[i][0]].b = 0;
+            free_chain(idx[i][0]);
+        }
+        done += m;
+    }
     release(&disk.vdisk_lock);
+}
+
+// Read (write = 0) or write block b->blockno from/to b->data, sleeping
+// until the device is done. The caller must hold b->lock (sleeplock).
+void virtio_disk_rw(struct buf *b, int write)
+{
+    virtio_disk_rwv(&b, 1, write);
 }
 
 void virtio_disk_intr(void)

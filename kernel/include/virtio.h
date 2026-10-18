@@ -48,9 +48,9 @@
 // feature bits
 #define VIRTIO_F_VERSION_1 32 // compliant with this (1.0+) spec
 
-// this many virtio descriptors.
+// this many virtio descriptors (three per request).
 // must be a power of two.
-#define NUM 8
+#define NUM 64
 
 // a single descriptor, from the spec.
 struct virtq_desc {
