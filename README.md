@@ -12,7 +12,7 @@ Minimal xv6-like kernel for arm64 and riscv64.
     make ARM64_ASID=1 qemu  # arm64: per-process ASIDs (see Isolation)
 
 The kernel boots into xv6's shell; programs live in `/` (`ls`, `cat`,
-`echo`, `grep`, `wc`, `mkdir`, `rm`, `ln`, `kill [-sig]`, `ps`, `pwd`, `dmesg`), plus
+`echo`, `grep`, `wc`, `mkdir`, `rm`, `ln`, `kill [-sig]`, `ps`, `pwd`, `dmesg`, `date`), plus
 xv6's `usertests`, `grind` and `stressfs` (`user/xv6`) and o2's own
 tests, `o2tests`.
 ^P on the console prints the kernel's process list.
@@ -58,21 +58,30 @@ under ASID 0 and flushes the TLB on each return to user mode instead.
 
 System calls xv6 doesn't have: `getppid`, `dup2`, `lseek` (not past
 the end of a file, which xv6's write semantics rule out), `waitpid`
-(with `WNOHANG`), `kill(pid, sig)` and `signal`. Files starting with
+(with `WNOHANG`), `kill(pid, sig)`, `signal`, `clock_gettime` and
+`ioctl` (the console's raw mode). Files starting with
 `#!interpreter [arg]` are run by their interpreter.
+
+Time comes from the RTC (PL031 on arm64, Goldfish on riscv64), read at
+boot, plus the system counter; `date` shows it. Inodes are 128 bytes
+on disk and record atime (creation only: reads don't update it), mtime
+and ctime, which `stat` returns and `ls` shows.
 
 Signals use Linux's numbers. Most terminate by default, SIGCHLD (sent
 to the parent when a child exits) is ignored, and SIGKILL can't be
 caught. A handler runs on the process's own stack, in a frame holding
 the interrupted registers and FP state, and returns through
 `sigreturn`. Pending signals interrupt sleeping system calls, which
-return -1. ^C on the console sends SIGINT to every user process but
-init, since there are no process groups.
+return -1. Faults raise SIGSEGV, SIGBUS, SIGILL or SIGTRAP, which a
+handler may catch; ignoring them doesn't work. ^C on the console sends
+SIGINT to every user process but init, since there are no process
+groups.
 
 The shell runs scripts (`sh file`, or `#!/sh`), skips `#` comments,
 looks commands up in `PATH` (`PATH=/:/bin`; default `/`), keeps a
-`history` (`!!`, `!n`), and survives ^C, which interrupts the command
-it is running.
+`history` (`!!`, `!n`, or the up and down keys), edits the command
+line (left/right, home/end, backspace, delete, ^U), and survives ^C,
+which interrupts the command it is running.
 
 ## Floating point
 
