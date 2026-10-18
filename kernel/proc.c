@@ -98,6 +98,8 @@ struct proc *initproc;
 // any p->lock.
 static struct spinlock wait_lock = { .name = "wait_lock" };
 
+static void sigsend(struct proc *p, int sig);
+
 // Assembly in exceptions.S: switch to tf and return to user mode.
 extern void userret(struct trapframe *tf) __attribute__((noreturn));
 
@@ -459,6 +461,9 @@ void exit(int status) {
 
     // Parent might be sleeping in wait().
     wakeup(p->parent);
+    acquire(&p->parent->lock);
+    sigsend(p->parent, SIGCHLD);
+    release(&p->parent->lock);
 
     acquire(&p->lock);
 
@@ -543,20 +548,25 @@ int kill(int pid, int sig) {
         struct proc *p = &ptable[i];
         acquire(&p->lock);
         if (p->pid == pid && p->pagetable != 0) {
-            if (sig == SIGKILL)
-                p->killed = 1;
-            else if (sig != 0 && !sigignored(p, sig))
-                p->sigpending |= 1U << sig;
-            if (p->state == SLEEPING && (p->killed || p->sigpending)) {
-                // Wake process from sleep().
-                p->state = RUNNABLE;
-            }
+            sigsend(p, sig);
             release(&p->lock);
             return 0;
         }
         release(&p->lock);
     }
     return -1;
+}
+
+// Send sig to p, with p->lock held.
+static void sigsend(struct proc *p, int sig) {
+    if (sig == SIGKILL)
+        p->killed = 1;
+    else if (sig != 0 && !sigignored(p, sig))
+        p->sigpending |= 1U << sig;
+    if (p->state == SLEEPING && (p->killed || p->sigpending)) {
+        // Wake process from sleep().
+        p->state = RUNNABLE;
+    }
 }
 
 // Should p stop waiting and return to user mode? Yes if it was killed

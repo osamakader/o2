@@ -1052,6 +1052,17 @@ static void test_handlers(void)
                              "handler kept across exec");
   }
 
+  // SIGCHLD when a child exits
+  got_sig = 0;
+  signal(SIGCHLD, on_sig);
+  pid = fork();
+  if(pid == 0)
+    exit(0);
+  pause(1000);   // interrupted by SIGCHLD
+  if(wait(&status) != pid || got_sig != SIGCHLD)
+    fail("handlers", "no SIGCHLD");
+  signal(SIGCHLD, SIG_DFL);
+
   pid = fork();
   if(pid == 0)
     bad_sigreturn();
