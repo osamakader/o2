@@ -1165,8 +1165,11 @@ static void test_time(void)
   if(clock_gettime(CLOCK_REALTIME, &r0) < 0 || clock_gettime(CLOCK_MONOTONIC, &m0) < 0 ||
      clock_gettime(7, &r0) != -1 || clock_gettime(CLOCK_REALTIME, (void *)0x7000000000UL) != -1)
     fail("time", "clock_gettime");
-  if(r0.tv_sec < 1577836800 || r0.tv_nsec >= 1000000000 || m0.tv_nsec >= 1000000000)
-    fail("time", "the real-time clock says before 2020");
+  int rtc = r0.tv_sec >= 1577836800;   // the Raspberry Pi 4 has none: 1970
+  if(!rtc)
+    printf("o2tests: no real-time clock, checking time since boot only\n");
+  if(r0.tv_nsec >= 1000000000 || m0.tv_nsec >= 1000000000)
+    fail("time", "nanoseconds");
   pause(10);   // 100 ms
   clock_gettime(CLOCK_REALTIME, &r1);
   clock_gettime(CLOCK_MONOTONIC, &m1);
