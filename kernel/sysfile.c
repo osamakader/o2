@@ -19,6 +19,7 @@
 #include "fcntl.h"
 #include "memlayout.h"
 #include "exec.h"
+#include "timer.h"
 
 // Fetch the nth word-sized system call argument as a file descriptor
 // and return both the descriptor and the corresponding struct file.
@@ -171,6 +172,7 @@ uint64 sys_link(void)
     }
 
     ip->nlink++;
+    ip->ctime = time_sec();
     iupdate(ip);
     iunlock(ip);
 
@@ -254,6 +256,7 @@ uint64 sys_unlink(void)
     iunlockput(dp);
 
     ip->nlink--;
+    ip->ctime = time_sec();
     iupdate(ip);
     iunlockput(ip);
 

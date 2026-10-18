@@ -13,6 +13,10 @@ struct stat {
     short type;  // Type of file
     short nlink; // Number of links to file
     uint64 size; // Size of file in bytes
+    uint64 atime;   // seconds since the epoch: created (o2 doesn't
+                    // update it on reads)
+    uint64 mtime;   // contents last changed
+    uint64 ctime;   // inode last changed (contents, links)
 };
 
 #endif

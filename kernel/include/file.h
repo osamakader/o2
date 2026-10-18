@@ -32,6 +32,7 @@ struct inode {
     short nlink;
     uint size;
     uint addrs[NDIRECT+1];
+    uint64 atime, mtime, ctime;
 };
 
 // map major device number to device functions.

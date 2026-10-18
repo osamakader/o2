@@ -1191,6 +1191,61 @@ static void test_time(void)
   }
 }
 
+// Wait until the wall clock's seconds change.
+static void next_second(void)
+{
+  uint64 t0 = time();
+  while(time() == t0)
+    pause(1);
+}
+
+// Files record when they were created and changed.
+static void test_timestamps(void)
+{
+  struct stat st, st2;
+  uint64 t0 = time();
+  int fd = open("ts.tmp", O_CREATE | O_RDWR | O_TRUNC);
+  if(fd < 0 || fstat(fd, &st) < 0){
+    fail("timestamps", "create");
+    return;
+  }
+  if(st.atime < t0 || st.mtime < t0 || st.ctime < t0 || st.mtime > time())
+    fail("timestamps", "new file");
+
+  next_second();
+  write(fd, "x", 1);
+  fstat(fd, &st2);
+  if(st2.mtime <= st.mtime || st2.ctime != st2.mtime || st2.atime != st.atime)
+    fail("timestamps", "write");
+
+  next_second();
+  char c;
+  lseek(fd, 0, SEEK_SET);
+  read(fd, &c, 1);
+  link("ts.tmp", "ts.link");
+  fstat(fd, &st);
+  if(st.mtime != st2.mtime || st.ctime <= st2.ctime)
+    fail("timestamps", "link changes ctime only");
+  close(fd);
+
+  next_second();
+  fd = open("ts.tmp", O_RDWR | O_TRUNC);
+  fstat(fd, &st2);
+  if(st2.mtime <= st.mtime || st2.size != 0)
+    fail("timestamps", "truncate");
+  close(fd);
+
+  // a directory changes when entries are added or removed
+  struct stat d0, d1;
+  stat(".", &d0);
+  next_second();
+  unlink("ts.link");
+  stat(".", &d1);
+  if(d1.mtime <= d0.mtime)
+    fail("timestamps", "directory");
+  unlink("ts.tmp");
+}
+
 static void o2tests(void)
 {
   struct { const char *name; void (*fn)(void); } tests[] = {
@@ -1206,6 +1261,7 @@ static void o2tests(void)
     { "klog", test_klog },
     { "printf", test_printf },
     { "time", test_time },
+    { "timestamps", test_timestamps },
     { "getppid", test_getppid },
     { "dup2", test_dup2 },
     { "lseek", test_lseek },

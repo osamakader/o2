@@ -20,6 +20,7 @@
 #include "fs.h"
 #include "buf.h"
 #include "file.h"
+#include "timer.h"
 
 #define min(a, b) ((a) < (b) ? (a) : (b))
 // there should be one superblock per disk device, but we run with
@@ -184,6 +185,7 @@ struct inode *ialloc(uint dev, short type)
         if (dip->type == 0) {  // a free inode
             memset(dip, 0, sizeof(*dip));
             dip->type = type;
+            dip->atime = dip->mtime = dip->ctime = time_sec();
             log_write(bp);   // mark it allocated on the disk
             brelse(bp);
             return iget(dev, inum);
@@ -208,6 +210,9 @@ void iupdate(struct inode *ip)
     dip->nlink = ip->nlink;
     dip->size = ip->size;
     memmove(dip->addrs, ip->addrs, sizeof(ip->addrs));
+    dip->atime = ip->atime;
+    dip->mtime = ip->mtime;
+    dip->ctime = ip->ctime;
     log_write(bp);
     brelse(bp);
 }
@@ -275,6 +280,9 @@ void ilock(struct inode *ip)
         ip->nlink = dip->nlink;
         ip->size = dip->size;
         memmove(ip->addrs, dip->addrs, sizeof(ip->addrs));
+        ip->atime = dip->atime;
+        ip->mtime = dip->mtime;
+        ip->ctime = dip->ctime;
         brelse(bp);
         ip->valid = 1;
         if (ip->type == 0)
@@ -406,6 +414,7 @@ void itrunc(struct inode *ip)
     }
 
     ip->size = 0;
+    ip->mtime = ip->ctime = time_sec();
     iupdate(ip);
 }
 
@@ -418,6 +427,9 @@ void stati(struct inode *ip, struct stat *st)
     st->type = ip->type;
     st->nlink = ip->nlink;
     st->size = ip->size;
+    st->atime = ip->atime;
+    st->mtime = ip->mtime;
+    st->ctime = ip->ctime;
 }
 
 // Read data from inode.
@@ -483,6 +495,8 @@ int writei(struct inode *ip, int user_src, uint64 src, uint off, uint n)
 
     if (off > ip->size)
         ip->size = off;
+    if (tot > 0)
+        ip->mtime = ip->ctime = time_sec();
 
     // write the i-node back to disk even if the size didn't change
     // because the loop above might have called bmap() and added a new

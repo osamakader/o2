@@ -26,7 +26,7 @@ struct superblock {
     uint bmapstart;    // Block number of first free map block
 };
 
-#define FSMAGIC 0x10203040
+#define FSMAGIC 0x10203041   // o2: 128-byte inodes with timestamps
 
 #define NDIRECT 12
 #define NINDIRECT (BSIZE / sizeof(uint))
@@ -40,7 +40,14 @@ struct dinode {
     short nlink;          // Number of links to inode in file system
     uint size;            // Size of file (bytes)
     uint addrs[NDIRECT+1];   // Data block addresses
+    uint64 atime;         // seconds since the epoch: created (not
+                          // updated by reads)
+    uint64 mtime;         // contents last changed
+    uint64 ctime;         // inode last changed (contents, links)
+    uint spare[10];       // room to grow; zero
 };
+
+_Static_assert(sizeof(struct dinode) == 128, "dinode size");
 
 // Inodes per block.
 #define IPB           (BSIZE / sizeof(struct dinode))

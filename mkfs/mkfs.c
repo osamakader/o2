@@ -11,6 +11,7 @@
 #include <string.h>
 #include <fcntl.h>
 #include <assert.h>
+#include <time.h>
 
 #define stat xv6_stat  // avoid clash with host struct stat
 #include "types.h"
@@ -57,6 +58,16 @@ xshort(ushort x)
   uchar *a = (uchar*)&y;
   a[0] = x;
   a[1] = x >> 8;
+  return y;
+}
+
+uint64
+xlong(uint64 x)
+{
+  uint64 y;
+  uchar *a = (uchar*)&y;
+  for(int i = 0; i < 8; i++)
+    a[i] = x >> (8 * i);
   return y;
 }
 
@@ -230,6 +241,7 @@ ialloc(ushort type)
   din.type = xshort(type);
   din.nlink = xshort(1);
   din.size = xint(0);
+  din.atime = din.mtime = din.ctime = xlong(time(0));
   winode(inum, &din);
   return inum;
 }
