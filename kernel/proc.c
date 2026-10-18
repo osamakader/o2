@@ -557,6 +557,20 @@ int kill(int pid, int sig) {
     return -1;
 }
 
+// A fault in the user code of p, the current process: raise sig. It
+// can't be ignored, since the faulting instruction would only fault
+// again: as on Linux, SIG_IGN is reset to the default action, which
+// terminates. Returns whether a handler will run.
+int sigfault(struct proc *p, int sig) {
+    acquire(&p->lock);
+    if (p->sighandler[sig] == (uint64)SIG_IGN)
+        p->sighandler[sig] = (uint64)SIG_DFL;
+    p->sigpending |= 1U << sig;
+    int handled = p->sighandler[sig] != (uint64)SIG_DFL;
+    release(&p->lock);
+    return handled;
+}
+
 // Send sig to every user process but init.
 void killall(int sig) {
     for (int i = 0; i < NPROC; i++) {

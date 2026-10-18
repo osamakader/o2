@@ -16,6 +16,17 @@ void fp_trap(struct proc *p);
 
 #define ESR_EC(esr) (((esr) >> 26) & 0x3f)
 
+// the signal for a fault in user code
+static int ec_signal(uint64 ec)
+{
+    switch (ec) {
+    case 0x20: case 0x24: return SIGSEGV;   // instruction/data abort
+    case 0x22: case 0x26: return SIGBUS;    // pc/sp alignment
+    case 0x3c: return SIGTRAP;              // brk
+    default:   return SIGILL;
+    }
+}
+
 static const char *ec_name(uint64 ec)
 {
     switch (ec) {
@@ -82,12 +93,11 @@ void usertrap(struct trapframe *tf)
     } else if (ESR_EC(tf->esr) == EC_DABT_LOW && (tf->esr & 0x3c) == 0x04 &&
                vmfault(p->pagetable, tf->far) != 0) {
         // translation fault (DFSC 0b0001xx) on lazily allocated memory
-    } else {
-        // a fault in the user program: kill it, not the kernel
+    } else if (!sigfault(p, ec_signal(ESR_EC(tf->esr)))) {
+        // a fault in the user program, which will terminate it
         printf("usertrap(): %s (esr %p) pid=%d %s\n            elr=%p far=%p\n",
                ec_name(ESR_EC(tf->esr)), (void *)tf->esr, p->pid, p->name,
                (void *)tf->elr, (void *)tf->far);
-        setkilled(p);
     }
 
     usersignals();

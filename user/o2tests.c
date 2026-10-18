@@ -1070,6 +1070,67 @@ static void test_handlers(void)
     fail("handlers", "bad sigreturn frame");
 }
 
+static void exit_with_sig(int sig)
+{
+  exit(100 + sig);
+}
+
+// Run fn in a child with SIGSEGV, SIGBUS, SIGILL and SIGTRAP handled
+// by handler (or ignored); returns its exit status.
+static int fault_status(void (*fn)(void), sighandler_t handler)
+{
+  int pid = fork();
+  if(pid == 0){
+    signal(SIGSEGV, handler);
+    signal(SIGBUS, handler);
+    signal(SIGILL, handler);
+    signal(SIGTRAP, handler);
+    fn();
+    exit(0);
+  }
+  int status = 0;
+  wait(&status);
+  return status;
+}
+
+static void store_to_null(void)
+{
+  *(volatile char *)0 = 1;   // page 0 is read-only text
+}
+
+static void illegal_instruction(void)
+{
+#if defined(__aarch64__)
+  asm volatile(".inst 0x00000000");   // udf #0
+#else
+  asm volatile(".word 0");            // all zeros: illegal
+#endif
+}
+
+static void breakpoint(void)
+{
+#if defined(__aarch64__)
+  asm volatile("brk #0");
+#else
+  asm volatile("ebreak");
+#endif
+}
+
+// Faults raise signals a handler can catch.
+static void test_sigsegv(void)
+{
+  if(fault_status(store_to_null, exit_with_sig) != 100 + SIGSEGV ||
+     fault_status(read_kernel, exit_with_sig) != 100 + SIGSEGV)
+    fail("sigsegv", "SIGSEGV not caught");
+  if(fault_status(illegal_instruction, exit_with_sig) != 100 + SIGILL)
+    fail("sigsegv", "SIGILL not caught");
+  if(fault_status(breakpoint, exit_with_sig) != 100 + SIGTRAP)
+    fail("sigsegv", "SIGTRAP not caught");
+  // ignoring a fault doesn't work: the process still dies
+  if(fault_status(store_to_null, SIG_IGN) != -1)
+    fail("sigsegv", "ignored SIGSEGV");
+}
+
 static void o2tests(void)
 {
   struct { const char *name; void (*fn)(void); } tests[] = {
@@ -1090,6 +1151,7 @@ static void o2tests(void)
     { "script", test_script },
     { "signals", test_signals },
     { "handlers", test_handlers },
+    { "sigsegv", test_sigsegv },
     { "fp math", test_fp_math },
     { "fp regs", test_fp_regs },
     { "fp fork", test_fp_fork },

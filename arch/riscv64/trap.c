@@ -40,6 +40,18 @@ static const char *cause_name(uint64 cause)
     }
 }
 
+// the signal for a fault in user code
+static int cause_signal(uint64 cause)
+{
+    switch (cause) {
+    case 0: case 4: case 6: return SIGBUS;            // misaligned
+    case 1: case 5: case 7:                           // access fault
+    case 12: case 13: case 15: return SIGSEGV;        // page fault
+    case 3:  return SIGTRAP;                          // breakpoint
+    default: return SIGILL;
+    }
+}
+
 // Exception in the kernel: fatal. trapvec.S runs this on the hart's
 // emergency stack.
 void kernel_fatal(struct trapframe *tf)
@@ -155,12 +167,11 @@ void usertrap(void)
     } else if ((tf->cause == 13 || tf->cause == 15) &&
                vmfault(p->pagetable, tf->tval) != 0) {
         // load/store page fault on lazily allocated memory
-    } else {
-        // a fault in the user program: kill it, not the kernel
+    } else if (!sigfault(p, cause_signal(tf->cause))) {
+        // a fault in the user program, which will terminate it
         printf("usertrap(): %s (scause 0x%lx) pid=%d %s\n            sepc=%p stval=%p\n",
                cause_name(tf->cause), tf->cause, p->pid, p->name,
                (void *)tf->epc, (void *)tf->tval);
-        setkilled(p);
     }
 
     if (killed(p))
