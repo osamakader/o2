@@ -79,6 +79,7 @@ static void find_devices(void) {
     // the Pi 4's card slot is on EMMC2; qemu's raspi4b puts the card on
     // the other controller (on the Pi, for Wi-Fi)
     find_device("brcm,bcm2711-emmc2", 0, &board.sdhci[0], 0);
+    find_device("brcm,bcm2835-mbox", 0, &board.mbox, 0);
     find_device("brcm,bcm2835-sdhci", 0, &board.sdhci[1], 0);
 
     board.nvirtio = 0;
@@ -109,6 +110,8 @@ void board_map(pagetable_t pagetable) {
     for (int i = 0; i < NELEM(board.sdhci); i++)
         if (board.sdhci[i])
             map_range(pagetable, board.sdhci[i], PGSIZE);
+    if (board.mbox)
+        map_range(pagetable, board.mbox, 0x40);
     map_range(pagetable, board.intc, board.intc_size);
     if (board.intc2_size)
         map_range(pagetable, board.intc2, board.intc2_size);

@@ -110,6 +110,7 @@ void disk_rwv(struct buf **bufs, int n, int write);
 int sd_init(uint64 *sectors);
 int sd_rw(uint64 sector, char *data, int write);
 void virtio_gpu_init(void);
+void rpi_fb_init(void);
 int virtio_disk_present(void);
 struct buf;
 void virtio_disk_rw(struct buf *b, int write);

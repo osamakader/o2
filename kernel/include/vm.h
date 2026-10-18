@@ -55,6 +55,7 @@ void kvmswitch(void);                    // arch: back to no user page table
 // that address space changed or before the ASID is reused
 void asid_flush(int asid);
 void sync_icache(uint64 va, uint64 len); // arch: make written code executable
+void dcache_flush_line(uint64 va);         // arch: memory a device sees = cache
 
 extern pagetable_t kernel_pagetable;
 

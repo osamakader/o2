@@ -84,6 +84,13 @@ void uvmswitch(pagetable_t pagetable, int asid) {
 // the point of unification and invalidate the instruction caches.
 // va is a kernel address of the written bytes; the caches are
 // physically indexed, so the user alias sees the result too.
+// Write the data cache line holding va back to memory and drop it, so
+// that a device reading or writing the memory behind the caches (the
+// Raspberry Pi's GPU) and the CPU agree on it.
+void dcache_flush_line(uint64 va) {
+    asm volatile("dc civac, %0; dsb sy" : : "r"(va) : "memory");
+}
+
 void sync_icache(uint64 va, uint64 len) {
     uint64 ctr;
     asm volatile("mrs %0, ctr_el0" : "=r"(ctr));

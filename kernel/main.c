@@ -51,6 +51,7 @@ int main(int boot, uint64 dtb) {
         sockinit();
         virtio_net_init();
         virtio_gpu_init();
+        rpi_fb_init();
         binit();
         iinit();
         fileinit();

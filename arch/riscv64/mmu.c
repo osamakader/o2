@@ -60,6 +60,10 @@ void kvminithart(void) {
 // Make code the kernel wrote visible to instruction fetch. fence.i
 // only covers this hart, so usertrapret() repeats it on every return to
 // user mode, wherever the process runs.
+// Caches are coherent with devices on qemu: nothing to do.
+void dcache_flush_line(uint64 va) {
+}
+
 void sync_icache(uint64 va, uint64 len) {
     asm volatile("fence.i" ::: "memory");
 }
