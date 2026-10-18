@@ -200,20 +200,20 @@ void uvmfree(pagetable_t pagetable, uint64 sz) {
     freewalk(pagetable, 2);
 }
 
-// Given a parent process's page table, share its memory with a child's
-// page table (fork()): map the same pages, with writable ones made
-// copy-on-write in both, so that the first write to one gives the
-// writer a copy of its own (uvmcow()). The caller must flush the old
-// page table's TLB entries. Returns 0 on success, -1 if out of memory
-// for page-table pages, after undoing the child's mappings.
-int uvmcopy(pagetable_t old, pagetable_t new, uint64 sz) {
+// Map the pages old maps in [start, end) (page aligned) into new too.
+// With cow, writable ones become copy-on-write in both, so that the
+// first write to one gives the writer a copy of its own (uvmcow());
+// without, both page tables share them as they are. The caller must
+// flush the old page table's TLB entries. Returns 0 on success, -1 if
+// out of memory for page-table pages, after undoing new's mappings.
+int uvmshare(pagetable_t old, pagetable_t new, uint64 start, uint64 end, int cow) {
     uint64 i;
 
-    for (i = 0; i < sz; i += PGSIZE) {
+    for (i = start; i < end; i += PGSIZE) {
         pte_t *pte = walk(old, i, 0);
         if (pte == 0 || (*pte & PTE_VALID) == 0)
             continue;  // not allocated yet (lazy): nothing to share
-        if (PTE_IS_USER_W(*pte))
+        if (cow && PTE_IS_USER_W(*pte))
             *pte = PTE_MAKE_COW(*pte);
         uint64 pa = PTE2PA(*pte);
         if (mappages(new, i, PGSIZE, pa, PTE_FLAGS(*pte)) != 0)
@@ -223,8 +223,13 @@ int uvmcopy(pagetable_t old, pagetable_t new, uint64 sz) {
     return 0;
 
 err:
-    uvmunmap(new, 0, i / PGSIZE, 1);
+    uvmunmap(new, start, (i - start) / PGSIZE, 1);
     return -1;
+}
+
+// Give a child (fork()) the parent's memory [0, sz), copy-on-write.
+int uvmcopy(pagetable_t old, pagetable_t new, uint64 sz) {
+    return uvmshare(old, new, 0, PGROUNDUP(sz), 1);
 }
 
 // A write to va in the current process, whose page table is pagetable,

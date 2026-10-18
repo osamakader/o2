@@ -37,6 +37,7 @@ uint64 uvmalloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz, int perm);
 uint64 uvmdealloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz);
 void uvmfree(pagetable_t pagetable, uint64 sz);
 int uvmcopy(pagetable_t old, pagetable_t new, uint64 sz);
+int uvmshare(pagetable_t old, pagetable_t new, uint64 start, uint64 end, int cow);
 void uvmclear(pagetable_t pagetable, uint64 va);
 uint64 vmfault(pagetable_t pagetable, uint64 va);
 uint64 uvmcow(pagetable_t pagetable, uint64 va);
