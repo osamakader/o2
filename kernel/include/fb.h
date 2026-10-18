@@ -23,4 +23,15 @@ struct fb_rect {
     uint32 x, y, width, height;
 };
 
+// in the kernel: a display driver's description, for fb_register()
+struct fbdev {
+    struct fb_info info;
+    uint64 (*page)(uint64 n);              // page n's physical address
+    void (*flush)(struct fb_rect *r);      // show r; may be 0
+    int uncached;                          // map it uncached (the GPU reads
+                                           // the memory itself)
+};
+
+void fb_register(struct fbdev *dev);
+
 #endif

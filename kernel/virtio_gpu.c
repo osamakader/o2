@@ -185,16 +185,15 @@ static int probe(void)
     return -1;
 }
 
-static int fbioctl(int req, uint64 arg);
-uint64 fb_page(uint64 n);
+static uint64 page(uint64 n);
+static void flushrect(struct fb_rect *r);
+static struct fbdev fbdev = { .page = page, .flush = flushrect };
 
 void virtio_gpu_init(void)
 {
     uint32 status = 0;
 
     initlock(&gpu.lock, "virtio_gpu");
-    devsw[FB].ioctl = fbioctl;
-    devsw[FB].mmap = fb_page;
     int slot = probe();
     if (slot < 0)
         return;
@@ -314,41 +313,19 @@ void virtio_gpu_init(void)
     release(&gpu.lock);
 
     printf("virtio_gpu: slot %d, %dx%d\n", slot, gpu.info.width, gpu.info.height);
+    fbdev.info = gpu.info;
+    fb_register(&fbdev);
 }
 
-// The physical address of framebuffer page n, for mmap(); 0 if none.
-uint64 fb_page(uint64 n)
+// The physical address of framebuffer page n.
+static uint64 page(uint64 n)
 {
-    if (gpu.base == 0 || n >= gpu.npages)
-        return 0;
     return V2P(gpu.pages[n]);
 }
 
-// ioctl on the fb device: FB_INFO (arg: struct fb_info *) or FB_FLUSH
-// (arg: struct fb_rect *, or 0 for all of it).
-static int fbioctl(int req, uint64 arg)
+static void flushrect(struct fb_rect *r)
 {
-    struct proc *p = myproc();
-
-    if (gpu.base == 0)
-        return -1;
-    if (req == FB_INFO)
-        return copyout(p->pagetable, arg, (char *)&gpu.info, sizeof(gpu.info));
-    if (req != FB_FLUSH)
-        return -1;
-    struct fb_rect r = { 0, 0, gpu.info.width, gpu.info.height };
-    if (arg && copyin(p->pagetable, (char *)&r, arg, sizeof(r)) < 0)
-        return -1;
-    if (r.x >= gpu.info.width || r.y >= gpu.info.height)
-        return -1;
-    if (r.width > gpu.info.width - r.x)
-        r.width = gpu.info.width - r.x;
-    if (r.height > gpu.info.height - r.y)
-        r.height = gpu.info.height - r.y;
-    if (r.width == 0 || r.height == 0)
-        return 0;
     acquire(&gpu.lock);
-    flush(r.x, r.y, r.width, r.height);
+    flush(r->x, r->y, r->width, r->height);
     release(&gpu.lock);
-    return 0;
 }

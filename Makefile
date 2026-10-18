@@ -60,6 +60,7 @@ KOBJS = \
   kernel/virtio_net.o \
   kernel/net.o \
   kernel/socket.o \
+  kernel/fb.o \
   kernel/virtio_gpu.o \
   kernel/sdhci.o \
   kernel/disk.o \
