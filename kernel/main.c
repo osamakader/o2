@@ -42,7 +42,7 @@ int main(int boot, uint64 dtb) {
 
         // console input: UART receive interrupts, handled on this CPU
         uart_enable_rx_irq();
-        irq_register(UART0_IRQ, uartintr, cpuid());
+        irq_register(board.uart_irq, uartintr, cpuid());
 
         virtio_disk_init();
         binit();

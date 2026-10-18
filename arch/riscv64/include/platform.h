@@ -24,6 +24,16 @@
 #define VIRTIO_MMIO_COUNT  8
 #define VIRTIO_MMIO_IRQ0   1
 
+// What the device tree calls them (board.c), and which addresses
+// stand for the interrupt controller.
+#define UART_COMPAT "ns16550a"
+#define RTC_COMPAT  "google,goldfish-rtc"
+#define INTC_COMPAT "riscv,plic0"
+#define INTC_BASE   PLIC
+#define INTC_SIZE   PLIC_SIZE
+#define INTC2_BASE  0
+#define INTC2_SIZE  0
+
 // RAM starts here. OpenSBI occupies the first 2MB; qemu loads the
 // kernel at 0x80200000.
 #define KERNBASE 0x80000000

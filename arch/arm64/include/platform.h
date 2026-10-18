@@ -30,6 +30,16 @@
 #define VIRTIO_MMIO_COUNT  32
 #define VIRTIO_MMIO_IRQ0   48
 
+// What the device tree calls them (board.c), and which addresses
+// stand for the interrupt controller: distributor, redistributors.
+#define UART_COMPAT "arm,pl011"
+#define RTC_COMPAT  "arm,pl031"
+#define INTC_COMPAT "arm,gic-v3"
+#define INTC_BASE   GICD
+#define INTC_SIZE   GICD_SIZE
+#define INTC2_BASE  GICR
+#define INTC2_SIZE  GICR_SIZE
+
 // RAM starts here; qemu puts the device tree here and the kernel at
 // 0x40200000 (kernel.ld).
 #define KERNBASE 0x40000000

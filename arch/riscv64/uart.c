@@ -4,9 +4,10 @@
 #include "memlayout.h"
 #include "uart.h"
 #include "console.h"
+#include "board.h"
 
-// the UART control registers are memory-mapped at address UART0.
-#define Reg(reg) ((volatile unsigned char *)(P2V(UART0) + (reg)))
+// the UART control registers are memory-mapped at board.uart.
+#define Reg(reg) ((volatile unsigned char *)(P2V(board.uart) + (reg)))
 
 // the UART control registers.
 // some have different meanings for read vs write.

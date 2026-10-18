@@ -6,8 +6,9 @@
 #include "memlayout.h"
 #include "intc.h"
 #include "cpu.h"
+#include "board.h"
 
-#define PLIC_BASE P2V(PLIC)
+#define PLIC_BASE P2V(board.intc)
 #define PLIC_PRIORITY(irq)   (PLIC_BASE + (irq) * 4)
 #define PLIC_SENABLE(hart)   (PLIC_BASE + 0x2080 + (hart) * 0x100)
 #define PLIC_SPRIORITY(hart) (PLIC_BASE + 0x201000 + (hart) * 0x2000)

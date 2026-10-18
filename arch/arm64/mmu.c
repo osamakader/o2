@@ -6,15 +6,11 @@
 #include "param.h"
 #include "defs.h"
 #include "console.h"
+#include "board.h"
 
-// Map the qemu virt devices the kernel drives: UART, RTC, GIC, virtio.
+// Map the devices the kernel drives: UART, RTC, GIC, virtio.
 void kvmmap_devices(pagetable_t pagetable) {
-    kvmmap(pagetable, P2V(RTC0), RTC0, PGSIZE, PTE_KERN_DEVICE);
-    kvmmap(pagetable, P2V(VIRTIO_MMIO), VIRTIO_MMIO,
-           VIRTIO_MMIO_COUNT * VIRTIO_MMIO_STRIDE, PTE_KERN_DEVICE);
-    kvmmap(pagetable, P2V(UART0), UART0, PGSIZE, PTE_KERN_DEVICE);
-    kvmmap(pagetable, P2V(GICD), GICD, GICD_SIZE, PTE_KERN_DEVICE);
-    kvmmap(pagetable, P2V(GICR), GICR, GICR_SIZE, PTE_KERN_DEVICE);
+    board_map(pagetable);
 }
 
 // An all-invalid table for TTBR0 when no user page table is

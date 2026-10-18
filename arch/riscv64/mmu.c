@@ -1,5 +1,6 @@
 #include "types.h"
 #include "memlayout.h"
+#include "board.h"
 #include "vm.h"
 #include "mmu.h"
 #include "proc.h"
@@ -11,13 +12,10 @@
 
 extern char trampoline[];  // trampoline.S
 
-// Map the qemu virt devices the kernel drives: UART, PLIC, virtio.
+// Map the devices the kernel drives (UART, RTC, PLIC, virtio) and the
+// trampoline.
 void kvmmap_devices(pagetable_t pagetable) {
-    kvmmap(pagetable, P2V(VIRTIO_MMIO), VIRTIO_MMIO,
-           VIRTIO_MMIO_COUNT * VIRTIO_MMIO_STRIDE, PTE_KERN_DEVICE);
-    kvmmap(pagetable, P2V(UART0), UART0, PGSIZE, PTE_KERN_DEVICE);
-    kvmmap(pagetable, P2V(RTC0), RTC0, PGSIZE, PTE_KERN_DEVICE);
-    kvmmap(pagetable, P2V(PLIC), PLIC, PLIC_SIZE, PTE_KERN_DEVICE);
+    board_map(pagetable);
     kvmmap(pagetable, TRAMPOLINE, V2P(trampoline), PGSIZE, PTE_R | PTE_X);
 }
 

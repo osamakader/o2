@@ -5,9 +5,10 @@
 #include "console.h"
 #include "memlayout.h"
 #include "cpu.h"
+#include "board.h"
 
-#define GICD_BASE P2V(GICD)
-#define GICR_BASE P2V(GICR)
+#define GICD_BASE P2V(board.intc)
+#define GICR_BASE P2V(board.intc2)
 
 // Distributor registers
 #define GICD_CTLR       0x0000
@@ -81,7 +82,7 @@ static uint64 gicr_base(void)
 {
     int id = cpuid();
 
-    for (uint64 base = GICR_BASE; base < GICR_BASE + GICR_SIZE; base += GICR_FRAME_SIZE) {
+    for (uint64 base = GICR_BASE; base < GICR_BASE + board.intc2_size; base += GICR_FRAME_SIZE) {
         uint64 typer = *(volatile uint64 *)(base + GICR_TYPER);
         if (GICR_TYPER_AFF0(typer) == id)
             return base;

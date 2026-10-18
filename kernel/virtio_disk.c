@@ -18,6 +18,7 @@
 #include "proc.h"
 #include "intc.h"
 #include "cpu.h"
+#include "board.h"
 
 // the address of virtio mmio register r.
 #define R(r) ((volatile uint32 *)(disk.base + (r)))
@@ -62,12 +63,12 @@ static struct disk {
     int irq;
 } disk;
 
-// Find a virtio-mmio slot with a modern (version 2) block device.
-// Returns its slot number or -1.
+// Find a virtio-mmio transport (board.virtio) with a modern (version 2)
+// block device. Returns its index or -1.
 static int probe(void)
 {
-    for (int i = 0; i < VIRTIO_MMIO_COUNT; i++) {
-        disk.base = P2V(VIRTIO_MMIO + i * VIRTIO_MMIO_STRIDE);
+    for (int i = 0; i < board.nvirtio; i++) {
+        disk.base = P2V(board.virtio[i].base);
         if (*R(VIRTIO_MMIO_MAGIC_VALUE) == VIRTIO_MAGIC &&
             *R(VIRTIO_MMIO_VERSION) == 2 &&
             *R(VIRTIO_MMIO_DEVICE_ID) == VIRTIO_DEV_BLOCK)
@@ -177,7 +178,7 @@ void virtio_disk_init(void)
 
     // config space: capacity in 512-byte sectors, 64 bits
     disk.capacity = R(VIRTIO_MMIO_CONFIG)[0] | ((uint64)R(VIRTIO_MMIO_CONFIG)[1] << 32);
-    disk.irq = VIRTIO_MMIO_IRQ0 + slot;
+    disk.irq = board.virtio[slot].irq;
 
     printf("virtio_disk: slot %d, irq %d, %ld KB\n", slot, disk.irq,
            (long)(disk.capacity / 2));

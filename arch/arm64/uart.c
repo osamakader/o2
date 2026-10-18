@@ -4,6 +4,7 @@
 #include "memlayout.h"
 #include "uart.h"
 #include "console.h"
+#include "board.h"
 
 struct pl011 {
     uint64 base_address;
@@ -140,7 +141,7 @@ void uartputc_sync(int c)
 
 // Set up the console UART: qemu virt's PL011 runs off a 24MHz clock.
 void uartinit(void) {
-    pl011_setup(&sdev, P2V(UART0), 24000000);
+    pl011_setup(&sdev, P2V(board.uart), 24000000);
 }
 
 // Read one input character, or -1 if the RX FIFO is empty.
