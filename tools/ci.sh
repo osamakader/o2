@@ -161,7 +161,18 @@ else
     fail net "datagrams or pings lost"
 fi
 
-# 9. graphics: gfx draws its test picture; a screen dump must show it
+# 9. graphics: the boot animation ends with the logo on the screen; gfx
+# draws its test picture
+rm -f "$LOGS/$ARCH-splash.ppm"
+run splash 60 "init: starting sh" -D "$PWD/$LOGS/$ARCH-splash.ppm" --
+if panicked splash; then
+    fail splash "kernel panic"
+elif python3 tools/checkshot.py "$LOGS/$ARCH-splash.ppm" splash >> "$LOGS/$ARCH-splash.log" 2>&1; then
+    pass splash
+else
+    fail splash "the boot animation didn't end with the logo"
+fi
+
 rm -f "$LOGS/$ARCH-gfx.ppm"
 run gfx 60 "gfx: .*done" -D "$PWD/$LOGS/$ARCH-gfx.ppm" -- gfx
 if panicked gfx; then
