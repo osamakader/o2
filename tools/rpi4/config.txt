@@ -1,0 +1,10 @@
+# o2 on the Raspberry Pi 4 (the firmware reads this from the card's
+# first partition, with kernel8.img)
+arm_64bit=1
+kernel=kernel8.img
+# where o2 is linked to run (its Image header says the same)
+kernel_address=0x200000
+# the console: the PL011 (uart0) on GPIO 14 (TX) and 15 (RX), 115200
+# baud, rather than the mini UART: Bluetooth gets neither
+enable_uart=1
+dtoverlay=disable-bt
