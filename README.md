@@ -96,6 +96,13 @@ out). Datagram sockets are files: `socket`, `bind`, `connect`,
 pings. `ping`, `nettest` (against `tools/udpecho.py` on the host) and
 `nslookup` use them. No TCP yet.
 
+Graphics: a virtio-gpu framebuffer (2D; 1280x800 under qemu, `make
+GPU=0` leaves it out). Programs mmap the `fb` device and ioctl
+`FB_INFO` and `FB_FLUSH` (fb.h); `gfx` draws a test picture, `gfx
+bounce` an animation. qemu runs without a window here; `tools/run.sh
+-D shot.ppm` saves a screen dump through the monitor, and CI checks
+gfx's picture in one. For a window, run qemu without `-nographic`.
+
 Time comes from the RTC (PL031 on arm64, Goldfish on riscv64), read at
 boot, plus the system counter; `date` shows it. Inodes are 128 bytes
 on disk and record atime (creation only: reads don't update it), mtime
