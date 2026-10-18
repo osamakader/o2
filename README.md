@@ -59,7 +59,7 @@ On a real Pi 4 (not tried yet: expect rough edges, see below):
    (`sudo dd if=/dev/sdX of=card-backup.img bs=4M`), then
    `tools/rpi4-card.sh /dev/sdX`. It shows the card and asks you to
    type yes, unmounts it, writes `sd.img`, then formats the first
-   partition FAT32 and copies the firmware (`start4.elf`,
+   partition FAT16 and copies the firmware (`start4.elf`,
    `fixup4.dat`, the device tree, the `disable-bt` overlay, all from
    the pinned firmware release), `tools/rpi4/config.txt` and
    `kernel8.img` to it.

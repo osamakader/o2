@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 # mksd.py fs.img sd.img: an SD card image for the Raspberry Pi: an MBR
-# with a 32MB FAT partition (type 0x0c, left empty here: the firmware's
-# files go there on a real card) and the o2 file system in a partition
+# with a 32MB FAT16 partition (type 0x0e, left empty here: the
+# firmware's files go there on a real card; 32MB is too small for a
+# proper FAT32, which the firmware then fails to read kernel8.img from)
+# and the o2 file system in a partition
 # of type 0x6f, which the kernel looks for (disk.c). The image is 128MB
 # or the next power of two that holds it: qemu wants one.
 import sys
@@ -21,7 +23,7 @@ def entry(ptype, start, count):
             start.to_bytes(4, "little") + count.to_bytes(4, "little"))
 
 mbr = bytearray(SECTOR)
-mbr[446:462] = entry(0x0c, fat_start, fat_sectors)
+mbr[446:462] = entry(0x0e, fat_start, fat_sectors)
 mbr[462:478] = entry(0x6f, o2_start, o2_sectors)
 mbr[510:512] = b"\x55\xaa"
 

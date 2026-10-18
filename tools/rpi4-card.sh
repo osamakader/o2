@@ -2,7 +2,7 @@
 # rpi4-card.sh /dev/sdX: put o2 on an SD card for a Raspberry Pi 4.
 # THIS ERASES THE CARD. It writes build/arm64-rpi4/sd.img (an MBR, an
 # empty first partition, o2's file system in the second), then makes
-# the first partition FAT32 with what the firmware needs: its files
+# the first partition FAT16 with what the firmware needs: its files
 # (from the raspberrypi/firmware release the build's device tree comes
 # from), tools/rpi4/config.txt and kernel8.img. Needs sudo, curl and
 # mkfs.vfat (dosfstools).
@@ -42,7 +42,7 @@ case "$DEV" in
 *[0-9]) P1=${DEV}p1 ;;   # /dev/mmcblk0p1, /dev/nvme0n1p1
 *)      P1=${DEV}1 ;;
 esac
-sudo mkfs.vfat -F 32 -n O2BOOT "$P1"
+sudo mkfs.vfat -F 16 -n O2BOOT "$P1"
 
 MNT=$(mktemp -d)
 sudo mount "$P1" "$MNT"
