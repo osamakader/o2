@@ -12,7 +12,7 @@ Minimal xv6-like kernel for arm64 and riscv64.
     make ARM64_ASID=1 qemu  # arm64: per-process ASIDs (see Isolation)
 
 The kernel boots into xv6's shell; programs live in `/` (`ls`, `cat`,
-`echo`, `grep`, `wc`, `mkdir`, `rm`, `ln`, `kill`, `ps`, `pwd`, `dmesg`), plus
+`echo`, `grep`, `wc`, `mkdir`, `rm`, `ln`, `kill [-sig]`, `ps`, `pwd`, `dmesg`), plus
 xv6's `usertests`, `grind` and `stressfs` (`user/xv6`) and o2's own
 tests, `o2tests`.
 ^P on the console prints the kernel's process list.
@@ -53,6 +53,26 @@ its address space shrinks, is replaced by exec, or is freed. QEMU's TLB
 isn't ASID-tagged and flushes on ASID changes itself, which makes the
 arm64 ASID path slower under QEMU, so by default arm64 runs everything
 under ASID 0 and flushes the TLB on each return to user mode instead.
+
+## Beyond xv6
+
+System calls xv6 doesn't have: `getppid`, `dup2`, `lseek` (not past
+the end of a file, which xv6's write semantics rule out), `waitpid`
+(with `WNOHANG`), `kill(pid, sig)` and `signal`. Files starting with
+`#!interpreter [arg]` are run by their interpreter.
+
+Signals use Linux's numbers. Most terminate by default, SIGCHLD (sent
+to the parent when a child exits) is ignored, and SIGKILL can't be
+caught. A handler runs on the process's own stack, in a frame holding
+the interrupted registers and FP state, and returns through
+`sigreturn`. Pending signals interrupt sleeping system calls, which
+return -1. ^C on the console sends SIGINT to every user process but
+init, since there are no process groups.
+
+The shell runs scripts (`sh file`, or `#!/sh`), skips `#` comments,
+looks commands up in `PATH` (`PATH=/:/bin`; default `/`), keeps a
+`history` (`!!`, `!n`), and survives ^C, which interrupts the command
+it is running.
 
 ## Floating point
 
