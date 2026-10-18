@@ -27,6 +27,15 @@ main(void)
   if(stat("fb", &st) < 0)
     mknod("fb", FB, 0);
 
+  // the boot animation, if there is a screen to show it on
+  char *splash[] = { "splash", 0 };
+  if((pid = fork()) == 0){
+    exec("splash", splash);
+    exit(0);
+  }
+  if(pid > 0)
+    waitpid(pid, 0, 0);
+
   for(;;){
     printf("init: starting sh\n");
     pid = fork();
