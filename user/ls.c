@@ -3,6 +3,7 @@
 #include "user.h"
 #include "fs.h"
 #include "fcntl.h"
+#include "time.h"
 
 char*
 fmtname(char *path)
@@ -22,6 +23,17 @@ fmtname(char *path)
   memset(buf+strlen(p), ' ', DIRSIZ-strlen(p));
   buf[DIRSIZ] = 0;
   return buf;
+}
+
+// name, type, inode number, size, and when it was last modified (UTC)
+void
+printstat(char *name, struct stat *st)
+{
+  struct tm tm;
+
+  gmtime(st->mtime, &tm);
+  printf("%s %d %3d %6d %d-%02d-%02d %02d:%02d\n", name, st->type, st->ino,
+         (int)st->size, tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min);
 }
 
 void
@@ -46,7 +58,7 @@ ls(char *path)
   switch(st.type){
   case T_DEVICE:
   case T_FILE:
-    printf("%s %d %d %d\n", fmtname(path), st.type, st.ino, (int) st.size);
+    printstat(fmtname(path), &st);
     break;
 
   case T_DIR:
@@ -66,7 +78,7 @@ ls(char *path)
         printf("ls: cannot stat %s\n", buf);
         continue;
       }
-      printf("%s %d %d %d\n", fmtname(buf), st.type, st.ino, (int) st.size);
+      printstat(fmtname(buf), &st);
     }
     break;
   }
