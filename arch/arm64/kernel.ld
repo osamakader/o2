@@ -18,10 +18,12 @@ SECTIONS
 {
   /*
    * The kernel runs in the high half at physical + KVA_OFFSET but is
-   * loaded at 0x40200000: 2MB into RAM, leaving room for the device
-   * tree, which qemu puts at the start of RAM if it fits below.
+   * loaded at KERNEL_LOAD (from the Makefile, as in platform.h): on
+   * qemu virt 0x40200000, 2MB into RAM, leaving room for the device
+   * tree, which qemu puts at the start of RAM if it fits below; on the
+   * Raspberry Pi 0x200000.
    */
-  . = 0x40200000 + KVA_OFFSET;
+  . = KERNEL_LOAD + KVA_OFFSET;
   _entry_phys = _entry - KVA_OFFSET;
 
   .text : AT(ADDR(.text) - KVA_OFFSET) {
@@ -79,4 +81,5 @@ SECTIONS
   }
 
   PROVIDE(end = .);
+  __image_size = . - (KERNEL_LOAD + KVA_OFFSET);
 }

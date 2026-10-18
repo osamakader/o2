@@ -1,6 +1,50 @@
 #ifndef PLATFORM_H
 #define PLATFORM_H
 
+#ifdef PLATFORM_RPI4
+
+// Raspberry Pi 4 (BCM2711; qemu -machine raspi4b), in the "low
+// peripheral" layout the firmware sets up: the peripherals are at
+// 0xfc000000-0xffffffff, the GIC-400 at 0xff840000. Plain constants
+// only: included from assembly via memlayout.h. The device tree says
+// the same; these are for booting without one.
+
+#include "param.h"
+
+#define UART0     0xfe201000   // PL011 (uart0)
+#define UART0_IRQ (32 + 121)   // SPI 121
+#define RTC0      0            // no real-time clock
+
+// GIC-400 (GICv2): distributor and CPU interface
+#define GICD      0xff841000
+#define GICD_SIZE 0x1000
+#define GICC      0xff842000
+#define GICC_SIZE 0x2000
+
+#define VIRTIO_MMIO        0
+#define VIRTIO_MMIO_STRIDE 0
+#define VIRTIO_MMIO_COUNT  0
+#define VIRTIO_MMIO_IRQ0   0
+
+#define UART_COMPAT "arm,pl011"
+#define RTC_COMPAT  "none"
+#define INTC_COMPAT "arm,gic-400"
+#define INTC_BASE   GICD
+#define INTC_SIZE   GICD_SIZE
+#define INTC2_BASE  GICC
+#define INTC2_SIZE  GICC_SIZE
+
+// RAM starts at 0; the firmware loads the kernel at kernel_address
+// (config.txt), qemu at the ELF file's address.
+#define KERNBASE    0
+#define KERNEL_LOAD 0x200000
+
+// the boot page table: 1GB of RAM, and the peripherals' 1GB block
+#define BOOT_RAM_GB    1
+#define BOOT_DEVICE_GB 3
+
+#else
+
 // qemu -machine virt (arm64) physical layout. Plain constants only:
 // included from assembly via memlayout.h.
 
@@ -41,10 +85,14 @@
 #define INTC2_SIZE  GICR_SIZE
 
 // RAM starts here; qemu puts the device tree here and the kernel at
-// 0x40200000 (kernel.ld).
-#define KERNBASE 0x40000000
+// 0x40200000 (KERNEL_LOAD, given to kernel.ld).
+#define KERNBASE    0x40000000
+#define KERNEL_LOAD 0x40200000
 
-// the boot page table maps all of RAM (MAX_RAM)
-#define BOOT_RAM_GB 16
+// the boot page table: the devices' 1GB, and all of RAM (MAX_RAM)
+#define BOOT_RAM_GB    16
+#define BOOT_DEVICE_GB 0
+
+#endif
 
 #endif

@@ -10,6 +10,19 @@
 .section .text.boot, "ax"
 .global _entry
 _entry:
+        // An arm64 Linux Image header, so that boot loaders (the Pi
+        // firmware, qemu's raspi4b) load the raw image (kernel8.img) at
+        // KERNEL_LOAD and start it as they start Linux: in EL2, with the
+        // device tree in x0, other CPUs waiting in a spin table.
+        b 1f                            // code0
+        .long 0                         // code1
+        .quad KERNEL_LOAD - KERNBASE    // text_offset, from the start of RAM
+        .quad __image_size              // memory the image takes, with BSS
+        .quad 0x2                       // flags: little-endian, 4KB pages
+        .quad 0, 0, 0
+        .ascii "ARM\x64"                // magic
+        .long 0
+1:
         // mask interrupts
         msr daifset, #0xf
 
@@ -138,26 +151,29 @@ mmu_on:
         ret
 
 // Coarse boot page table, loaded into both TTBR0 and TTBR1 until
-// kvminithart() installs the real kernel page table. The same first
-// The devices and all of RAM (up to MAX_RAM) appear at the identity
-// address (low half, needed while the PC is still physical) and at
-// P2V() (high half).
+// kvminithart() installs the real kernel page table: 1GB blocks for
+// the devices (BOOT_DEVICE_GB) and the first BOOT_RAM_GB of RAM, at
+// their identity address (low half, needed while the PC is still
+// physical) and at P2V() (high half).
 #define BOOT_HIGH_IDX ((KVA_OFFSET >> 30) & 0x1ff)
+#define RAM_GB0 (KERNBASE >> 30)
 
 .section .data
 .balign 4096
 boot_pagetable:
-        .quad 0x00000000 | BOOT_DEVICE  // [0, 1GB): UART, GIC
-        .set gb, 0                      // [1GB, 1GB + MAX_RAM): RAM
-        .rept BOOT_RAM_GB
-        .quad KERNBASE + (gb << 30) | BOOT_NORMAL
-        .set gb, gb + 1
+        .set i, 0
+        .rept 512
+        .if i >= BOOT_HIGH_IDX
+        .set gb, i - BOOT_HIGH_IDX
+        .else
+        .set gb, i
+        .endif
+        .if gb == BOOT_DEVICE_GB
+        .quad (gb << 30) | BOOT_DEVICE
+        .elseif gb >= RAM_GB0 && gb < RAM_GB0 + BOOT_RAM_GB
+        .quad (gb << 30) | BOOT_NORMAL
+        .else
+        .quad 0
+        .endif
+        .set i, i + 1
         .endr
-        .fill BOOT_HIGH_IDX - 1 - BOOT_RAM_GB, 8, 0
-        .quad 0x00000000 | BOOT_DEVICE  // P2V() of the same
-        .set gb, 0
-        .rept BOOT_RAM_GB
-        .quad KERNBASE + (gb << 30) | BOOT_NORMAL
-        .set gb, gb + 1
-        .endr
-        .fill 512 - BOOT_HIGH_IDX - 1 - BOOT_RAM_GB, 8, 0

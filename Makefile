@@ -9,15 +9,22 @@ SELFTEST ?= 0
 # flush-per-return scheme is faster; on hardware ASIDs avoid flushing.
 ARM64_ASID ?= 0
 
-# Everything is built under build/$(ARCH), plus -selftest / -asid for
-# those options, so both arches and all settings can be built from the
-# same tree without cleaning in between.
+# arm64 machine: virt (qemu -machine virt) or rpi4 (Raspberry Pi 4;
+# qemu -machine raspi4b)
+PLATFORM ?= virt
+
+# Everything is built under build/$(ARCH), plus -selftest / -asid /
+# -rpi4 for those options, so both arches and all settings can be built
+# from the same tree without cleaning in between.
 B = build/$(ARCH)
 ifeq ($(SELFTEST), 1)
 B := $(B)-selftest
 endif
 ifeq ($(ARCH)$(ARM64_ASID), arm641)
 B := $(B)-asid
+endif
+ifeq ($(ARCH)$(PLATFORM), arm64rpi4)
+B := $(B)-rpi4
 endif
 KERNEL = $(B)/kernel.elf
 # file system image for the virtio block device, made by mkfs
@@ -108,7 +115,20 @@ AOBJS = \
   timer.o \
   rtc.o \
 
+ifeq ($(PLATFORM), rpi4)
+CFLAGS += -DPLATFORM_RPI4
+# where the kernel is loaded (platform.h's KERNEL_LOAD)
+KERNEL_LOAD = 0x200000
+# qemu doesn't make a device tree for the Pi: the firmware's (GPL, from
+# Linux, so fetched rather than kept here)
+DTB = $(B)/bcm2711-rpi-4-b.dtb
+QEMUOPTS = -machine raspi4b -dtb $(DTB)
+# the raw image, as the Pi firmware loads it
+IMAGE = $(B)/kernel8.img
+else
+KERNEL_LOAD = 0x40200000
 QEMUOPTS = -machine virt,gic-version=3 -cpu cortex-a57
+endif
 endif
 
 ifeq ($(SELFTEST), 1)
@@ -149,6 +169,7 @@ CFLAGS += -fno-pie -nopie
 endif
 
 LDFLAGS = -z max-page-size=4096
+KLDFLAGS = $(LDFLAGS) --defsym=KERNEL_LOAD=$(or $(KERNEL_LOAD),0)
 
 # Objects depend on $(B)/flags, which is rewritten whenever the compiler
 # flags change, so a flag change rebuilds everything.
@@ -158,7 +179,7 @@ $(shell mkdir -p $(B))
 $(file > $(B)/flags,$(FLAGS))
 endif
 
-all: $(KERNEL) $(FSIMG)
+all: $(KERNEL) $(IMAGE) $(FSIMG) $(DTB)
 
 # The kernel carries its own symbol table, for backtraces. Link once
 # with an empty table, generate ksyms.S from that kernel's text
@@ -178,7 +199,7 @@ $(B)/ksyms0.S:
 	printf '.section .rodata\n.balign 8\n.global ksyms, nksyms\nksyms:\nnksyms: .quad 0\n' > $@
 
 $(B)/kernel.nosyms.elf: $(OBJS) $(B)/ksyms0.o arch/$(ARCH)/kernel.ld
-	$(LD) $(LDFLAGS) -T arch/$(ARCH)/kernel.ld -o $@ $(OBJS) $(B)/ksyms0.o
+	$(LD) $(KLDFLAGS) -T arch/$(ARCH)/kernel.ld -o $@ $(OBJS) $(B)/ksyms0.o
 
 $(B)/ksyms.S: $(B)/kernel.nosyms.elf
 	$(call KSYMS_GEN,$<) > $@
@@ -187,7 +208,7 @@ $(B)/ksyms0.o $(B)/ksyms.o: $(B)/%.o: $(B)/%.S $(B)/flags
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 $(KERNEL): $(OBJS) $(B)/ksyms.o arch/$(ARCH)/kernel.ld
-	$(LD) $(LDFLAGS) -T arch/$(ARCH)/kernel.ld -o $@ $(OBJS) $(B)/ksyms.o
+	$(LD) $(KLDFLAGS) -T arch/$(ARCH)/kernel.ld -o $@ $(OBJS) $(B)/ksyms.o
 	@$(NM) -n $(B)/kernel.nosyms.elf | awk '$$2 ~ /^[tT]$$/' > $(B)/text0.sym
 	@$(NM) -n $@ | awk '$$2 ~ /^[tT]$$/' > $(B)/text1.sym
 	@cmp -s $(B)/text0.sym $(B)/text1.sym || { echo "ksyms: text moved between links"; rm -f $@; exit 1; }
@@ -283,6 +304,18 @@ $(B)/README: README.md
 $(FSIMG): $(MKFS) $(B)/README $(UPROGS)
 	$(MKFS) $@ $(B)/README $(UPROGS) > /dev/null
 
+ifeq ($(ARCH)$(PLATFORM), arm64rpi4)
+# raspi4b has 2GB and 4 CPUs, and no virtio devices. Given the raw
+# image (a Linux Image to qemu), qemu starts it as the firmware does.
+QEMUOPTS += -kernel $(IMAGE) -nographic
+
+$(IMAGE): $(KERNEL)
+	$(OBJCOPY) -O binary $< $@
+
+$(DTB):
+	@mkdir -p $(dir $@)
+	curl -sSfL -o $@ https://github.com/raspberrypi/firmware/raw/1.20260915/boot/bcm2711-rpi-4-b.dtb
+else
 QEMUOPTS += -kernel $(KERNEL) -m $(MEM) -smp $(CPUS) -nographic
 # a virtio network card on qemu's user-mode network (NET=0: none); not
 # -nic, whose PCI card wants a boot ROM that may not be installed
@@ -299,12 +332,13 @@ endif
 QEMUOPTS += -global virtio-mmio.force-legacy=false
 QEMUOPTS += -drive file=$(FSIMG),if=none,format=raw,id=x0
 QEMUOPTS += -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0
+endif
 
-qemu: $(KERNEL) $(FSIMG)
+qemu: $(KERNEL) $(IMAGE) $(FSIMG) $(DTB)
 	$(QEMU) $(QEMUOPTS)
 
 # the same with a window showing the framebuffer; the console stays here
-qemu-gui: $(KERNEL) $(FSIMG)
+qemu-gui: $(KERNEL) $(IMAGE) $(FSIMG) $(DTB)
 	$(QEMU) $(subst -nographic,-serial mon:stdio,$(QEMUOPTS))
 
 # the QEMU command line and disk image, for tools/run.sh
