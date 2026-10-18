@@ -299,6 +299,10 @@ QEMUOPTS += -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0
 qemu: $(KERNEL) $(FSIMG)
 	$(QEMU) $(QEMUOPTS)
 
+# the same with a window showing the framebuffer; the console stays here
+qemu-gui: $(KERNEL) $(FSIMG)
+	$(QEMU) $(subst -nographic,-serial mon:stdio,$(QEMUOPTS))
+
 # the QEMU command line and disk image, for tools/run.sh
 print-qemu:
 	@echo $(QEMU) $(QEMUOPTS)

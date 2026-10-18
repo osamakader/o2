@@ -10,6 +10,7 @@ Minimal xv6-like kernel for arm64 and riscv64.
     make CPUS=8 qemu     # number of CPUs (default 3)
     make SELFTEST=1 qemu # with the kernel self-tests at boot
     make ARM64_ASID=1 qemu  # arm64: per-process ASIDs (see Isolation)
+    make qemu-gui        # with a window showing the framebuffer
 
 The kernel boots into xv6's shell; programs live in `/` (`ls`, `cat`,
 `echo`, `grep`, `wc`, `mkdir`, `rm`, `ln`, `kill [-sig]`, `ps`, `pwd`, `dmesg`, `date`), plus
@@ -101,7 +102,7 @@ GPU=0` leaves it out). Programs mmap the `fb` device and ioctl
 `FB_INFO` and `FB_FLUSH` (fb.h); `gfx` draws a test picture, `gfx
 bounce` an animation. qemu runs without a window here; `tools/run.sh
 -D shot.ppm` saves a screen dump through the monitor, and CI checks
-gfx's picture in one. For a window, run qemu without `-nographic`.
+gfx's picture in one. `make qemu-gui` opens a window showing it.
 
 Time comes from the RTC (PL031 on arm64, Goldfish on riscv64), read at
 boot, plus the system counter; `date` shows it. Inodes are 128 bytes
