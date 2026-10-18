@@ -62,6 +62,11 @@ the end of a file, which xv6's write semantics rule out), `waitpid`
 `ioctl` (the console's raw mode). Files starting with
 `#!interpreter [arg]` are run by their interpreter.
 
+fork() shares memory copy-on-write: writable pages become read-only in
+both processes, marked by a software PTE bit, and the first write to
+one, by the process or by the kernel for it, copies it (pages are
+reference counted; the last writer keeps the original).
+
 Time comes from the RTC (PL031 on arm64, Goldfish on riscv64), read at
 boot, plus the system counter; `date` shows it. Inodes are 128 bytes
 on disk and record atime (creation only: reads don't update it), mtime
