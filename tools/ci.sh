@@ -4,8 +4,9 @@
 #   tools/ci.sh arm64|riscv64 [quick]
 #
 # Boots the self-test build, then runs o2tests, xv6's usertests (-q with
-# quick), stressfs, ^C and line editing checks and a timed grind in the
-# shell; on arm64 also o2tests with ARM64_ASID=1. Exits non-zero if anything fails or the
+# quick), stressfs, ^C, line editing and network checks and a timed
+# grind in the shell; on arm64 also o2tests with ARM64_ASID=1. The
+# network check needs python3 on the host. Exits non-zero if anything fails or the
 # kernel panics. Logs are kept in build/ci/<arch>-<step>.log.
 
 ARCH=${1:?usage: tools/ci.sh arm64|riscv64 [quick]}
@@ -144,7 +145,23 @@ else
     fail lineedit "history, editing or completion didn't work"
 fi
 
-# 8. grind runs until stopped: no errors or panic within the time limit
+# 8. the network: UDP to an echo server on the host (10.0.2.2 in qemu's
+# user-mode network is the host's loopback), and ping
+python3 tools/udpecho.py > "$LOGS/$ARCH-udpecho.port" &
+echopid=$!
+sleep 1
+port=$(cat "$LOGS/$ARCH-udpecho.port")
+run net 120 "received$" -- "nettest 10.0.2.2 $port 50" "ping -c 3 10.0.2.2"
+kill $echopid 2>/dev/null
+if panicked net; then
+    fail net "kernel panic"
+elif has net "nettest: 50 of 50 echoed" && has net "3 sent, 3 received"; then
+    pass net
+else
+    fail net "datagrams or pings lost"
+fi
+
+# 9. grind runs until stopped: no errors or panic within the time limit
 run grind $((GRIND + DELAY)) "^grind:" -- grind
 if panicked grind; then
     fail grind "kernel panic"
