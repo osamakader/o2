@@ -1,13 +1,19 @@
 // Physical memory allocator, for user processes,
 // kernel stacks, page-table pages,
-// and pipe buffers. 
+// and pipe buffers.
 // Allocates whole 4096-byte pages.
+//
+// Each CPU has its own free list and lock, so CPUs allocating at the
+// same time don't contend; a CPU whose list is empty takes a batch of
+// pages from another's. Reference counts are updated atomically.
 
+#include "param.h"
 #include "memlayout.h"
 #include "defs.h"
 #include "console.h"
 #include "spinlock.h"
 #include "board.h"
+#include "cpu.h"
 
 extern char end[]; // first address after kernel.
                    // defined by kernel.ld.
@@ -19,14 +25,17 @@ struct run {
 struct {
   struct spinlock lock;
   struct run *freelist;
-  // references to each page of RAM: page tables mapping it (pages
-  // shared copy-on-write after fork() have several), or 1 for other
-  // uses. Under lock. In the first pages after the kernel.
-  ushort *ref;
-} kmem;
+} kmem[NCPU];
 
-#define PAGEREF(pa) kmem.ref[(V2P(pa) - KERNBASE) / PGSIZE]
+// References to each page of RAM: page tables mapping it (pages shared
+// copy-on-write after fork() have several), or 1 for other uses.
+// Atomic. In the first pages after the kernel.
+static ushort *ref;
 
+#define PAGEREF(pa) ref[(V2P(pa) - KERNBASE) / PGSIZE]
+
+// pages a CPU takes from another's list at a time
+#define STEAL 64
 
 // Drop a reference to the page of physical memory pointed at by pa,
 // which normally should have been returned by a call to kalloc(), and
@@ -39,12 +48,10 @@ void kfree(void *pa)
   if(((uint64)pa % PGSIZE) != 0 || (char*)pa < end || (uint64)pa >= P2V(board.ram_end))
     panic("kfree");
 
-  acquire(&kmem.lock);
-  if(PAGEREF(pa) == 0)
+  int old = __atomic_fetch_sub(&PAGEREF(pa), 1, __ATOMIC_ACQ_REL);
+  if(old == 0)
     panic("kfree: free page");
-  int last = --PAGEREF(pa) == 0;
-  release(&kmem.lock);
-  if(!last)
+  if(old > 1)
     return;
 
   // Fill with junk to catch dangling refs.
@@ -52,10 +59,13 @@ void kfree(void *pa)
 
   r = (struct run*)pa;
 
-  acquire(&kmem.lock);
-  r->next = kmem.freelist;
-  kmem.freelist = r;
-  release(&kmem.lock);
+  push_off();
+  int c = cpuid();
+  acquire(&kmem[c].lock);
+  r->next = kmem[c].freelist;
+  kmem[c].freelist = r;
+  release(&kmem[c].lock);
+  pop_off();
 }
 
 // Give the pages in [pa_start, pa_end) (kernel addresses) to the
@@ -72,17 +82,40 @@ void freerange(void *pa_start, void *pa_end)
   }
 }
 
-// Give all of RAM after the kernel to the allocator, but for the
-// reference counts, which go first.
+// Give all of RAM after the kernel to the allocator (to this CPU's
+// list; the others take from it), but for the reference counts, which
+// go first.
 void kinit()
 {
-  initlock(&kmem.lock, "kmem");
+  for(int i = 0; i < NCPU; i++)
+    initlock(&kmem[i].lock, "kmem");
   uint64 npages = (board.ram_end - KERNBASE) / PGSIZE;
-  kmem.ref = (ushort*)PGROUNDUP((uint64)end);
-  memset(kmem.ref, 0, npages * sizeof(ushort));
-  freerange(kmem.ref + npages, (void*)P2V(board.ram_end));
+  ref = (ushort*)PGROUNDUP((uint64)end);
+  memset(ref, 0, npages * sizeof(ushort));
+  freerange(ref + npages, (void*)P2V(board.ram_end));
 }
 
+// Take up to STEAL pages from another CPU's list; returns them as a
+// list, or 0. Holds one lock at a time: two CPUs stealing from each
+// other can't deadlock.
+static struct run *steal(int c)
+{
+  for(int i = 1; i < NCPU; i++){
+    int v = (c + i) % NCPU;
+    acquire(&kmem[v].lock);
+    struct run *first = kmem[v].freelist, *last = first;
+    if(first){
+      for(int n = 1; n < STEAL && last->next; n++)
+        last = last->next;
+      kmem[v].freelist = last->next;
+      last->next = 0;
+    }
+    release(&kmem[v].lock);
+    if(first)
+      return first;
+  }
+  return 0;
+}
 
 // Allocate one 4096-byte page of physical memory.
 // Returns its kernel virtual address; V2P() gives the physical one.
@@ -91,16 +124,30 @@ void * kalloc(void)
 {
   struct run *r;
 
-  acquire(&kmem.lock);
-  r = kmem.freelist;
-  if(r){
-    kmem.freelist = r->next;
-    PAGEREF(r) = 1;
-  }
-  release(&kmem.lock);
-
+  push_off();
+  int c = cpuid();
+  acquire(&kmem[c].lock);
+  r = kmem[c].freelist;
   if(r)
+    kmem[c].freelist = r->next;
+  release(&kmem[c].lock);
+
+  if(r == 0 && (r = steal(c)) != 0){
+    // keep the rest of the batch
+    acquire(&kmem[c].lock);
+    struct run *last = r;
+    while(last->next)
+      last = last->next;
+    last->next = kmem[c].freelist;
+    kmem[c].freelist = r->next;
+    release(&kmem[c].lock);
+  }
+  pop_off();
+
+  if(r){
+    __atomic_store_n(&PAGEREF(r), 1, __ATOMIC_RELEASE);
     memset((char*)r, 5, PGSIZE); // fill with junk
+  }
   return (void*)r;
 }
 
@@ -108,20 +155,15 @@ void * kalloc(void)
 // it).
 void kref(void *pa)
 {
-  acquire(&kmem.lock);
-  if(PAGEREF(pa) == 0 || PAGEREF(pa) == 0xffff)
+  int old = __atomic_fetch_add(&PAGEREF(pa), 1, __ATOMIC_ACQ_REL);
+  if(old == 0 || old == 0xffff)
     panic("kref");
-  PAGEREF(pa)++;
-  release(&kmem.lock);
 }
 
 // How many references to the allocated page pa?
 int krefs(void *pa)
 {
-  acquire(&kmem.lock);
-  int n = PAGEREF(pa);
-  release(&kmem.lock);
-  return n;
+  return __atomic_load_n(&PAGEREF(pa), __ATOMIC_ACQUIRE);
 }
 
 // Number of free pages, for leak checks.
@@ -129,9 +171,11 @@ uint64 kfreepages(void)
 {
   uint64 n = 0;
 
-  acquire(&kmem.lock);
-  for(struct run *r = kmem.freelist; r; r = r->next)
-    n++;
-  release(&kmem.lock);
+  for(int i = 0; i < NCPU; i++){
+    acquire(&kmem[i].lock);
+    for(struct run *r = kmem[i].freelist; r; r = r->next)
+      n++;
+    release(&kmem[i].lock);
+  }
   return n;
 }
