@@ -120,13 +120,16 @@ static void vma_unmap_range(pagetable_t pagetable, uint64 a, uint64 b) {
 }
 
 // Map a device's pages (devsw[].mmap()) into [start, end) of new
-// mapping v, sharing them: each mapping holds a reference. Returns 0,
-// or -1 if the device has fewer pages.
+// mapping v, sharing them: each mapping holds a reference (if they are
+// RAM kalloc() manages; kref() ignores other memory). Returns 0, or -1
+// if the device has fewer pages.
 static int vma_load_device(struct proc *p, struct vma *v) {
     uint64 (*page)(uint64) = devsw[v->file->major].mmap;
+    uint64 attrs = devsw[v->file->major].uncached ? PTE_USER_NC(prot2perm(v->prot))
+                                                  : PTE_USER(prot2perm(v->prot));
     for (uint64 va = v->start; va < v->end; va += PGSIZE) {
         uint64 pa = page((v->off + va - v->start) / PGSIZE);
-        if (pa == 0 || mappages(p->pagetable, va, PGSIZE, pa, PTE_USER(prot2perm(v->prot))) != 0) {
+        if (pa == 0 || mappages(p->pagetable, va, PGSIZE, pa, attrs) != 0) {
             vma_unmap_range(p->pagetable, v->start, va);
             return -1;
         }

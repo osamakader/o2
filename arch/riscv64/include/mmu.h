@@ -44,6 +44,8 @@
 #define PTE_USER(perm) (PTE_U | PTE_R | \
                         (((perm) & PERM_W) ? PTE_W : 0) | \
                         (((perm) & PERM_X) ? PTE_X : 0))
+// uncached, for memory a device reads: the same here (qemu)
+#define PTE_USER_NC(perm) PTE_USER(perm)
 #define PTE_IS_USER(pte)    (((pte) & PTE_U) != 0)
 #define PTE_IS_USER_W(pte)  (((pte) & (PTE_U | PTE_W)) == (PTE_U | PTE_W))
 #define PTE_CLEAR_USER(pte) ((pte) & ~PTE_U)

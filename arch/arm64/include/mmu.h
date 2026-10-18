@@ -29,8 +29,10 @@
 // MAIR_EL1 attribute slots
 #define MT_DEVICE_nGnRE 0
 #define MT_NORMAL       1
+#define MT_NORMAL_NC    2   // memory a device reads, as a framebuffer
 #define MAIR_VALUE      ((_UL(0x04) << (8 * MT_DEVICE_nGnRE)) | \
-                         (_UL(0xff) << (8 * MT_NORMAL)))
+                         (_UL(0xff) << (8 * MT_NORMAL)) | \
+                         (_UL(0x44) << (8 * MT_NORMAL_NC)))
 
 // TCR_EL1: 39-bit VA in both halves, 4KB granule, inner-shareable
 // write-back cacheable table walks. TTBR0 holds the low half (boot
@@ -106,6 +108,9 @@ void uvmswitch(uint64 *pagetable, int asid);
 #define PTE_USER(perm) (PTE_ATTRIDX(MT_NORMAL) | PTE_SH_INNER | PTE_PXN | PTE_NG | \
                         (((perm) & PERM_W) ? PTE_AP_RW_USER : PTE_AP_RO_USER) | \
                         (((perm) & PERM_X) ? 0 : PTE_UXN))
+
+// the same, uncached, for memory a device reads behind the caches
+#define PTE_USER_NC(perm) ((PTE_USER(perm) & ~PTE_ATTRIDX(7)) | PTE_ATTRIDX(MT_NORMAL_NC))
 
 // is this leaf accessible / writable from EL0? (AP[2:1] = x1 / 01)
 #define PTE_AP_MASK      (_UL(3) << 6)

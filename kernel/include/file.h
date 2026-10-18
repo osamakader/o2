@@ -44,6 +44,7 @@ struct devsw {
     int (*ioctl)(int req, uint64 arg);   // may be 0
     uint64 (*mmap)(uint64 pgoff);        // physical address of page pgoff
                                          // to map (or 0); may be 0
+    int uncached;                        // map those uncached
 };
 
 extern struct devsw devsw[];

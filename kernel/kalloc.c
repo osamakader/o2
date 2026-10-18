@@ -45,7 +45,9 @@ void kfree(void *pa)
 {
   struct run *r;
 
-  if(((uint64)pa % PGSIZE) != 0 || (char*)pa < end || (uint64)pa >= P2V(board.ram_end))
+  if((uint64)pa >= P2V(board.ram_end))
+    return;   // not RAM the allocator manages: a device's (mmap)
+  if(((uint64)pa % PGSIZE) != 0 || (char*)pa < end)
     panic("kfree");
 
   int old = __atomic_fetch_sub(&PAGEREF(pa), 1, __ATOMIC_ACQ_REL);
@@ -166,6 +168,8 @@ void * kalloc(void)
 // it).
 void kref(void *pa)
 {
+  if((uint64)pa >= P2V(board.ram_end))
+    return;   // a device's (see kfree())
   int old = __atomic_fetch_add(&PAGEREF(pa), 1, __ATOMIC_ACQ_REL);
   if(old == 0 || old == 0xffff)
     panic("kref");
@@ -174,6 +178,8 @@ void kref(void *pa)
 // How many references to the allocated page pa?
 int krefs(void *pa)
 {
+  if((uint64)pa >= P2V(board.ram_end))
+    return 1;
   return __atomic_load_n(&PAGEREF(pa), __ATOMIC_ACQUIRE);
 }
 
