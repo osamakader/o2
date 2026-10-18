@@ -106,8 +106,9 @@ groups.
 The shell runs scripts (`sh file`, or `#!/sh`), skips `#` comments,
 looks commands up in `PATH` (`PATH=/:/bin`; default `/`), keeps a
 `history` (`!!`, `!n`, or the up and down keys), edits the command
-line (left/right, home/end, backspace, delete, ^U), and survives ^C,
-which interrupts the command it is running.
+line (left/right, home/end, backspace, delete, ^U), completes command
+and file names with tab, and survives ^C, which interrupts the command
+it is running.
 
 ## Scalability
 
