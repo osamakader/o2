@@ -19,5 +19,6 @@ int fdt_find_compatible(int node, const char *compat);
 uint32 fdt_cells(int node, const char *name, uint32 def);
 int fdt_reg(int node, int i, uint64 *addr, uint64 *size);
 uint32 fdt32(const void *p);
+int fdt_okay(int node);
 
 #endif

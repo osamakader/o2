@@ -168,13 +168,15 @@ static int has_string(const char *list, int len, const char *s) {
     return 0;
 }
 
-// The next node after node (-1: from the start) that is compatible
-// with compat, or -1.
+int fdt_okay(int node);
+
+// The next enabled node after node (-1: from the start) that is
+// compatible with compat, or -1.
 int fdt_find_compatible(int node, const char *compat) {
     while ((node = fdt_next_node(node, 0)) >= 0) {
         int len;
         const char *c = fdt_getprop(node, "compatible", &len);
-        if (c && has_string(c, len, compat))
+        if (c && has_string(c, len, compat) && fdt_okay(node))
             return node;
     }
     return -1;
@@ -191,8 +193,44 @@ static uint64 cells(const char *p, uint32 n) {
     return n == 2 ? fdt64(p) : n == 1 ? fdt32(p) : 0;
 }
 
+// Translate addr, in the address space of node's children, to the CPU's,
+// through the "ranges" of node and its ancestors (a bus's addresses
+// often differ from the CPU's, as on the Raspberry Pi: 0x7e000000 for
+// 0xfe000000). Returns -1 if some range doesn't cover it.
+static uint64 translate(int node, uint64 addr) {
+    for (; node >= 0; node = fdt_parent(node)) {
+        int len, parent = fdt_parent(node);
+        if (parent < 0)
+            return addr;   // the root: the CPU's addresses
+        const char *r = fdt_getprop(node, "ranges", &len);
+        if (r == 0 || len == 0)
+            continue;      // none or empty: the same addresses
+        uint32 cac = fdt_cells(node, "#address-cells", 2);
+        uint32 pac = fdt_cells(parent, "#address-cells", 2);
+        uint32 sc = fdt_cells(node, "#size-cells", 1);
+        uint32 entry = 4 * (cac + pac + sc);
+        if (cac > 2 || pac > 2 || sc > 2)
+            return -1;
+        int found = 0;
+        for (int off = 0; off + entry <= len; off += entry) {
+            uint64 child = cells(r + off, cac);
+            uint64 par = cells(r + off + 4 * cac, pac);
+            uint64 size = cells(r + off + 4 * (cac + pac), sc);
+            if (addr >= child && addr - child < size) {
+                addr = par + (addr - child);
+                found = 1;
+                break;
+            }
+        }
+        if (!found)
+            return -1;
+    }
+    return addr;
+}
+
 // The i-th (address, size) pair of node's "reg", with the parent's
-// #address-cells and #size-cells. Returns 0, or -1 if there is none.
+// #address-cells and #size-cells, the address translated to the CPU's.
+// Returns 0, or -1 if there is none.
 int fdt_reg(int node, int i, uint64 *addr, uint64 *size) {
     int parent = fdt_parent(node), len;
     uint32 ac = fdt_cells(parent, "#address-cells", 2);
@@ -201,7 +239,16 @@ int fdt_reg(int node, int i, uint64 *addr, uint64 *size) {
     uint32 entry = 4 * (ac + sc);
     if (reg == 0 || ac > 2 || sc > 2 || entry * (i + 1) > len)
         return -1;
-    *addr = cells(reg + entry * i, ac);
+    uint64 a = translate(parent, cells(reg + entry * i, ac));
+    if (a == (uint64)-1)
+        return -1;
+    *addr = a;
     *size = cells(reg + entry * i + 4 * ac, sc);
     return 0;
+}
+
+// Is node enabled: no "status", or "okay"?
+int fdt_okay(int node) {
+    const char *s = fdt_getprop(node, "status", 0);
+    return s == 0 || strncmp(s, "okay", 5) == 0 || strncmp(s, "ok", 3) == 0;
 }
