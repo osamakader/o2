@@ -9,8 +9,8 @@
 #define MAXOPBLOCKS  20  // max # of blocks any FS op writes (deleting a
                          // MAXFILE file frees blocks in ~10 bitmap blocks)
 #define LOGBLOCKS    (MAXOPBLOCKS*3)  // max data blocks in on-disk log
-#define NBUF         (LOGBLOCKS+MAXOPBLOCKS*3)  // size of disk block cache:
-                         // the log pins up to LOGBLOCKS between commits
+#define NBUF       1024  // size of disk block cache (> LOGBLOCKS, which
+                         // the log pins between commits)
 #define FSSIZE      70000  // size of file system in blocks (> MAXFILE)
 #define NINODE       50  // maximum number of active i-nodes
 #define NFILE       100  // open files per system
