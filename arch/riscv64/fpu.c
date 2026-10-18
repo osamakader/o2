@@ -41,25 +41,37 @@ void fp_switch_out(struct proc *p) {
         set_fs(FS_OFF);
 }
 
-// fork(): the child starts with the parent's FP registers.
-void fp_fork(struct proc *parent, struct proc *child) {
+// Save the current process p's FP registers into p->fp if they changed
+// since loaded; they stay live.
+void fp_sync(struct proc *p) {
     push_off();   // no preemption between checking and saving
     if (fs() == FS_DIRTY) {
-        fp_save(&parent->fp);
+        fp_save(&p->fp);
         set_fs(FS_CLEAN);
     }
     pop_off();
+}
+
+// p->fp has new contents: if p is running here, turn FP off so the next
+// user FP instruction traps and loads p->fp.
+void fp_reload(struct proc *p) {
+    if (p == myproc()) {
+        push_off();
+        set_fs(FS_OFF);
+        pop_off();
+    }
+}
+
+// fork(): the child starts with the parent's FP registers.
+void fp_fork(struct proc *parent, struct proc *child) {
+    fp_sync(parent);
     child->fp = parent->fp;
 }
 
 // exec(): the new program starts with zeroed FP registers.
 void fp_exec(struct proc *p) {
     memset(&p->fp, 0, sizeof(p->fp));
-    if (p == myproc()) {
-        push_off();
-        set_fs(FS_OFF);
-        pop_off();
-    }
+    fp_reload(p);
 }
 
 // An illegal-instruction trap from user mode (interrupts off): if FP

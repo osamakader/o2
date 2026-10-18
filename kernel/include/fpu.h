@@ -13,5 +13,7 @@ void fpinithart(void);                               // FP disabled for user mod
 void fp_switch_out(struct proc *p);                  // p leaves its CPU: save if live
 void fp_fork(struct proc *parent, struct proc *child); // child gets parent's state
 void fp_exec(struct proc *p);                        // fresh state for a new program
+void fp_sync(struct proc *p);    // current process: bring p->fp up to date
+void fp_reload(struct proc *p);  // p->fp was changed: drop live registers
 
 #endif

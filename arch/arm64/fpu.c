@@ -43,24 +43,36 @@ void fp_switch_out(struct proc *p) {
     }
 }
 
-// fork(): the child starts with the parent's FP registers.
-void fp_fork(struct proc *parent, struct proc *child) {
+// Save the current process p's FP registers into p->fp if they are
+// live; they stay live.
+void fp_sync(struct proc *p) {
     push_off();   // no preemption between checking and saving
     if (fp_live())
-        fp_save(&parent->fp);
+        fp_save(&p->fp);
     pop_off();
-    child->fp = parent->fp;
 }
 
-// exec(): the new program starts with zeroed FP registers.
-void fp_exec(struct proc *p) {
-    memset(&p->fp, 0, sizeof(p->fp));
+// p->fp has new contents: if p's registers are live here, make the next
+// user FP access trap and load p->fp instead.
+void fp_reload(struct proc *p) {
     if (p == myproc()) {
         push_off();
         if (fp_live())
             set_fpen(FPEN_TRAP_EL0);
         pop_off();
     }
+}
+
+// fork(): the child starts with the parent's FP registers.
+void fp_fork(struct proc *parent, struct proc *child) {
+    fp_sync(parent);
+    child->fp = parent->fp;
+}
+
+// exec(): the new program starts with zeroed FP registers.
+void fp_exec(struct proc *p) {
+    memset(&p->fp, 0, sizeof(p->fp));
+    fp_reload(p);
 }
 
 // EL0 FP/SIMD access trapped (usertrap(), interrupts off): load p's FP
