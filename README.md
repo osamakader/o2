@@ -82,6 +82,12 @@ shared file mappings are written back on munmap, exit and exec; with
 no page cache, separate mappings of a file see each other's changes
 only after that.
 
+Files can be about 64MB (a double-indirect block), on a 70000-block
+file system; symbolic links (`ln -s`, `symlink`, `readlink`, `lstat`,
+`O_NOFOLLOW`) are followed anywhere in a path, up to 10 per lookup.
+The log commits in groups: finished system calls collect until the log
+is full, a second has passed, or `sync` is called.
+
 Time comes from the RTC (PL031 on arm64, Goldfish on riscv64), read at
 boot, plus the system counter; `date` shows it. Inodes are 128 bytes
 on disk and record atime (creation only: reads don't update it), mtime
