@@ -1,3 +1,4 @@
+#include "memlayout.h"
 // The trampoline: the only kernel code mapped while user code runs
 // (KPTI). On return to EL0, TTBR1 is switched to tramp_pagetable,
 // which maps just this page and tramp_data (mmu.c), at the same
@@ -49,6 +50,9 @@
 // (interrupts are masked from the switch to eret); hang if one does.
 .macro TRAMP_HANG
     .balign 128
+#ifdef EARLY_UART
+    b tramp_hang
+#endif
 1:  b 1b
 .endm
 
@@ -100,3 +104,44 @@ tramp_exit:
     eret
 .balign 8
 1:  .quad tramp_data
+
+#ifdef EARLY_UART
+// Bring-up aid: an exception in EL1 with the trampoline installed
+// (which otherwise just hangs, unseen): print !, then ESR, ELR, FAR and
+// SPSR to the UART, which tramp_pagetable maps too, and hang.
+tramp_hang:
+    ldr x4, =(KVA_OFFSET + EARLY_UART)
+    mov x1, #'!'
+    bl uputc
+    mrs x2, esr_el1
+    bl uhex
+    mrs x2, elr_el1
+    bl uhex
+    mrs x2, far_el1
+    bl uhex
+    mrs x2, spsr_el1
+    bl uhex
+1:  b 1b
+uputc:
+    ldr w3, [x4, #0x18]
+    tbnz w3, #5, uputc
+    str w1, [x4]
+    ret
+uhex:
+    mov x6, x30
+    mov x1, #' '
+    bl uputc
+    mov x5, #60
+2:  lsr x1, x2, x5
+    and x1, x1, #0xf
+    add x7, x1, #'0'
+    add x8, x1, #('a' - 10)
+    cmp x1, #10
+    csel x1, x7, x8, lt
+    bl uputc
+    subs x5, x5, #4
+    b.ge 2b
+    mov x30, x6
+    ret
+.ltorg
+#endif

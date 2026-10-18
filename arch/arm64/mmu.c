@@ -36,6 +36,12 @@ static void tramp_init(void) {
         mappages(tramp_pagetable, (uint64)tramp_data, PGSIZE,
                  V2P(tramp_data), PTE_KERN_RODATA) != 0)
         panic("tramp_init: map");
+#ifdef EARLY_UART
+    // the UART too, for tramp_hang (tramp.S), on a board being brought up
+    if (mappages(tramp_pagetable, P2V(EARLY_UART & ~0xfffUL), PGSIZE, EARLY_UART & ~0xfffUL,
+                 PTE_KERN_DEVICE) != 0)
+        panic("tramp_init: map uart");
+#endif
 
     tramp_data[0] = V2P(kernel_pagetable);  // TTBR1 in the kernel
     tramp_data[1] = V2P(tramp_pagetable);   // TTBR1 in user mode
