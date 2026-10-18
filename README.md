@@ -98,9 +98,10 @@ pings. `ping`, `nettest` (against `tools/udpecho.py` on the host) and
 `nslookup` use them. No TCP yet.
 
 Graphics: a virtio-gpu framebuffer (2D; 1280x800 under qemu, `make
-GPU=0` leaves it out). Programs mmap the `fb` device and ioctl
-`FB_INFO` and `FB_FLUSH` (fb.h); `gfx` draws a test picture, `gfx
-bounce` an animation. qemu runs without a window here; `tools/run.sh
+GPU=0` leaves it out). At boot, init plays `splash`, an animation of
+the o2 logo, before starting the shell. Programs mmap the `fb` device
+and ioctl `FB_INFO` and `FB_FLUSH` (fb.h); `gfx` draws a test picture,
+`gfx bounce` an animation. qemu runs without a window here; `tools/run.sh
 -D shot.ppm` saves a screen dump through the monitor, and CI checks
 gfx's picture in one. `make qemu-gui` opens a window showing it.
 
