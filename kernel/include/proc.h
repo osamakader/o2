@@ -39,6 +39,7 @@ struct proc {
     struct inode *cwd;            // current directory
     uint64 sighandler[NSIG];      // SIG_DFL, SIG_IGN or a user function;
                                   // written with p->lock held
+    uint64 sigrestorer;           // user code handlers return to: sigreturn
     char name[16];                // process name (debugging)
 };
 
@@ -66,6 +67,7 @@ int kill(int pid, int sig);
 int interrupted(struct proc *p);
 void usersignals(void);
 void sigexec(struct proc *p);
+void sigdeliver(struct proc *p, int sig, uint64 handler);
 int getppid(void);
 void setkilled(struct proc *p);
 int killed(struct proc *p);

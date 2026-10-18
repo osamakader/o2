@@ -20,6 +20,26 @@ _Static_assert(sizeof(struct trapframe) == 288, "exceptions.S TF_SIZE");
 #define TF_ARG(tf, n)  ((tf)->x[n])
 #define TF_RET(tf)     ((tf)->x[0])
 
+// for signal delivery: user pc, stack pointer, return address
+#define TF_PC(tf)      ((tf)->elr)
+#define TF_SP(tf)      ((tf)->sp)
+#define TF_RA(tf)      ((tf)->x[30])
+
+#define SPSR_NZCV      (0xfUL << 28)
+
+// Copy the user-visible state from src to dst: registers, pc, sp and
+// the condition flags. Nothing else, so that src may come from user
+// memory (sigreturn) without letting it change the exception level or
+// unmask anything.
+static inline void tf_copy_user(struct trapframe *dst, const struct trapframe *src)
+{
+    for (int i = 0; i < 31; i++)
+        dst->x[i] = src->x[i];
+    dst->elr = src->elr;
+    dst->sp = src->sp;
+    dst->spsr = (dst->spsr & ~SPSR_NZCV) | (src->spsr & SPSR_NZCV);
+}
+
 // Set up tf to start a user program at pc with stack pointer sp:
 // EL0t with interrupts unmasked.
 static inline void tf_init_user(struct trapframe *tf, uint64 pc, uint64 sp)

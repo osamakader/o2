@@ -32,6 +32,8 @@
 #define SYS_dup2    26
 #define SYS_lseek   27
 #define SYS_waitpid 28
+#define SYS_signal  29
+#define SYS_sigreturn 30
 
 // sbrk(n, type): allocate now, or only on first touch (page fault)
 #define SBRK_EAGER 1

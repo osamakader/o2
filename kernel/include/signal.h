@@ -21,7 +21,9 @@
 #define NSIG    32    // signals are 1..NSIG-1
 
 // signal handlers: default action, ignore, or a user function
-#define SIG_DFL 0
-#define SIG_IGN 1
+typedef void (*sighandler_t)(int);
+#define SIG_DFL ((sighandler_t)0)
+#define SIG_IGN ((sighandler_t)1)
+#define SIG_ERR ((sighandler_t)-1)
 
 #endif

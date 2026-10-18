@@ -143,3 +143,13 @@ char* sbrklazy(int n)
 {
   return sys_sbrk(n, SBRK_LAZY);
 }
+
+// Handle signal sig with handler (or SIG_DFL, SIG_IGN); returns the
+// previous handler, or SIG_ERR. The kernel calls handler(sig) with a
+// return address of sigreturn_tramp, which resumes the interrupted
+// code.
+sighandler_t
+signal(int sig, sighandler_t handler)
+{
+  return sys_signal(sig, handler, sigreturn_tramp);
+}

@@ -941,6 +941,124 @@ static void test_signals(void)
     fail("signals", "bad pids or signals accepted");
 }
 
+static volatile int got_sig, sig_count;
+
+static void on_sig(int sig)
+{
+  got_sig = sig;
+  sig_count++;
+}
+
+// a handler that leaves junk in all FP registers
+static void on_sig_clobber(int sig)
+{
+  fp_regs_spin(0xbad0000000000000UL, 1);
+  sig_count++;
+}
+
+// sigreturn() with a frame of junk: the process may crash, but only
+// itself
+static void bad_sigreturn(void)
+{
+  static char buf[4096] __attribute__((aligned(16)));
+  memset(buf, 0xff, sizeof(buf));
+#if defined(__aarch64__)
+  asm volatile("mov sp, %0; mov x8, %1; svc #0" : : "r"(buf), "r"((uint64)SYS_sigreturn));
+#else
+  asm volatile("mv sp, %0; li a7, %1; ecall" : : "r"(buf), "i"(SYS_sigreturn));
+#endif
+  exit(0);   // not reached, the stack is gone
+}
+
+// Signal handlers.
+static void test_handlers(void)
+{
+  int pid, status = -1;
+
+  // to self: delivered on the way back from kill()
+  got_sig = 0;
+  if(signal(SIGUSR1, on_sig) != SIG_DFL)
+    fail("handlers", "previous handler");
+  if(kill(getpid(), SIGUSR1) != 0 || got_sig != SIGUSR1)
+    fail("handlers", "handler not called");
+  if(signal(SIGUSR1, SIG_IGN) != on_sig)
+    fail("handlers", "previous handler");
+  kill(getpid(), SIGUSR1);   // ignored
+  if(signal(SIGUSR1, SIG_DFL) != SIG_IGN)
+    fail("handlers", "previous handler");
+  if(signal(SIGKILL, on_sig) != SIG_ERR || signal(0, on_sig) != SIG_ERR ||
+     signal(NSIG, on_sig) != SIG_ERR)
+    fail("handlers", "bad signals accepted");
+
+  // the handler is inherited, and interrupts pause(), which returns -1
+  int fds[2];
+  char c;
+  pipe(fds);
+  signal(SIGUSR1, on_sig);
+  pid = fork();
+  if(pid == 0){
+    got_sig = 0;
+    write(fds[1], "x", 1);
+    int r = pause(1000);
+    exit(r == -1 && got_sig == SIGUSR1 ? 0 : 1);
+  }
+  signal(SIGUSR1, SIG_DFL);
+  read(fds[0], &c, 1);
+  pause(2);
+  kill(pid, SIGUSR1);
+  if(wait(&status) != pid || status != 0)
+    fail("handlers", "pause() not interrupted");
+
+  // registers and FP state survive handlers that change them, for
+  // signals arriving at any point. A signal sent while the same one is
+  // still pending is merged with it, so keep sending until the child
+  // has seen enough.
+  pid = fork();
+  if(pid == 0){
+    int bad = 0;
+    sig_count = 0;
+    signal(SIGUSR2, on_sig_clobber);
+    write(fds[1], "x", 1);
+    while(sig_count < 5)
+      bad += fp_regs_spin(FP_SEED + 3, 100000);
+    exit(bad ? 1 : 0);
+  }
+  read(fds[0], &c, 1);
+  int r = 0;
+  for(int i = 0; i < 1000 && (r = waitpid(pid, &status, WNOHANG)) == 0; i++){
+    kill(pid, SIGUSR2);
+    pause(1);
+  }
+  if(r == 0){
+    kill(pid, SIGKILL);
+    wait(0);
+    fail("handlers", "signals lost");
+  } else if(r != pid || status != 0)
+    fail("handlers", "registers changed");
+  close(fds[0]);
+  close(fds[1]);
+
+  // exec: handlers go back to the default, ignored signals stay ignored
+  char *argv[] = { "o2tests", "sigself", 0 };
+  for(int ign = 0; ign < 2; ign++){
+    pid = fork();
+    if(pid == 0){
+      signal(SIGUSR1, ign ? SIG_IGN : on_sig);
+      exec("/o2tests", argv);
+      exit(2);
+    }
+    if(wait(&status) != pid || status != (ign ? 0 : -1))
+      fail("handlers", ign ? "ignored signal not kept across exec" :
+                             "handler kept across exec");
+  }
+
+  pid = fork();
+  if(pid == 0)
+    bad_sigreturn();
+  if(wait(&status) != pid || status != -1)
+    fail("handlers", "bad sigreturn frame");
+}
+
 static void o2tests(void)
 {
   struct { const char *name; void (*fn)(void); } tests[] = {
@@ -960,6 +1078,7 @@ static void o2tests(void)
     { "waitpid", test_waitpid },
     { "script", test_script },
     { "signals", test_signals },
+    { "handlers", test_handlers },
     { "fp math", test_fp_math },
     { "fp regs", test_fp_regs },
     { "fp fork", test_fp_fork },
@@ -977,6 +1096,11 @@ int main(int argc, char *argv[])
 {
   if(argc == 2 && strcmp(argv[1], "fpexec") == 0)
     exit(fp_old_pattern_left() ? 1 : 0);
+  if(argc == 2 && strcmp(argv[1], "sigself") == 0){
+    // run by test_handlers: send ourselves SIGUSR1
+    kill(getpid(), SIGUSR1);
+    exit(0);
+  }
   o2tests();
   exit(failed);
 }

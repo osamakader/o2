@@ -143,6 +143,7 @@ static void freeproc(struct proc *p) {
     p->killed = 0;
     p->sigpending = 0;
     memset(p->sighandler, 0, sizeof(p->sighandler));
+    p->sigrestorer = 0;
     p->xstate = 0;
     p->state = UNUSED;
 }
@@ -384,6 +385,7 @@ int fork(void) {
 
     // signal handlers are inherited; pending signals aren't
     memmove(np->sighandler, p->sighandler, sizeof(p->sighandler));
+    np->sigrestorer = p->sigrestorer;
 
     // Cause fork to return 0 in the child.
     TF_RET(np->trapframe) = 0;
@@ -526,7 +528,7 @@ int waitpid(int pid, uint64 addr, int options) {
 // Is sig ignored by p, explicitly or by default? p->lock held.
 static int sigignored(struct proc *p, int sig) {
     uint64 h = p->sighandler[sig];
-    return h == SIG_IGN || (h == SIG_DFL && sig == SIGCHLD);
+    return h == (uint64)SIG_IGN || (h == (uint64)SIG_DFL && sig == SIGCHLD);
 }
 
 // Send signal sig to the user process with the given pid; sig 0 only
@@ -568,8 +570,10 @@ int interrupted(struct proc *p) {
 }
 
 // On the way back to user mode: exit if killed, and act on pending
-// signals: ignore them, or exit for those whose default action is to
-// terminate.
+// signals: ignore them, exit for those whose default action is to
+// terminate, or set up the call of a handler (one at a time; the next
+// is delivered when the process next returns to user mode, at the
+// latest after the handler's sigreturn).
 void usersignals(void) {
     struct proc *p = myproc();
 
@@ -588,9 +592,14 @@ void usersignals(void) {
             sig++;
         p->sigpending &= ~(1U << sig);
         int ignored = sigignored(p, sig);
+        uint64 handler = p->sighandler[sig];
         release(&p->lock);
-        if (!ignored)
+        if (ignored)
+            continue;
+        if (handler == (uint64)SIG_DFL)
             exit(-1);
+        sigdeliver(p, sig, handler);
+        return;
     }
 }
 
@@ -600,8 +609,9 @@ void usersignals(void) {
 // makes a signal pending that usersignals() then ignores.
 void sigexec(struct proc *p) {
     for (int sig = 1; sig < NSIG; sig++)
-        if (p->sighandler[sig] != SIG_IGN)
-            p->sighandler[sig] = SIG_DFL;
+        if (p->sighandler[sig] != (uint64)SIG_IGN)
+            p->sighandler[sig] = (uint64)SIG_DFL;
+    p->sigrestorer = 0;
 }
 
 // The parent's pid; 0 for init, which has none.
