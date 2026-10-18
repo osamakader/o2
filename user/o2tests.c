@@ -1493,6 +1493,128 @@ static void test_mmap(void)
     fail("mmap", "the heap moved");
 }
 
+// Make a file of n bytes, byte i being 'a' + i % 26.
+static void make_file(char *name, int n)
+{
+  char buf[512];
+  int fd = open(name, O_CREATE | O_WRONLY | O_TRUNC);
+  for(int i = 0; i < n; i += sizeof(buf)){
+    for(int j = 0; j < sizeof(buf); j++)
+      buf[j] = 'a' + (i + j) % 26;
+    write(fd, buf, n - i < sizeof(buf) ? n - i : sizeof(buf));
+  }
+  close(fd);
+}
+
+// Bytes [from, to) of the file; check they are 'a' + i % 26, or c if
+// c isn't 0. Returns the number that differ.
+static int check_file(char *name, int from, int to, char c)
+{
+  char ch;
+  int bad = 0, fd = open(name, O_RDONLY);
+  lseek(fd, from, SEEK_SET);
+  for(int i = from; i < to; i++){
+    if(read(fd, &ch, 1) != 1 || ch != (c ? c : 'a' + i % 26))
+      bad++;
+  }
+  close(fd);
+  return bad;
+}
+
+// File mappings.
+static void test_mmap_file(void)
+{
+  enum { SIZE = 6000 };
+  int status, bad = 0;
+  struct stat st;
+
+  make_file("mm.tmp", SIZE);
+  int fd = open("mm.tmp", O_RDWR);
+  int rofd = open("mm.tmp", O_RDONLY);
+
+  // private: a copy; zeros past the end of the file
+  char *p = mmap(0, 8192, PROT_READ | PROT_WRITE, MAP_PRIVATE, rofd, 0);
+  if(p == MAP_FAILED){
+    fail("mmap file", "MAP_PRIVATE");
+    return;
+  }
+  for(int i = 0; i < 8192; i++)
+    bad += p[i] != (i < SIZE ? 'a' + i % 26 : 0);
+  if(bad)
+    fail("mmap file", "contents");
+  memset(p, 'x', 8192);
+  munmap(p, 8192);
+  if(check_file("mm.tmp", 0, SIZE, 0) != 0)
+    fail("mmap file", "MAP_PRIVATE wrote to the file");
+
+  // from an offset
+  p = mmap(0, 4096, PROT_READ, MAP_PRIVATE, rofd, 4096);
+  if(p == MAP_FAILED || p[0] != 'a' + 4096 % 26)
+    fail("mmap file", "offset");
+  munmap(p, 4096);
+
+  // shared: written back by munmap, within the file
+  p = mmap(0, 8192, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+  if(p == MAP_FAILED){
+    fail("mmap file", "MAP_SHARED");
+    return;
+  }
+  memset(p + 100, 'y', 50);
+  memset(p + SIZE - 10, 'z', 200);   // past the end: not written
+  // write() from the mapping, to the same file
+  if(write(fd, p + 100, 10) != 10)
+    fail("mmap file", "write() from a mapping of the file");
+  munmap(p, 8192);
+  if(check_file("mm.tmp", 100, 150, 'y') != 0 || check_file("mm.tmp", 150, SIZE - 10, 0) != 0 ||
+     check_file("mm.tmp", SIZE - 10, SIZE, 'z') != 0)
+    fail("mmap file", "MAP_SHARED not written back");
+  if(stat("mm.tmp", &st) < 0 || st.size != SIZE)
+    fail("mmap file", "the file grew");
+
+  // a child shares the mapping; exit writes it back
+  p = mmap(0, SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+  int pid = fork();
+  if(pid == 0){
+    p[0] = 'C';
+    exit(0);
+  }
+  waitpid(pid, &status, 0);
+  if(p[0] != 'C')
+    fail("mmap file", "the child's write");
+  pid = fork();
+  if(pid == 0){
+    p[1] = 'D';
+    exit(0);   // without munmap
+  }
+  waitpid(pid, &status, 0);
+  if(check_file("mm.tmp", 0, 2, 0) == 0)
+    fail("mmap file", "exit didn't write back");
+  munmap(p, SIZE);
+
+  // what may not be mapped
+  int fds[2];
+  pipe(fds);
+  int dfd = open(".", O_RDONLY);
+  if(mmap(0, 4096, PROT_READ | PROT_WRITE, MAP_SHARED, rofd, 0) != MAP_FAILED ||
+     mmap(0, 4096, PROT_READ, MAP_PRIVATE, fds[0], 0) != MAP_FAILED ||
+     mmap(0, 4096, PROT_READ, MAP_PRIVATE, dfd, 0) != MAP_FAILED ||
+     mmap(0, 4096, PROT_READ, MAP_PRIVATE, 99, 0) != MAP_FAILED ||
+     mmap(0, 4096, PROT_READ, MAP_PRIVATE, fd, 100) != MAP_FAILED)
+    fail("mmap file", "bad mappings allowed");
+  close(fds[0]);
+  close(fds[1]);
+  close(dfd);
+
+  // the mapping holds the file: close and unlink don't affect it
+  p = mmap(0, 4096, PROT_READ, MAP_PRIVATE, fd, 0);
+  close(fd);
+  close(rofd);
+  unlink("mm.tmp");
+  if(p == MAP_FAILED || p[50] != 'a' + 50 % 26)
+    fail("mmap file", "mapping of a closed, unlinked file");
+  munmap(p, 4096);
+}
+
 static void o2tests(void)
 {
   struct { const char *name; void (*fn)(void); } tests[] = {
@@ -1500,6 +1622,7 @@ static void o2tests(void)
     { "forkloop", test_forkloop },
     { "cow", test_cow },
     { "mmap", test_mmap },
+    { "mmap file", test_mmap_file },
     { "faults", test_faults },
     { "badptr", test_badptr },
     { "kill", test_kill },

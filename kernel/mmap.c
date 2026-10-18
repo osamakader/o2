@@ -6,6 +6,14 @@
 // allocated when first touched (vma_fault()), and fork() shares them
 // copy-on-write. MAP_SHARED pages are all allocated by mmap(), so that
 // a child shares them for real.
+//
+// File mappings are read in whole by mmap() too: reading a page in on
+// a fault could deadlock, when the fault comes from a system call that
+// holds the file's inode lock already (write(fd, p) of a mapping of
+// fd's file). Writable MAP_SHARED mappings are written back to the
+// file by munmap(), exit() and exec(), without extending it. There is
+// no page cache: processes that map a file separately (not through
+// fork()) don't see each other's changes before they are written back.
 
 #include "types.h"
 #include "param.h"
@@ -17,6 +25,9 @@
 #include "mmu.h"
 #include "mman.h"
 #include "file.h"
+#include "sleeplock.h"
+#include "fs.h"
+#include "stat.h"
 
 static int prot2perm(int prot) {
     return ((prot & PROT_WRITE) ? PERM_W : 0) | ((prot & PROT_EXEC) ? PERM_X : 0);
@@ -108,6 +119,52 @@ static void vma_unmap_range(pagetable_t pagetable, uint64 a, uint64 b) {
     uvmunmap(pagetable, a, (b - a) / PGSIZE, 1);
 }
 
+// Read the file's pages into [start, end) of new mapping v; pages past
+// the end of the file stay zero. Returns 0, or -1 if out of memory.
+static int vma_load(struct proc *p, struct vma *v) {
+    struct inode *ip = v->file ? v->file->ip : 0;
+    int r = 0;
+
+    if (ip)
+        ilock(ip);
+    for (uint64 va = v->start; va < v->end; va += PGSIZE) {
+        uint64 pa = vma_newpage(p, v, va);
+        if (pa == 0) {
+            vma_unmap_range(p->pagetable, v->start, va);
+            r = -1;
+            break;
+        }
+        if (ip) {
+            readi(ip, 0, P2V(pa), v->off + (va - v->start), PGSIZE);
+            if (v->prot & PROT_EXEC)
+                sync_icache(P2V(pa), PGSIZE);
+        }
+    }
+    if (ip)
+        iunlock(ip);
+    return r;
+}
+
+// Write the pages of [a, b) of mapping v back to its file, if it is a
+// writable MAP_SHARED file mapping; only what lies within the file.
+static void vma_writeback(struct proc *p, struct vma *v, uint64 a, uint64 b) {
+    if (v->file == 0 || !(v->flags & MAP_SHARED) || !(v->prot & PROT_WRITE))
+        return;
+    struct inode *ip = v->file->ip;
+    for (uint64 va = a; va < b; va += PGSIZE) {
+        uint64 pa = walkaddr(p->pagetable, va);
+        if (pa == 0)
+            continue;
+        uint64 off = v->off + (va - v->start);
+        begin_op();   // a page per transaction: well within its size
+        ilock(ip);
+        if (off < ip->size)
+            writei(ip, 0, P2V(pa), off, ip->size - off < PGSIZE ? ip->size - off : PGSIZE);
+        iunlock(ip);
+        end_op();
+    }
+}
+
 static void vma_free(struct vma *v) {
     if (v->file)
         fileclose(v->file);
@@ -133,8 +190,19 @@ uint64 sys_mmap(void) {
         (flags & ~(MAP_SHARED | MAP_PRIVATE | MAP_ANONYMOUS)) ||
         (prot & ~(PROT_READ | PROT_WRITE | PROT_EXEC)) || off % PGSIZE != 0)
         return -1;
-    if (!(flags & MAP_ANONYMOUS))
-        return -1;   // files: not yet
+    struct file *f = 0;
+    if (!(flags & MAP_ANONYMOUS)) {
+        // a regular file, open for reading, and for writing if writes
+        // are to go to it
+        if (fd < 0 || fd >= NOFILE || (f = p->ofile[fd]) == 0 || f->type != FD_INODE ||
+            !f->readable || (type == MAP_SHARED && (prot & PROT_WRITE) && !f->writable))
+            return -1;
+        ilock(f->ip);
+        int regular = f->ip->type == T_FILE;
+        iunlock(f->ip);
+        if (!regular)
+            return -1;
+    }
     len = PGROUNDUP(len);
 
     struct vma *v = vma_alloc(p);
@@ -145,18 +213,14 @@ uint64 sys_mmap(void) {
     v->end = start + len;
     v->prot = prot;
     v->flags = flags;
-    v->file = 0;
-    v->off = 0;
+    v->file = f ? filedup(f) : 0;
+    v->off = f ? off : 0;
 
-    if (type == MAP_SHARED && prot != PROT_NONE) {
-        // all pages now, so that children share them
-        for (uint64 va = start; va < v->end; va += PGSIZE) {
-            if (vma_newpage(p, v, va) == 0) {
-                vma_unmap_range(p->pagetable, start, va);
-                vma_free(v);
-                return -1;
-            }
-        }
+    // all pages now for files, and for MAP_SHARED so that children
+    // share them
+    if ((f || type == MAP_SHARED) && prot != PROT_NONE && vma_load(p, v) < 0) {
+        vma_free(v);
+        return -1;
     }
     return start;
 }
@@ -192,6 +256,7 @@ uint64 sys_munmap(void) {
             continue;
         uint64 a = addr > v->start ? addr : v->start;
         uint64 b = end < v->end ? end : v->end;
+        vma_writeback(p, v, a, b);
         vma_unmap_range(p->pagetable, a, b);
         if (a == v->start && b == v->end) {
             vma_free(v);
@@ -242,8 +307,11 @@ void vma_drop(struct proc *p) {
     }
 }
 
-// Write MAP_SHARED file mappings back to their files (before exec()).
+// Write MAP_SHARED file mappings back to their files.
 void vma_sync(struct proc *p) {
+    for (int i = 0; i < NVMA; i++)
+        if (p->vma[i].end)
+            vma_writeback(p, &p->vma[i], p->vma[i].start, p->vma[i].end);
 }
 
 // exec(): unmap all mappings from the old page table; vma_clear()
