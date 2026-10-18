@@ -38,6 +38,7 @@ static void readsb(int dev, struct superblock *sb)
 // Init fs
 void fsinit(int dev)
 {
+    disk_init();
     readsb(dev, &sb);
     if (sb.magic != FSMAGIC)
         panic("invalid file system");

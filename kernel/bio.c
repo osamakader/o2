@@ -167,7 +167,7 @@ struct buf *bread(uint dev, uint blockno)
 
     b = bget(dev, blockno);
     if (!b->valid) {
-        virtio_disk_rw(b, 0);
+        disk_rw(b, 0);
         b->valid = 1;
     }
     return b;
@@ -188,7 +188,7 @@ void bwritev(struct buf **bufs, int n)
     for (int i = 0; i < n; i++)
         if (!holdingsleep(&bufs[i]->lock))
             panic("bwritev");
-    virtio_disk_rwv(bufs, n, 1);
+    disk_rwv(bufs, n, 1);
 }
 
 // Write b's contents to disk.  Must be locked.
@@ -196,7 +196,7 @@ void bwrite(struct buf *b)
 {
     if (!holdingsleep(&b->lock))
         panic("bwrite");
-    virtio_disk_rw(b, 1);
+    disk_rw(b, 1);
 }
 
 // Release a locked buffer; once free, it may be recycled, least

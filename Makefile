@@ -61,6 +61,8 @@ KOBJS = \
   kernel/net.o \
   kernel/socket.o \
   kernel/virtio_gpu.o \
+  kernel/sdhci.o \
+  kernel/disk.o \
   kernel/sysfile.o \
   kernel/initcode.o \
 
@@ -125,8 +127,10 @@ KERNEL_LOAD = 0x200000
 # Linux, so fetched rather than kept here)
 DTB = $(B)/bcm2711-rpi-4-b.dtb
 QEMUOPTS = -machine raspi4b -dtb $(DTB)
-# the raw image, as the Pi firmware loads it
+# the raw image, as the Pi firmware loads it, and an SD card image with
+# the file system
 IMAGE = $(B)/kernel8.img
+SDIMG = $(B)/sd.img
 else
 KERNEL_LOAD = 0x40200000
 QEMUOPTS = -machine virt,gic-version=3 -cpu cortex-a57
@@ -181,7 +185,7 @@ $(shell mkdir -p $(B))
 $(file > $(B)/flags,$(FLAGS))
 endif
 
-all: $(KERNEL) $(IMAGE) $(FSIMG) $(DTB)
+all: $(KERNEL) $(IMAGE) $(FSIMG) $(SDIMG) $(DTB)
 
 # The kernel carries its own symbol table, for backtraces. Link once
 # with an empty table, generate ksyms.S from that kernel's text
@@ -309,7 +313,12 @@ $(FSIMG): $(MKFS) $(B)/README $(UPROGS)
 ifeq ($(ARCH)$(PLATFORM), arm64rpi4)
 # raspi4b has 2GB and 4 CPUs, and no virtio devices. Given the raw
 # image (a Linux Image to qemu), qemu starts it as the firmware does.
+# The file system is on an SD card (tools/mksd.py).
 QEMUOPTS += -kernel $(IMAGE) -nographic
+QEMUOPTS += -drive file=$(SDIMG),if=sd,format=raw
+
+$(SDIMG): $(FSIMG) tools/mksd.py
+	python3 tools/mksd.py $(FSIMG) $@
 
 $(IMAGE): $(KERNEL)
 	$(OBJCOPY) -O binary $< $@
@@ -336,11 +345,11 @@ QEMUOPTS += -drive file=$(FSIMG),if=none,format=raw,id=x0
 QEMUOPTS += -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0
 endif
 
-qemu: $(KERNEL) $(IMAGE) $(FSIMG) $(DTB)
+qemu: $(KERNEL) $(IMAGE) $(FSIMG) $(SDIMG) $(DTB)
 	$(QEMU) $(QEMUOPTS)
 
 # the same with a window showing the framebuffer; the console stays here
-qemu-gui: $(KERNEL) $(IMAGE) $(FSIMG) $(DTB)
+qemu-gui: $(KERNEL) $(IMAGE) $(FSIMG) $(SDIMG) $(DTB)
 	$(QEMU) $(subst -nographic,-serial mon:stdio,$(QEMUOPTS))
 
 # the QEMU command line and disk image, for tools/run.sh

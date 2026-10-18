@@ -76,6 +76,10 @@ static void find_devices(void) {
 
     board.rtc = 0;
     find_device(RTC_COMPAT, 0, &board.rtc, 0);
+    // the Pi 4's card slot is on EMMC2; qemu's raspi4b puts the card on
+    // the other controller (on the Pi, for Wi-Fi)
+    find_device("brcm,bcm2711-emmc2", 0, &board.sdhci[0], 0);
+    find_device("brcm,bcm2835-sdhci", 0, &board.sdhci[1], 0);
 
     board.nvirtio = 0;
     for (n = fdt_find_compatible(-1, "virtio,mmio"); n >= 0 && board.nvirtio < NELEM(board.virtio);
@@ -102,6 +106,9 @@ void board_map(pagetable_t pagetable) {
     map_range(pagetable, board.uart, PGSIZE);
     if (board.rtc)
         map_range(pagetable, board.rtc, PGSIZE);
+    for (int i = 0; i < NELEM(board.sdhci); i++)
+        if (board.sdhci[i])
+            map_range(pagetable, board.sdhci[i], PGSIZE);
     map_range(pagetable, board.intc, board.intc_size);
     if (board.intc2_size)
         map_range(pagetable, board.intc2, board.intc2_size);
@@ -219,6 +226,9 @@ void board_report(void) {
            (void *)board.rtc, (void *)board.intc);
     if (board.intc2_size)
         printf(" + %p", (void *)board.intc2);
+    for (int i = 0; i < NELEM(board.sdhci); i++)
+        if (board.sdhci[i])
+            printf(", sdhci %p", (void *)board.sdhci[i]);
     printf(", %d virtio-mmio", board.nvirtio);
     if (board.nvirtio)
         printf(" from %p irq %d", (void *)board.virtio[0].base, board.virtio[0].irq);

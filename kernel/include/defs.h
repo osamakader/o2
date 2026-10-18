@@ -99,6 +99,16 @@ void end_op(void);
 
 // virtio_disk.c
 void virtio_disk_init(void);
+
+// disk.c
+struct buf;
+void disk_init(void);
+void disk_rw(struct buf *b, int write);
+void disk_rwv(struct buf **bufs, int n, int write);
+
+// sdhci.c
+int sd_init(uint64 *sectors);
+int sd_rw(uint64 sector, char *data, int write);
 void virtio_gpu_init(void);
 int virtio_disk_present(void);
 struct buf;
