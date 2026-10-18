@@ -53,6 +53,7 @@ KOBJS = \
   kernel/virtio_net.o \
   kernel/net.o \
   kernel/socket.o \
+  kernel/virtio_gpu.o \
   kernel/sysfile.o \
   kernel/initcode.o \
 
@@ -235,6 +236,7 @@ endif
 # RAM for qemu; the kernel finds out how much from the device tree
 MEM ?= 128M
 NET ?= 1
+GPU ?= 1
 
 # mkfs runs on the host
 $(MKFS): mkfs/mkfs.c kernel/include/fs.h kernel/include/param.h kernel/include/stat.h
@@ -283,6 +285,11 @@ ifeq ($(NET), 0)
 QEMUOPTS += -nic none
 else
 QEMUOPTS += -netdev user,id=net0 -device virtio-net-device,netdev=net0,bus=virtio-mmio-bus.1
+endif
+# a virtio GPU (GPU=0: none); with -nographic nobody sees it, but the
+# qemu monitor's screendump does
+ifneq ($(GPU), 0)
+QEMUOPTS += -device virtio-gpu-device,bus=virtio-mmio-bus.2
 endif
 QEMUOPTS += -global virtio-mmio.force-legacy=false
 QEMUOPTS += -drive file=$(FSIMG),if=none,format=raw,id=x0

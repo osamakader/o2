@@ -6,6 +6,7 @@
 #include "user.h"
 #include "fcntl.h"
 #include "file.h"
+#include "fb.h"
 
 char *argv[] = { "sh", 0 };
 
@@ -20,6 +21,11 @@ main(void)
   }
   dup(0);  // stdout
   dup(0);  // stderr
+
+  // the framebuffer, for programs that draw (fb.h)
+  struct stat st;
+  if(stat("fb", &st) < 0)
+    mknod("fb", FB, 0);
 
   for(;;){
     printf("init: starting sh\n");

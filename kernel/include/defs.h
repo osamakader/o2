@@ -98,6 +98,7 @@ void end_op(void);
 
 // virtio_disk.c
 void virtio_disk_init(void);
+void virtio_gpu_init(void);
 int virtio_disk_present(void);
 struct buf;
 void virtio_disk_rw(struct buf *b, int write);
