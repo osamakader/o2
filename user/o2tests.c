@@ -1665,6 +1665,106 @@ static void test_bigfile(void)
     fail("bigfile", "sync");
 }
 
+// Read a whole (small) file into buf; returns its length, or -1.
+static int read_file(char *path, char *buf, int n)
+{
+  int fd = open(path, O_RDONLY);
+  if(fd < 0)
+    return -1;
+  int got = read(fd, buf, n - 1);
+  close(fd);
+  buf[got < 0 ? 0 : got] = 0;
+  return got;
+}
+
+// Symbolic links.
+static void test_symlink(void)
+{
+  char buf[64];
+  struct stat st;
+
+  mkdir("sl.d");
+  make_file("sl.d/f", 10);
+
+  // relative to the link's directory; read and written through
+  if(symlink("f", "sl.d/lf") != 0 || read_file("sl.d/lf", buf, sizeof(buf)) != 10 ||
+     memcmp(buf, "abcdefghij", 10) != 0)
+    fail("symlink", "relative link");
+  int fd = open("sl.d/lf", O_WRONLY);
+  write(fd, "XY", 2);
+  close(fd);
+  if(read_file("sl.d/f", buf, sizeof(buf)) != 10 || memcmp(buf, "XYcd", 4) != 0)
+    fail("symlink", "write through a link");
+
+  // stat follows, lstat and readlink don't
+  if(stat("sl.d/lf", &st) < 0 || st.type != T_FILE || st.size != 10)
+    fail("symlink", "stat");
+  if(lstat("sl.d/lf", &st) < 0 || st.type != T_SYMLINK || st.size != 1)
+    fail("symlink", "lstat");
+  int n = readlink("sl.d/lf", buf, sizeof(buf));
+  if(n != 1 || buf[0] != 'f' || readlink("sl.d/f", buf, sizeof(buf)) != -1)
+    fail("symlink", "readlink");
+
+  // absolute, and to a directory in the middle of a path
+  if(symlink("/sl.d", "sl.dir") != 0 || read_file("sl.dir/f", buf, sizeof(buf)) != 10 ||
+     symlink("sl.dir/lf", "sl.chain") != 0 || read_file("sl.chain", buf, sizeof(buf)) != 10)
+    fail("symlink", "absolute link, link to a directory");
+  if(chdir("sl.dir") != 0 || read_file("f", buf, sizeof(buf)) != 10 || chdir("..") != 0 ||
+     stat("sl.d", &st) < 0)
+    fail("symlink", "chdir through a link");
+
+  // dangling, loops, too many
+  symlink("nothing", "sl.dang");
+  symlink("sl.loop2", "sl.loop1");
+  symlink("sl.loop1", "sl.loop2");
+  if(open("sl.dang", O_RDONLY) >= 0 || open("sl.loop1", O_RDONLY) >= 0 ||
+     lstat("sl.dang", &st) < 0 || st.type != T_SYMLINK)
+    fail("symlink", "dangling link or loop");
+  char a[16], b[16];
+  strcpy(a, "sl.0");
+  symlink("sl.d/f", a);
+  for(int i = 1; i <= 10; i++){
+    strcpy(b, a);
+    a[3] = '0' + i % 10;
+    a[4] = i == 10 ? '+' : 0;
+    a[5] = 0;
+    symlink(b, a);
+    if((open(a, O_RDONLY) >= 0) != (i < 10))
+      fail("symlink", i < 10 ? "a chain of links" : "more than 10 links");
+  }
+
+  // O_NOFOLLOW, and link() and unlink() of the link itself
+  if(open("sl.d/lf", O_RDONLY | O_NOFOLLOW) >= 0 || (fd = open("sl.d/f", O_RDONLY | O_NOFOLLOW)) < 0)
+    fail("symlink", "O_NOFOLLOW");
+  close(fd);
+  if(link("sl.d/lf", "sl.hard") != 0 || lstat("sl.hard", &st) < 0 || st.type != T_SYMLINK ||
+     st.nlink != 2)
+    fail("symlink", "hard link to a link");
+  if(symlink("x", "sl.d/f") != -1 || symlink("", "sl.empty") != -1)
+    fail("symlink", "bad symlinks made");
+  unlink("sl.hard");
+  unlink("sl.d/lf");
+  if(stat("sl.d/f", &st) < 0)
+    fail("symlink", "unlink removed the target");
+
+  for(int i = 0; i <= 10; i++){
+    strcpy(a, "sl.0");
+    a[3] = '0' + i % 10;
+    if(i == 10){
+      a[4] = '+';
+      a[5] = 0;
+    }
+    unlink(a);
+  }
+  unlink("sl.dang");
+  unlink("sl.loop1");
+  unlink("sl.loop2");
+  unlink("sl.chain");
+  unlink("sl.dir");
+  unlink("sl.d/f");
+  unlink("sl.d");
+}
+
 static void o2tests(void)
 {
   struct { const char *name; void (*fn)(void); } tests[] = {
@@ -1685,6 +1785,7 @@ static void o2tests(void)
     { "time", test_time },
     { "timestamps", test_timestamps },
     { "bigfile", test_bigfile },
+    { "symlink", test_symlink },
     { "getppid", test_getppid },
     { "dup2", test_dup2 },
     { "lseek", test_lseek },

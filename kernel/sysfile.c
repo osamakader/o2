@@ -175,7 +175,7 @@ uint64 sys_link(void)
         return -1;
 
     begin_op();
-    if ((ip = namei(old)) == 0) {
+    if ((ip = namei_nofollow(old)) == 0) {   // a link to a link, as on Linux
         end_op();
         return -1;
     }
@@ -344,6 +344,78 @@ fail:
     return 0;
 }
 
+// symlink(target, path): make path a symbolic link to target, which
+// need not exist.
+uint64 sys_symlink(void)
+{
+    char target[MAXPATH], path[MAXPATH];
+    struct inode *ip;
+    int n;
+
+    if (argstr(0, target, MAXPATH) < 0 || argstr(1, path, MAXPATH) < 0 ||
+        (n = strlen(target)) == 0)
+        return -1;
+    begin_op();
+    if ((ip = create(path, T_SYMLINK, 0, 0)) == 0) {
+        end_op();
+        return -1;
+    }
+    int r = writei(ip, 0, (uint64)target, 0, n) == n ? 0 : -1;
+    iunlockput(ip);
+    end_op();
+    return r;
+}
+
+// readlink(path, buf, n): the target of symbolic link path, up to n
+// bytes, not null-terminated. Returns its length, or -1.
+uint64 sys_readlink(void)
+{
+    char path[MAXPATH];
+    uint64 buf;
+    int n;
+    struct inode *ip;
+
+    argaddr(1, &buf);
+    argint(2, &n);
+    if (argstr(0, path, MAXPATH) < 0 || n < 0)
+        return -1;
+    begin_op();
+    if ((ip = namei_nofollow(path)) == 0) {
+        end_op();
+        return -1;
+    }
+    ilock(ip);
+    int r = -1;
+    if (ip->type == T_SYMLINK)
+        r = readi(ip, 1, buf, 0, n < ip->size ? n : ip->size);
+    iunlockput(ip);
+    end_op();
+    return r;
+}
+
+// lstat(path, st): like stat(), but of a symbolic link itself.
+uint64 sys_lstat(void)
+{
+    char path[MAXPATH];
+    uint64 addr;
+    struct inode *ip;
+    struct stat st;
+
+    argaddr(1, &addr);
+    if (argstr(0, path, MAXPATH) < 0)
+        return -1;
+    begin_op();
+    if ((ip = namei_nofollow(path)) == 0) {
+        end_op();
+        return -1;
+    }
+    ilock(ip);
+    stati(ip, &st);
+    iunlockput(ip);
+    end_op();
+    return copyout(myproc()->pagetable, addr, (char *)&st, sizeof(st));
+}
+
 uint64 sys_open(void)
 {
     char path[MAXPATH];
@@ -357,19 +429,28 @@ uint64 sys_open(void)
 
     begin_op();
 
-    if (omode & O_CREATE) {
+    if ((omode & O_CREATE) && !(omode & O_NOFOLLOW) && (ip = namei(path)) != 0) {
+        // exists, maybe through a symbolic link: open that
+        ilock(ip);
+        if (ip->type != T_FILE && ip->type != T_DEVICE) {
+            iunlockput(ip);
+            end_op();
+            return -1;
+        }
+    } else if (omode & O_CREATE) {
         ip = create(path, T_FILE, 0, 0);
         if (ip == 0) {
             end_op();
             return -1;
         }
     } else {
-        if ((ip = namei(path)) == 0) {
+        ip = (omode & O_NOFOLLOW) ? namei_nofollow(path) : namei(path);
+        if (ip == 0) {
             end_op();
             return -1;
         }
         ilock(ip);
-        if (ip->type == T_DIR && omode != O_RDONLY) {
+        if ((ip->type == T_DIR && (omode & (O_WRONLY | O_RDWR))) || ip->type == T_SYMLINK) {
             iunlockput(ip);
             end_op();
             return -1;

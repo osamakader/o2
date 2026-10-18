@@ -17,6 +17,7 @@
 #define NOFILE       16  // open files per process
 #define NDEV         10  // maximum major device number
 #define MAXPATH     128  // maximum file path name
+#define MAXSYMLINKS  10  // symbolic links followed in one path lookup
 #define NVMA         16  // memory mappings (mmap) per process
 
 #endif

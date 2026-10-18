@@ -659,10 +659,16 @@ static char *skipelem(char *path, char *name)
 // Look up and return the inode for a path name.
 // If parent != 0, return the inode for the parent and copy the final
 // path element into name, which must have room for DIRSIZ bytes.
+// Symbolic links are followed in the middle of the path, and at the
+// end if follow is set: the link's target, then the rest of the path,
+// replaces the path, looked up from the root if the target is absolute
+// and from the link's directory if not; at most MAXSYMLINKS of them.
 // Must be called inside a transaction since it calls iput().
-static struct inode *namex(char *path, int nameiparent, char *name)
+static struct inode *namex(char *path, int nameiparent, char *name, int follow)
 {
     struct inode *ip, *next;
+    char buf[MAXPATH], rest[MAXPATH];
+    int links = 0;
 
     if (*path == '/')
         ip = iget(ROOTDEV, ROOTINO);
@@ -692,8 +698,37 @@ static struct inode *namex(char *path, int nameiparent, char *name)
             iunlockput(ip);
             return 0;
         }
-        iunlockput(ip);
-        ip = next;
+        iunlock(ip);
+
+        ilock(next);
+        if (next->type != T_SYMLINK || (*path == '\0' && !follow)) {
+            iunlock(next);
+            iput(ip);
+            ip = next;
+            continue;
+        }
+
+        // a symbolic link: go on with its target and the rest (which
+        // may be in buf, from an earlier link)
+        int n = next->size;
+        safestrcpy(rest, path, sizeof(rest));
+        if (++links > MAXSYMLINKS || n == 0 || n + 1 + strlen(rest) >= MAXPATH ||
+            readi(next, 0, (uint64)buf, 0, n) != n) {
+            iunlockput(next);
+            iput(ip);
+            return 0;
+        }
+        iunlockput(next);
+        buf[n] = 0;
+        if (*rest) {
+            buf[n] = '/';
+            safestrcpy(buf + n + 1, rest, sizeof(buf) - n - 1);
+        }
+        path = buf;
+        if (*path == '/') {
+            iput(ip);
+            ip = iget(ROOTDEV, ROOTINO);
+        }
     }
     if (nameiparent) {
         iput(ip);
@@ -702,13 +737,21 @@ static struct inode *namex(char *path, int nameiparent, char *name)
     return ip;
 }
 
+// The inode path names, following symbolic links.
 struct inode *namei(char *path)
 {
     char name[DIRSIZ];
-    return namex(path, 0, name);
+    return namex(path, 0, name, 1);
+}
+
+// The same, but if path names a symbolic link, the link itself.
+struct inode *namei_nofollow(char *path)
+{
+    char name[DIRSIZ];
+    return namex(path, 0, name, 0);
 }
 
 struct inode *nameiparent(char *path, char *name)
 {
-    return namex(path, 1, name);
+    return namex(path, 1, name, 1);
 }

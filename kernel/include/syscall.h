@@ -38,6 +38,9 @@
 #define SYS_ioctl   32
 #define SYS_mmap    33
 #define SYS_munmap  34
+#define SYS_symlink 35
+#define SYS_readlink 36
+#define SYS_lstat   37
 
 // sbrk(n, type): allocate now, or only on first touch (page fault)
 #define SBRK_EAGER 1

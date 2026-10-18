@@ -86,6 +86,9 @@ extern uint64 sys_clock_gettime(void);
 extern uint64 sys_ioctl(void);
 extern uint64 sys_mmap(void);
 extern uint64 sys_munmap(void);
+extern uint64 sys_symlink(void);
+extern uint64 sys_readlink(void);
+extern uint64 sys_lstat(void);
 
 // An array mapping syscall numbers from syscall.h to the function that
 // handles the system call.
@@ -124,6 +127,9 @@ static uint64 (*syscalls[])(void) = {
     [SYS_ioctl]    sys_ioctl,
     [SYS_mmap]     sys_mmap,
     [SYS_munmap]   sys_munmap,
+    [SYS_symlink]  sys_symlink,
+    [SYS_readlink] sys_readlink,
+    [SYS_lstat]    sys_lstat,
 };
 
 void syscall(void) {

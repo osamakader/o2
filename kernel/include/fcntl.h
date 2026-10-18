@@ -6,6 +6,7 @@
 #define O_RDWR    0x002
 #define O_CREATE  0x200
 #define O_TRUNC   0x400
+#define O_NOFOLLOW 0x800   // fail if the path names a symbolic link
 
 // ioctl() requests
 #define CONSOLE_RAW 1   // console input raw (arg 1) or by lines (arg 0)

@@ -73,6 +73,7 @@ void iunlockput(struct inode *ip);
 void iupdate(struct inode *ip);
 int namecmp(const char *s, const char *t);
 struct inode *namei(char *path);
+struct inode *namei_nofollow(char *path);
 struct inode *nameiparent(char *path, char *name);
 int readi(struct inode *ip, int user_dst, uint64 dst, uint off, uint n);
 void stati(struct inode *ip, struct stat *st);
