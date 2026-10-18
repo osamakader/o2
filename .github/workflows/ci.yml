@@ -12,7 +12,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        arch: [arm64, riscv64]
+        # rpi4: the Raspberry Pi 4 build; this qemu (8.2) has no raspi4b
+        # to run it on, so it is only built here
+        arch: [arm64, riscv64, rpi4]
 
     steps:
       - uses: actions/checkout@v4
