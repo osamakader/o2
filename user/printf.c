@@ -10,9 +10,22 @@ static void putc(int fd, char c)
   write(fd, &c, 1);
 }
 
-static void printint(int fd, long long xx, int base, int sgn)
+// Write s (n characters) padded to width: on the right if left, else on
+// the left with pad.
+static void putpadded(int fd, const char *s, int n, int width, int left, char pad)
 {
-  char buf[20];
+  if(!left)
+    for(; width > n; width--)
+      putc(fd, pad);
+  for(int i = 0; i < n; i++)
+    putc(fd, s[i]);
+  for(; width > n; width--)
+    putc(fd, ' ');
+}
+
+static void printint(int fd, long long xx, int base, int sgn, int width, int left, int zero)
+{
+  char buf[24];
   int i, neg;
   unsigned long long x;
 
@@ -24,15 +37,18 @@ static void printint(int fd, long long xx, int base, int sgn)
     x = xx;
   }
 
-  i = 0;
+  i = sizeof(buf);
   do{
-    buf[i++] = digits[x % base];
+    buf[--i] = digits[x % base];
   }while((x /= base) != 0);
-  if(neg)
-    buf[i++] = '-';
-
-  while(--i >= 0)
-    putc(fd, buf[i]);
+  if(neg && zero && !left){
+    // the sign goes before the zeros
+    putc(fd, '-');
+    width--;
+  } else if(neg){
+    buf[--i] = '-';
+  }
+  putpadded(fd, buf + i, sizeof(buf) - i, width, left, zero ? '0' : ' ');
 }
 
 static void printptr(int fd, uint64 x) {
@@ -43,54 +59,58 @@ static void printptr(int fd, uint64 x) {
     putc(fd, digits[x >> (sizeof(uint64) * 8 - 4)]);
 }
 
-// Print to the given fd. Only understands %d, %x, %p, %s, %c, %%,
-// with an l modifier for d/x.
+// Print to the given fd. Understands %d, %u, %x, %p, %s, %c and %%,
+// with an l modifier for d/u/x, and a width, optionally with a - flag
+// (pad on the right) or a 0 flag (pad numbers with zeros).
 static void vprintf(int fd, const char *fmt, va_list ap)
 {
   char *s;
-  int c0, c1, i, state;
 
-  state = 0;
-  for(i = 0; fmt[i]; i++){
-    c0 = fmt[i] & 0xff;
-    if(state == 0){
-      if(c0 == '%'){
-        state = '%';
-      } else {
-        putc(fd, c0);
-      }
-    } else if(state == '%'){
-      c1 = fmt[i+1] & 0xff;
-      if(c0 == 'd'){
-        printint(fd, va_arg(ap, int), 10, 1);
-      } else if(c0 == 'l' && c1 == 'd'){
-        printint(fd, va_arg(ap, uint64), 10, 1);
-        i += 1;
-      } else if(c0 == 'u'){
-        printint(fd, va_arg(ap, uint32), 10, 0);
-      } else if(c0 == 'x'){
-        printint(fd, va_arg(ap, uint32), 16, 0);
-      } else if(c0 == 'l' && c1 == 'x'){
-        printint(fd, va_arg(ap, uint64), 16, 0);
-        i += 1;
-      } else if(c0 == 'p'){
-        printptr(fd, va_arg(ap, uint64));
-      } else if(c0 == 's'){
-        if((s = va_arg(ap, char*)) == 0)
-          s = "(null)";
-        for(; *s; s++)
-          putc(fd, *s);
-      } else if(c0 == 'c'){
-        putc(fd, va_arg(ap, uint32));
-      } else if(c0 == '%'){
-        putc(fd, '%');
-      } else {
-        // Unknown % sequence.  Print it to draw attention.
-        putc(fd, '%');
-        putc(fd, c0);
-      }
-
-      state = 0;
+  for(int i = 0; fmt[i]; i++){
+    int c = fmt[i] & 0xff;
+    if(c != '%'){
+      putc(fd, c);
+      continue;
+    }
+    int left = 0, zero = 0, width = 0, lng = 0;
+    for(;; i++){
+      if(fmt[i+1] == '-')
+        left = 1;
+      else if(fmt[i+1] == '0')
+        zero = 1;
+      else
+        break;
+    }
+    while(fmt[i+1] >= '0' && fmt[i+1] <= '9')
+      width = width * 10 + (fmt[++i] - '0');
+    while(fmt[i+1] == 'l'){
+      lng = 1;
+      i++;
+    }
+    c = fmt[++i] & 0xff;
+    if(c == 'd'){
+      printint(fd, lng ? va_arg(ap, long) : va_arg(ap, int), 10, 1, width, left, zero);
+    } else if(c == 'u'){
+      printint(fd, lng ? va_arg(ap, uint64) : va_arg(ap, uint32), 10, 0, width, left, zero);
+    } else if(c == 'x'){
+      printint(fd, lng ? va_arg(ap, uint64) : va_arg(ap, uint32), 16, 0, width, left, zero);
+    } else if(c == 'p'){
+      printptr(fd, va_arg(ap, uint64));
+    } else if(c == 's'){
+      if((s = va_arg(ap, char*)) == 0)
+        s = "(null)";
+      putpadded(fd, s, strlen(s), width, left, ' ');
+    } else if(c == 'c'){
+      char ch = va_arg(ap, uint32);
+      putpadded(fd, &ch, 1, width, left, ' ');
+    } else if(c == '%'){
+      putc(fd, '%');
+    } else if(c == 0){
+      break;
+    } else {
+      // Unknown % sequence.  Print it to draw attention.
+      putc(fd, '%');
+      putc(fd, c);
     }
   }
 }

@@ -1131,6 +1131,28 @@ static void test_sigsegv(void)
     fail("sigsegv", "ignored SIGSEGV");
 }
 
+// printf's formats, widths and flags.
+static void test_printf(void)
+{
+  char buf[200];
+  int fds[2];
+  pipe(fds);
+  fprintf(fds[1], "[%d|%5d|%-5d|%05d|%05d|%x|%lx|%ld|%lu|%u]",
+          -12, 42, 42, 42, -42, 0xbeef, 0x123456789aUL, -5000000000L,
+          18446744073709551615UL, 4000000000U);
+  fprintf(fds[1], "[%s|%6s|%-6s|%c|%3c|%%|%02d:%02d]", "ab", "ab", "ab", 'x', 'y', 7, 30);
+  close(fds[1]);
+  int n = read(fds[0], buf, sizeof(buf) - 1);
+  close(fds[0]);
+  buf[n < 0 ? 0 : n] = 0;
+  char *want = "[-12|   42|42   |00042|-0042|BEEF|123456789A|-5000000000|18446744073709551615|4000000000]"
+               "[ab|    ab|ab    |x|  y|%|07:30]";
+  if(strcmp(buf, want) != 0){
+    printf("o2tests: got %s\n", buf);
+    fail("printf", "wrong output");
+  }
+}
+
 static void o2tests(void)
 {
   struct { const char *name; void (*fn)(void); } tests[] = {
@@ -1144,6 +1166,7 @@ static void o2tests(void)
     { "pipe", test_pipe },
     { "ps", test_ps },
     { "klog", test_klog },
+    { "printf", test_printf },
     { "getppid", test_getppid },
     { "dup2", test_dup2 },
     { "lseek", test_lseek },
