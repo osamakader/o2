@@ -7,6 +7,9 @@
 #define O_CREATE  0x200
 #define O_TRUNC   0x400
 
+// ioctl() requests
+#define CONSOLE_RAW 1   // console input raw (arg 1) or by lines (arg 0)
+
 // lseek() whence
 #define SEEK_SET  0
 #define SEEK_CUR  1

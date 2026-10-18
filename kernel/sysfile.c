@@ -126,6 +126,22 @@ uint64 sys_lseek(void)
     return fileseek(f, off, whence);
 }
 
+// ioctl(fd, req, arg): a device-specific request (CONSOLE_RAW).
+uint64 sys_ioctl(void)
+{
+    struct file *f;
+    int req;
+    uint64 arg;
+
+    argint(1, &req);
+    argaddr(2, &arg);
+    if (argfd(0, 0, &f) < 0 || f->type != FD_DEVICE)
+        return -1;
+    if (f->major < 0 || f->major >= NDEV || !devsw[f->major].ioctl)
+        return -1;
+    return devsw[f->major].ioctl(req, arg);
+}
+
 uint64 sys_close(void)
 {
     int fd;

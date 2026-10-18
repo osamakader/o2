@@ -43,6 +43,7 @@ int dup2(int, int);
 int lseek(int, int, int);
 int waitpid(int, int *, int);
 int clock_gettime(int, struct timespec *);
+int ioctl(int, int, uint64);
 
 // ulib.c
 char *strcpy(char *, const char *);

@@ -8,6 +8,7 @@
 #include "vm.h"
 #include "fs.h"
 #include "file.h"
+#include "fcntl.h"
 #include "backtrace.h"
 #include "defs.h"
 
@@ -255,6 +256,10 @@ int consolewrite(int user_src, uint64 src, int n) {
 //       init (there are no process groups to pick a foreground job)
 // Characters are echoed; consoleread() returns whole lines.
 //
+// In raw mode (ioctl CONSOLE_RAW, for the shell's line editor) only ^C
+// and ^P are special: other characters aren't echoed or edited, and
+// consoleread() returns them as soon as they arrive.
+//
 
 #define C(x)  ((x) - '@')  // control-x
 #define BACKSPACE 0x100
@@ -267,6 +272,8 @@ static struct {
     uint w;  // write index: end of the last completed line
     uint e;  // edit index
 } cons_in = { .lock = { .name = "cons_in" } };
+
+static int raw;   // raw mode? under cons_in.lock
 
 // Echo one input character, erasing it from the screen for BACKSPACE.
 static void echo(int c) {
@@ -287,7 +294,18 @@ void consoleintr(int c) {
 
     acquire(&cons_in.lock);
 
+    if (raw && c != C('C') && c != C('P')) {
+        if (cons_in.e - cons_in.r < INPUT_BUF_SIZE) {
+            cons_in.buf[cons_in.e++ % INPUT_BUF_SIZE] = c;
+            cons_in.w = cons_in.e;
+            wakeup(&cons_in.r);
+        }
+        c = -1;   // done
+    }
+
     switch (c) {
+    case -1:
+        break;
     case C('C'):  // interrupt
         cons_in.e = cons_in.w;
         echo('^');
@@ -337,6 +355,24 @@ void consoleintr(int c) {
         killall(SIGINT);
 }
 
+// CONSOLE_RAW: switch input to raw mode (arg 1) or back to lines
+// (arg 0). Switching to raw, a partly typed line is passed on too;
+// returns how many bytes of input are waiting to be read, all of them
+// echoed already when the console was in line mode before.
+static int consoleioctl(int req, uint64 arg) {
+    if (req != CONSOLE_RAW)
+        return -1;
+    acquire(&cons_in.lock);
+    if (arg && !raw) {
+        cons_in.w = cons_in.e;
+        wakeup(&cons_in.r);
+    }
+    raw = arg != 0;
+    int n = cons_in.w - cons_in.r;
+    release(&cons_in.lock);
+    return n;
+}
+
 // Read up to n bytes of input into dst, a user address if user_dst
 // is set, sleeping until a whole line (or ^D) is available. Returns
 // the number of bytes read; 0 means end of file, -1 that the process
@@ -359,7 +395,7 @@ int consoleread(int user_dst, uint64 dst, int n) {
 
         int c = cons_in.buf[cons_in.r++ % INPUT_BUF_SIZE];
 
-        if (c == C('D')) {  // end-of-file
+        if (c == C('D') && !raw) {  // end-of-file
             if (n < target) {
                 // Save ^D for next time, to make sure caller gets a
                 // 0-byte result.
@@ -376,8 +412,9 @@ int consoleread(int user_dst, uint64 dst, int n) {
         dst++;
         --n;
 
-        if (c == '\n') {
-            // a whole line has arrived, return to the caller.
+        if (c == '\n' || (raw && cons_in.r == cons_in.w)) {
+            // a whole line has arrived (or in raw mode, all there is),
+            // return to the caller.
             break;
         }
     }
@@ -390,4 +427,5 @@ int consoleread(int user_dst, uint64 dst, int n) {
 void consoleinit(void) {
     devsw[CONSOLE].read = consoleread;
     devsw[CONSOLE].write = consolewrite;
+    devsw[CONSOLE].ioctl = consoleioctl;
 }
