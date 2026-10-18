@@ -14,6 +14,8 @@
 
 #define MAXARGS 10
 
+#define C(x)  ((x) - '@')  // control-x
+
 struct cmd {
   int type;
 };
@@ -167,29 +169,41 @@ runcmd(struct cmd *cmd)
   exit(0);
 }
 
+int editline(char *buf, int nbuf, int echoed);
+
 // Read a command line from fd into buf, prompting if interactive, and
 // drop a "#" comment from it. Returns -1 at end of input. An
-// interactive shell starts over when ^C interrupts the read.
+// interactive shell on the console edits the line itself (editline()),
+// and starts over when ^C interrupts the read.
 int
 getcmd(int fd, int interactive, char *buf, int nbuf)
 {
-  int i, r;
+  int i, r, echoed;
   char c;
 
 again:
   if(interactive)
     write(2, "$ ", 2);
   memset(buf, 0, nbuf);
-  i = r = 0;
-  while(i + 1 < nbuf && (r = read(fd, &c, 1)) == 1){
-    buf[i++] = c;
-    if(c == '\n' || c == '\r')
-      break;
+  if(interactive && (echoed = ioctl(fd, CONSOLE_RAW, 1)) >= 0){
+    r = editline(buf, nbuf, echoed);
+    ioctl(fd, CONSOLE_RAW, 0);
+    if(r == -2)
+      goto again;
+    if(r < 0)
+      return -1;
+  } else {
+    i = r = 0;
+    while(i + 1 < nbuf && (r = read(fd, &c, 1)) == 1){
+      buf[i++] = c;
+      if(c == '\n' || c == '\r')
+        break;
+    }
+    if(r < 0 && interactive)
+      goto again;
+    if(buf[0] == 0) // EOF
+      return -1;
   }
-  if(r < 0 && interactive)
-    goto again;
-  if(buf[0] == 0) // EOF
-    return -1;
   for(i = 0; buf[i]; i++){
     if(buf[i] == '#' && (i == 0 || strchr(" \t", buf[i-1]))){
       buf[i] = '\n';
@@ -240,6 +254,165 @@ histexpand(char *buf)
   strcpy(buf, hist[(n-1) % NHIST]);
   fprintf(2, "%s", buf);  // show what runs, like other shells
   return 0;
+}
+
+// Line editor, for an interactive shell with the console in raw mode.
+// Keys: left/right, home/end (also ^A/^E), backspace, delete, ^U,
+// up/down through the history, enter; ^D on an empty line is end of
+// input. The first echoed bytes of input were typed ahead and echoed by
+// the console already, before the prompt: a whole line of them is
+// taken as it is, part of one is shown again after the prompt.
+// Returns 0 with a line in buf (ending in \n), -1 at end of input, -2
+// if ^C interrupted it.
+
+#define ESC 0x1b
+
+static char *line;    // the line being edited, in getcmd's buf
+static int len, pos;  // its length; the cursor
+
+static void
+putstr(char *s, int n)
+{
+  write(2, s, n);
+}
+
+// The screen shows the line up to from, with the cursor there, and
+// oldlen characters in all: show the rest of the line, blank out what
+// is left of the old one, and put the cursor at pos.
+static void
+redraw(int from, int oldlen)
+{
+  int end = len > oldlen ? len : oldlen;
+
+  putstr(line + from, len - from);
+  for(int i = len; i < oldlen; i++)
+    putstr(" ", 1);
+  for(int i = end; i > pos; i--)
+    putstr("\b", 1);
+}
+
+static void
+moveto(int to)
+{
+  for(; pos > to; pos--)
+    putstr("\b", 1);
+  if(to > pos)
+    putstr(line + pos, to - pos);
+  pos = to;
+}
+
+// Replace the line with s (up to a newline).
+static void
+setline(char *s, int nbuf)
+{
+  int oldlen = len;
+
+  moveto(0);
+  for(len = 0; s[len] && s[len] != '\n' && len < nbuf - 2; len++)
+    line[len] = s[len];
+  pos = len;
+  redraw(0, oldlen);
+}
+
+int
+editline(char *buf, int nbuf, int echoed)
+{
+  static char saved[100];   // the new line, while browsing the history
+  int hi = nhist;           // history entry shown; nhist: the new line
+  char c, seq[2];
+
+  line = buf;
+  len = pos = 0;
+  for(;;){
+    int r = read(0, &c, 1);
+    if(r < 0)
+      return -2;   // ^C: the console printed ^C and a newline
+    if(r == 0)
+      return -1;
+    if(echoed > 0){
+      // typed ahead: echoed before the prompt
+      echoed--;
+      if(c == '\r' || c == '\n'){
+        line[len++] = '\n';
+        return 0;
+      }
+      if(len < nbuf - 2)
+        line[len++] = c;
+      pos = len;
+      if(echoed == 0)
+        putstr(line, len);
+      continue;
+    }
+
+    if(c == '\r' || c == '\n'){
+      moveto(len);
+      putstr("\n", 1);
+      line[len++] = '\n';
+      line[len] = 0;
+      return 0;
+    }
+    if(c == C('D') && len == 0)
+      return -1;
+    if(c == ESC){
+      if(read(0, &seq[0], 1) != 1 || read(0, &seq[1], 1) != 1)
+        return -2;
+      if(seq[0] != '[' && seq[0] != 'O')
+        continue;
+      c = seq[1];
+      if(c >= '0' && c <= '9'){
+        // ESC [ n ~: 1 home, 3 delete, 4 end
+        char t;
+        if(read(0, &t, 1) != 1)
+          return -2;
+        c = c == '1' ? 'H' : c == '3' ? 'X' : c == '4' ? 'F' : 0;
+      }
+      if(c == 'A' && hi > 0 && hi > nhist - NHIST){
+        if(hi == nhist){
+          memmove(saved, line, len);
+          saved[len] = 0;
+        }
+        hi--;
+        setline(hist[hi % NHIST], nbuf);
+      } else if(c == 'B' && hi < nhist){
+        hi++;
+        setline(hi == nhist ? saved : hist[hi % NHIST], nbuf);
+      } else if(c == 'C' && pos < len){
+        moveto(pos + 1);
+      } else if(c == 'D' && pos > 0){
+        moveto(pos - 1);
+      } else if(c == 'H'){
+        moveto(0);
+      } else if(c == 'F'){
+        moveto(len);
+      } else if(c == 'X' && pos < len){
+        memmove(line + pos, line + pos + 1, len - pos - 1);
+        len--;
+        redraw(pos, len + 1);
+      }
+      continue;
+    }
+    if(c == C('A')){
+      moveto(0);
+    } else if(c == C('E')){
+      moveto(len);
+    } else if(c == C('U')){
+      setline("", nbuf);
+    } else if(c == '\b' || c == 0x7f){
+      if(pos > 0){
+        moveto(pos - 1);
+        memmove(line + pos, line + pos + 1, len - pos - 1);
+        len--;
+        redraw(pos, len + 1);
+      }
+    } else if(c >= ' ' && c < 0x7f && len < nbuf - 2){
+      memmove(line + pos + 1, line + pos, len - pos);
+      line[pos] = c;
+      len++;
+      pos++;
+      putstr(line + pos - 1, 1);
+      redraw(pos, len);
+    }
+  }
 }
 
 void
