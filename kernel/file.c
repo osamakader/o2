@@ -124,37 +124,11 @@ int fileread(struct file *f, uint64 addr, int n)
     return r;
 }
 
-// Writing at an offset past the end of the file (after lseek()) first
-// fills the gap with zeros, one block per transaction. Returns 0, or -1
-// if the disk is full.
-static int fillgap(struct file *f)
-{
-    static char zeros[BSIZE];
-
-    for (;;) {
-        begin_op();
-        ilock(f->ip);
-        uint size = f->ip->size;
-        uint n = 0;
-        if (f->off > size) {
-            n = BSIZE - size % BSIZE;   // up to the next block boundary
-            if (n > f->off - size)
-                n = f->off - size;
-        }
-        int r = n ? writei(f->ip, 0, (uint64)zeros, size, n) : 0;
-        iunlock(f->ip);
-        end_op();
-        if (n == 0)
-            return 0;
-        if (r != n)
-            return -1;
-    }
-}
-
 // Set f's offset relative to the start (SEEK_SET), the current offset
 // (SEEK_CUR) or the end (SEEK_END), and return it. Only files and
-// directories have offsets. The offset may be past the end of the file
-// (see fillgap()), but not past the largest possible file.
+// directories have offsets. Unlike POSIX, the offset can't go past the
+// end of the file: as in xv6, writing there fails (usertests'
+// truncate2 checks that), so there are no holes.
 int fileseek(struct file *f, int off, int whence)
 {
     if (f->type != FD_INODE)
@@ -164,7 +138,7 @@ int fileseek(struct file *f, int off, int whence)
                 whence == SEEK_CUR ? f->off :
                 whence == SEEK_END ? f->ip->size : -1;
     long newoff = base + off;
-    if (base < 0 || newoff < 0 || newoff > (long)MAXFILE * BSIZE) {
+    if (base < 0 || newoff < 0 || newoff > f->ip->size) {
         iunlock(f->ip);
         return -1;
     }
@@ -195,8 +169,6 @@ int filewrite(struct file *f, uint64 addr, int n)
         // and 2 blocks of slop for non-aligned writes.
         int max = ((MAXOPBLOCKS-1-1-2) / 2) * BSIZE;
         int i = 0;
-        if (fillgap(f) < 0)
-            return -1;
         while (i < n) {
             int n1 = n - i;
             if (n1 > max)

@@ -769,8 +769,7 @@ static void test_dup2(void)
   unlink("dup2.other");
 }
 
-// lseek() moves the offset; writing past the end leaves zeros in the
-// gap.
+// lseek() moves the offset, but not past the end.
 static void test_lseek(void)
 {
   char buf[16];
@@ -791,30 +790,8 @@ static void test_lseek(void)
   if(lseek(fd, 0, SEEK_SET) != 0 || write(fd, "ab", 2) != 2)
     fail("lseek", "overwrite");
 
-  // a gap of more than a block, ending mid-block
-  int gap = 3000;
-  if(lseek(fd, gap, SEEK_END) != 10 + gap || write(fd, "end", 3) != 3)
-    fail("lseek", "write past the end");
-  struct stat st;
-  if(fstat(fd, &st) < 0 || st.size != 10 + gap + 3)
-    fail("lseek", "size after the gap");
-  lseek(fd, 0, SEEK_SET);
-  int bad = 0;
-  char c;
-  for(int i = 0; i < 10 + gap + 3; i++){
-    if(read(fd, &c, 1) != 1){
-      bad = 1;
-      break;
-    }
-    if(i < 10)
-      bad |= c != "ab23456789"[i];
-    else if(i < 10 + gap)
-      bad |= c != 0;
-    else
-      bad |= c != "end"[i - 10 - gap];
-  }
-  if(bad)
-    fail("lseek", "file contents");
+  if(lseek(fd, 1, SEEK_END) != -1 || lseek(fd, 11, SEEK_SET) != -1)
+    fail("lseek", "past the end");
   close(fd);
   unlink("lseek.tmp");
 
