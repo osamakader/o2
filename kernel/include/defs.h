@@ -24,6 +24,7 @@ int strlen(const char *s);
 void kinit(void);
 void *kalloc(void);
 void kfree(void *pa);
+void kinit_rest(void);
 void kref(void *pa);
 int krefs(void *pa);
 uint64 kfreepages(void);

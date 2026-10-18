@@ -82,9 +82,12 @@ void freerange(void *pa_start, void *pa_end)
   }
 }
 
-// Give all of RAM after the kernel to the allocator (to this CPU's
-// list; the others take from it), but for the reference counts, which
-// go first.
+// RAM up to here has been given to the allocator.
+static uint64 freed;
+
+// Give the RAM after the kernel that the boot page table maps to the
+// allocator (to this CPU's list; the others take from it), but for the
+// reference counts, which go first.
 void kinit()
 {
   for(int i = 0; i < NCPU; i++)
@@ -92,7 +95,15 @@ void kinit()
   uint64 npages = (board.ram_end - KERNBASE) / PGSIZE;
   ref = (ushort*)PGROUNDUP((uint64)end);
   memset(ref, 0, npages * sizeof(ushort));
-  freerange(ref + npages, (void*)P2V(board.ram_end));
+  freed = board.ram_end < KERNBASE + BOOT_RAM ? board.ram_end : KERNBASE + BOOT_RAM;
+  freerange(ref + npages, (void*)P2V(freed));
+}
+
+// The rest of RAM, once the kernel page table maps it.
+void kinit_rest()
+{
+  freerange((void*)P2V(freed), (void*)P2V(board.ram_end));
+  freed = board.ram_end;
 }
 
 // Take up to STEAL pages from another CPU's list; returns them as a

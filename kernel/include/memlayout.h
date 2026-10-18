@@ -7,11 +7,13 @@
 #include "platform.h"
 
 // RAM starts at KERNBASE; how much there is comes from the device tree
-// (board.ram_end), or else is DEFAULT_RAM. Up to MAX_RAM is used, all
-// of which the boot page tables (entry.S) map, in 1GB blocks.
+// (board.ram_end), or else is DEFAULT_RAM. Up to MAX_RAM is used. The
+// boot page tables (entry.S) map the first BOOT_RAM_GB (platform.h) in
+// 1GB blocks: kinit() frees that, kinit_rest() the rest once the
+// kernel page table is installed.
 #define DEFAULT_RAM (128UL*1024*1024)
-#define BOOT_RAM_GB 16
-#define MAX_RAM     (BOOT_RAM_GB * 1024UL*1024*1024)
+#define MAX_RAM     (16UL*1024*1024*1024)
+#define BOOT_RAM    (BOOT_RAM_GB * 1024UL*1024*1024)
 
 
 #define PGSIZE 4096 // bytes per page

@@ -38,6 +38,7 @@ int main(int boot, uint64 dtb) {
         kvminithart();
         fpinithart();
         log_msg("Kernel page table installed\n");
+        kinit_rest();
 
         intc_init();
         intc_inithart();

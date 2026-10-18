@@ -38,6 +38,9 @@
 // kernel at 0x80200000.
 #define KERNBASE 0x80000000
 
+// the boot page table maps all of RAM (MAX_RAM)
+#define BOOT_RAM_GB 16
+
 // mtime frequency on qemu virt
 #define TIMEBASE_FREQ 10000000
 

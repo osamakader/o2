@@ -44,4 +44,7 @@
 // 0x40200000 (kernel.ld).
 #define KERNBASE 0x40000000
 
+// the boot page table maps all of RAM (MAX_RAM)
+#define BOOT_RAM_GB 16
+
 #endif
