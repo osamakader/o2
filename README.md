@@ -67,6 +67,14 @@ both processes, marked by a software PTE bit, and the first write to
 one, by the process or by the kernel for it, copies it (pages are
 reference counted; the last writer keeps the original).
 
+`mmap`/`munmap` map anonymous memory or files, MAP_PRIVATE or
+MAP_SHARED, placed downward from the top of user space. Anonymous
+private pages are allocated on first touch; shared ones, and files,
+when mapped (shared mappings stay shared with children). Writable
+shared file mappings are written back on munmap, exit and exec; with
+no page cache, separate mappings of a file see each other's changes
+only after that.
+
 Time comes from the RTC (PL031 on arm64, Goldfish on riscv64), read at
 boot, plus the system counter; `date` shows it. Inodes are 128 bytes
 on disk and record atime (creation only: reads don't update it), mtime
