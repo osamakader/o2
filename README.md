@@ -109,6 +109,26 @@ looks commands up in `PATH` (`PATH=/:/bin`; default `/`), keeps a
 line (left/right, home/end, backspace, delete, ^U), and survives ^C,
 which interrupts the command it is running.
 
+## Scalability
+
+`lockstat cmd` shows the spin locks a command contended on (acquire()
+counts per lock name, per CPU), and `bench alloc|fs|fork [n]` times n
+processes of a workload in parallel. Changes from xv6 it guided:
+
+- the page allocator has a free list per CPU (taking pages from
+  another's when empty), and atomic page reference counts;
+- the scheduler and wakeup() look at process slots without their lock
+  first, instead of locking all 64 on every pass;
+- the buffer cache is 31 hash buckets with a lock each, and 1024
+  buffers instead of 120;
+- the log commits in groups, and writes the log and the home blocks
+  as batches of virtio requests (up to 21 at a time).
+
+On 4 CPUs under qemu, `bench fs 4` went from 3.3s to 0.45s, and
+xv6's writebig (a 64MB file, 1KB per write) from 7.5 minutes to under
+one. wait_lock, which serializes every exit and wait, is the main
+contention left (`bench fork`).
+
 ## Floating point
 
 User programs may use floating point and SIMD; the kernel itself is
