@@ -154,6 +154,7 @@ int exec(struct proc *p, const char *name, struct elfsrc *src, char **argv) {
     fp_exec(p);
     sigexec(p);
     if (oldpagetable) {
+        vma_unmap_pages(p, oldpagetable);
         // This hart may still be translating through the old table (on
         // riscv64 its upper half maps the kernel itself); leave it before
         // kfree() fills it with junk. usertrapret() installs the new one.
@@ -229,6 +230,10 @@ int kexec(char *path, char **argv) {
     char *name, *s;
     char line[MAXPATH], *nargv[MAXARG + 1];
 
+    // the new program won't have the old one's mappings: write shared
+    // ones back now, outside exec's transaction
+    vma_sync(myproc());
+
     begin_op();
     if ((src.ip = namei(path)) == 0) {
         end_op();
@@ -257,5 +262,7 @@ int kexec(char *path, char **argv) {
 
     iunlockput(src.ip);
     end_op();
+    if (r >= 0)
+        vma_clear(myproc());   // may close files: after the transaction
     return r;
 }

@@ -164,9 +164,9 @@ void usertrap(void)
         // ok
     } else if (tf->cause == 2 && fp_trap(p)) {
         // illegal instruction with FP off: first FP use on this hart
-    } else if ((tf->cause == 13 || tf->cause == 15) &&
+    } else if ((tf->cause == 12 || tf->cause == 13 || tf->cause == 15) &&
                vmfault(p->pagetable, tf->tval) != 0) {
-        // load/store page fault on lazily allocated memory
+        // page fault on lazily allocated memory
     } else if (tf->cause == 15 && uvmcow(p->pagetable, tf->tval) != 0) {
         // store page fault on a copy-on-write page
     } else if (!sigfault(p, cause_signal(tf->cause))) {

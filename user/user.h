@@ -44,6 +44,8 @@ int lseek(int, int, int);
 int waitpid(int, int *, int);
 int clock_gettime(int, struct timespec *);
 int ioctl(int, int, uint64);
+void *mmap(void *, uint64, int, int, int, uint64);
+int munmap(void *, uint64);
 
 // ulib.c
 char *strcpy(char *, const char *);

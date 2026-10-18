@@ -36,6 +36,8 @@
 #define SYS_sigreturn 30
 #define SYS_clock_gettime 31
 #define SYS_ioctl   32
+#define SYS_mmap    33
+#define SYS_munmap  34
 
 // sbrk(n, type): allocate now, or only on first touch (page fault)
 #define SBRK_EAGER 1

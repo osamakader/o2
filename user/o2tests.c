@@ -8,6 +8,7 @@
 #include "procinfo.h"
 #include "syscall.h"
 #include "time.h"
+#include "mman.h"
 
 #define PGSIZE 4096
 
@@ -1356,12 +1357,149 @@ static void test_cow(void)
   sbrk(-big);
 }
 
+// Run fn(arg) in a child; returns its exit status, 100 + sig if it
+// faulted (SIGSEGV or SIGBUS).
+static int child_status(void (*fn)(char *), char *arg)
+{
+  int pid = fork();
+  if(pid == 0){
+    signal(SIGSEGV, exit_with_sig);
+    signal(SIGBUS, exit_with_sig);
+    fn(arg);
+    exit(0);
+  }
+  int status = -1;
+  waitpid(pid, &status, 0);
+  return status;
+}
+
+static void touch_read(char *p)
+{
+  (void)*(volatile char *)p;
+}
+
+static void touch_write(char *p)
+{
+  *(volatile char *)p = 1;
+}
+
+// Anonymous memory mappings.
+static void test_mmap(void)
+{
+  int status;
+  char *heap = sbrk(0);
+
+  // private: lazily allocated, zeroed
+  char *p = mmap(0, 3 * 4096, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+  if(p == MAP_FAILED || (uint64)p % 4096 != 0 || p < heap){
+    fail("mmap", "mmap");
+    return;
+  }
+  if(p[0] != 0 || p[3 * 4096 - 1] != 0)
+    fail("mmap", "not zeroed");
+  memset(p, 'a', 3 * 4096);
+
+  // the kernel reads and writes it too
+  int fds[2];
+  pipe(fds);
+  write(fds[1], p + 4096 - 2, 4);
+  char *q = mmap(0, 4096, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+  if(q == MAP_FAILED || q == p || read(fds[0], q + 10, 4) != 4 || memcmp(q + 10, "aaaa", 4) != 0)
+    fail("mmap", "read/write through a mapping");
+  close(fds[0]);
+  close(fds[1]);
+
+  // a hole in the middle
+  if(munmap(p + 4096, 4096) != 0)
+    fail("mmap", "munmap");
+  if(p[0] != 'a' || p[2 * 4096] != 'a')
+    fail("mmap", "the rest of a split mapping");
+  if(child_status(touch_read, p + 4096) != 100 + SIGSEGV)
+    fail("mmap", "an unmapped page is still there");
+  munmap(p, 3 * 4096);
+  munmap(q, 4096);
+  if(child_status(touch_read, p) != 100 + SIGSEGV)
+    fail("mmap", "munmap");
+
+  // read-only
+  p = mmap(0, 4096, PROT_READ, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+  if(p == MAP_FAILED || p[100] != 0 || child_status(touch_write, p) != 100 + SIGSEGV)
+    fail("mmap", "PROT_READ");
+  munmap(p, 4096);
+  p = mmap(0, 4096, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+  if(p == MAP_FAILED || child_status(touch_read, p) != 100 + SIGSEGV)
+    fail("mmap", "PROT_NONE");
+  munmap(p, 4096);
+
+  // shared with a child, or private to each
+  char *sh = mmap(0, 4096, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+  char *pr = mmap(0, 4096, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+  if(sh == MAP_FAILED || pr == MAP_FAILED){
+    fail("mmap", "mmap");
+    return;
+  }
+  strcpy(sh, "parent");
+  strcpy(pr, "parent");
+  int pid = fork();
+  if(pid == 0){
+    int ok = strcmp(sh, "parent") == 0 && strcmp(pr, "parent") == 0;
+    strcpy(sh, "child");
+    strcpy(pr, "child");
+    exit(ok ? 0 : 1);
+  }
+  waitpid(pid, &status, 0);
+  if(status != 0 || strcmp(sh, "child") != 0 || strcmp(pr, "parent") != 0)
+    fail("mmap", "MAP_SHARED / MAP_PRIVATE after fork");
+  munmap(sh, 4096);
+  munmap(pr, 4096);
+
+  // big and lazy: only touched pages take memory
+  p = mmap(0, 512 * 1024 * 1024, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+  if(p == MAP_FAILED){
+    fail("mmap", "a big private mapping");
+  } else {
+    p[0] = p[256 * 1024 * 1024] = 1;
+    munmap(p, 512 * 1024 * 1024);
+  }
+
+  // children's mappings go away when they exit or exec: 200 of 1 MB
+  // each would not fit if they leaked
+  for(int i = 0; i < 200; i++){
+    pid = fork();
+    if(pid == 0){
+      p = mmap(0, 1024 * 1024, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+      if(p == MAP_FAILED)
+        exit(1);
+      if(i % 2){
+        char *argv[] = { "o2tests", "nop", 0 };
+        exec("/o2tests", argv);
+        exit(1);
+      }
+      exit(0);
+    }
+    waitpid(pid, &status, 0);
+    if(status != 0){
+      fail("mmap", "mappings leak");
+      break;
+    }
+  }
+
+  if(mmap(0, 0, PROT_READ, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0) != MAP_FAILED ||
+     mmap(0, 4096, PROT_READ, MAP_SHARED | MAP_PRIVATE | MAP_ANONYMOUS, -1, 0) != MAP_FAILED ||
+     mmap(0, 4096, 8, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0) != MAP_FAILED ||
+     munmap((char *)4097, 4096) != -1)
+    fail("mmap", "bad arguments accepted");
+  if(sbrk(0) != heap)
+    fail("mmap", "the heap moved");
+}
+
 static void o2tests(void)
 {
   struct { const char *name; void (*fn)(void); } tests[] = {
     { "forkwait", test_forkwait },
     { "forkloop", test_forkloop },
     { "cow", test_cow },
+    { "mmap", test_mmap },
     { "faults", test_faults },
     { "badptr", test_badptr },
     { "kill", test_kill },
@@ -1398,6 +1536,8 @@ int main(int argc, char *argv[])
 {
   if(argc == 2 && strcmp(argv[1], "fpexec") == 0)
     exit(fp_old_pattern_left() ? 1 : 0);
+  if(argc == 2 && strcmp(argv[1], "nop") == 0)
+    exit(0);
   if(argc == 2 && strcmp(argv[1], "sigself") == 0){
     // run by test_handlers: send ourselves SIGUSR1
     kill(getpid(), SIGUSR1);

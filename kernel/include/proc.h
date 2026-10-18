@@ -13,6 +13,16 @@
 enum procstate { UNUSED, USED, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 
 
+// A memory mapping (mmap()): [start, end), page aligned, of a file
+// from offset off or anonymous (file 0). See mmap.c.
+struct vma {
+    uint64 start, end;   // end 0: slot unused
+    int prot;            // PROT_*
+    int flags;           // MAP_*
+    struct file *file;
+    uint64 off;
+};
+
 struct proc {
     struct spinlock lock;
 
@@ -40,6 +50,7 @@ struct proc {
     uint64 sighandler[NSIG];      // SIG_DFL, SIG_IGN or a user function;
                                   // written with p->lock held
     uint64 sigrestorer;           // user code handlers return to: sigreturn
+    struct vma vma[NVMA];         // memory mappings
     char name[16];                // process name (debugging)
 };
 
@@ -70,6 +81,16 @@ int interrupted(struct proc *p);
 void usersignals(void);
 void sigexec(struct proc *p);
 void sigdeliver(struct proc *p, int sig, uint64 handler);
+
+// mmap.c
+uint64 vma_floor(struct proc *p);
+uint64 vma_fault(struct proc *p, uint64 va);
+int vma_fork(struct proc *p, struct proc *np);
+void vma_drop(struct proc *p);
+void vma_unmapall(struct proc *p);
+void vma_sync(struct proc *p);
+void vma_unmap_pages(struct proc *p, pagetable_t pagetable);
+void vma_clear(struct proc *p);
 int getppid(void);
 void setkilled(struct proc *p);
 int killed(struct proc *p);

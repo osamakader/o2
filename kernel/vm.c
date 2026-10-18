@@ -269,14 +269,17 @@ void uvmclear(pagetable_t pagetable, uint64 va) {
     *pte = PTE_CLEAR_USER(*pte);
 }
 
-// Lazily allocated memory (sbrklazy): map a zeroed user page at va in
-// the current process's page table if va is below its size and nothing
-// is mapped there yet. Returns the page's physical address, or 0.
+// Lazily allocated memory (sbrklazy, or mmap above the heap): map a
+// zeroed user page at va in the current process's page table if va is
+// below its size and nothing is mapped there yet. Returns the page's
+// physical address, or 0.
 uint64 vmfault(pagetable_t pagetable, uint64 va) {
     struct proc *p = myproc();
 
-    if (p == 0 || p->pagetable != pagetable || va >= p->sz)
+    if (p == 0 || p->pagetable != pagetable || va >= MAXVA)
         return 0;
+    if (va >= p->sz)
+        return vma_fault(p, va);
     va = PGROUNDDOWN(va);
     pte_t *pte = walk(pagetable, va, 0);
     if (pte && (*pte & PTE_VALID))

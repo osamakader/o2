@@ -66,7 +66,7 @@ uint64 sys_sbrk(void) {
         if (growproc(n) < 0)
             return -1;
     } else {
-        if (addr + n < addr || addr + n > USERTOP)
+        if (addr + n < addr || addr + n > vma_floor(p))
             return -1;
         p->sz += n;
     }

@@ -42,3 +42,5 @@ SYSCALL_AS(sys_signal, signal)       // signal() in ulib.c
 SYSCALL_AS(sigreturn_tramp, sigreturn)  // where handlers return to
 SYSCALL(clock_gettime)
 SYSCALL(ioctl)
+SYSCALL(mmap)
+SYSCALL(munmap)

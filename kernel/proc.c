@@ -343,7 +343,7 @@ int growproc(int n) {
     uint64 sz = p->sz;
 
     if (n > 0) {
-        if (sz + n > USERTOP)
+        if (sz + n > vma_floor(p))
             return -1;
         if ((sz = uvmalloc(p->pagetable, sz, sz + n, PERM_W)) == 0)
             return -1;
@@ -374,6 +374,12 @@ int fork(void) {
     // Copy user memory from parent to child.
     if ((np->pagetable = proc_pagetable(np)) == 0 ||
         uvmcopy(p->pagetable, np->pagetable, p->sz) < 0) {
+        freeproc(np);
+        release(&np->lock);
+        return -1;
+    }
+    if (vma_fork(p, np) < 0) {
+        vma_drop(np);
         freeproc(np);
         release(&np->lock);
         return -1;
@@ -441,6 +447,8 @@ void exit(int status) {
 
     if (p == initproc)
         panic("init exiting");
+
+    vma_unmapall(p);
 
     // Close all open files.
     for (int fd = 0; fd < NOFILE; fd++) {
