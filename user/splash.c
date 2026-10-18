@@ -81,7 +81,9 @@ arc(float px, float py, float best)
   }
   float d0 = fsqrt((px - arc_x0) * (px - arc_x0) + (py - arc_y0) * (py - arc_y0));
   float d1 = fsqrt((px - arc_x1) * (px - arc_x1) + (py - arc_y1) * (py - arc_y1));
-  return d0 < d1 ? d0 : d1;
+  if(d1 < d0)
+    d0 = d1;
+  return d0 < best ? d0 : best;
 }
 
 // The logo's strokes, in units where it spans about [-0.9, 0.9] x
