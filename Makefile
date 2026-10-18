@@ -221,6 +221,9 @@ $(B)/user/_%: $(B)/user/%.o $(ULIB) user/$(ARCH)/user.ld
 # kernel/*.h and user/user.h includes resolve through user/xv6/include.
 $(B)/user/xv6/%.o: CFLAGS += -iquote user/xv6/include
 
+# sqrtf() as an instruction, not a libm call that sets errno
+$(B)/user/splash.o: CFLAGS += -fno-math-errno
+
 $(B)/user/xv6/_%: $(B)/user/xv6/%.o $(ULIB) user/$(ARCH)/user.ld
 	$(LD) $(LDFLAGS) -T user/$(ARCH)/user.ld -o $@ $< $(ULIB)
 	$(OBJDUMP) -S $@ > $(B)/user/xv6/$*.asm
@@ -265,6 +268,7 @@ UPROGS = \
   $(B)/user/_pwd \
   $(B)/user/_rm \
   $(B)/user/_sh \
+  $(B)/user/_splash \
   $(B)/user/_o2tests \
   $(B)/user/xv6/_usertests \
   $(B)/user/xv6/_grind \
