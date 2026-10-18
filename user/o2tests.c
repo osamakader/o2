@@ -10,6 +10,7 @@
 #include "time.h"
 #include "mman.h"
 #include "lockstat.h"
+#include "socket.h"
 
 #define PGSIZE 4096
 
@@ -1789,6 +1790,55 @@ static void test_lockstat(void)
     fail("lockstat", "counts");
 }
 
+// Datagram sockets, on qemu's user-mode network (skipped without one).
+static void test_net(void)
+{
+  int fd = socket(AF_INET, SOCK_DGRAM, 0);
+  if(fd < 0){
+    printf("o2tests: no network, skipping\n");
+    return;
+  }
+  struct sockaddr_in a = { .sin_family = AF_INET, .sin_port = htons(5555) };
+  int fd2 = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+  if(bind(fd, &a, sizeof(a)) != 0 || bind(fd2, &a, sizeof(a)) != -1 || bind(fd, &a, sizeof(a)) != -1)
+    fail("net", "bind");
+  a.sin_port = 0;
+  if(bind(fd2, &a, sizeof(a)) != 0)
+    fail("net", "bind to any port");
+
+  // nothing arrives: with MSG_DONTWAIT, and with a timeout
+  char buf[64];
+  struct timeval tv = { 0, 200000 };
+  uint64 t0 = uptime();
+  if(recvfrom(fd, buf, sizeof(buf), MSG_DONTWAIT, 0, 0) != -1 ||
+     setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) != 0 ||
+     recvfrom(fd, buf, sizeof(buf), 0, 0, 0) != -1 || uptime() - t0 < 20 || uptime() - t0 > 100)
+    fail("net", "receive timeout");
+  close(fd);
+  close(fd2);
+
+  // ping the gateway
+  fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_ICMP);
+  struct sockaddr_in gw = { .sin_family = AF_INET };
+  inet_aton("10.0.2.2", &gw.sin_addr);
+  tv.tv_sec = 2;
+  setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+  char msg[16] = { 8 };   // echo request
+  msg[7] = 42;
+  struct sockaddr_in from;
+  int len = sizeof(from);
+  if(sendto(fd, msg, sizeof(msg), 0, &gw, sizeof(gw)) != sizeof(msg) ||
+     recvfrom(fd, buf, sizeof(buf), 0, &from, &len) != sizeof(msg) || buf[0] != 0 ||
+     buf[7] != 42 || from.sin_addr.s_addr != gw.sin_addr.s_addr)
+    fail("net", "ping 10.0.2.2");
+  close(fd);
+
+  if(socket(AF_INET, 1, 0) != -1 || socket(1, SOCK_DGRAM, 0) != -1 ||
+     socket(AF_INET, SOCK_DGRAM, 6) != -1 || bind(0, &a, sizeof(a)) != -1 ||
+     sendto(1, msg, 1, 0, &gw, sizeof(gw)) != -1)
+    fail("net", "bad arguments accepted");
+}
+
 static void o2tests(void)
 {
   struct { const char *name; void (*fn)(void); } tests[] = {
@@ -1811,6 +1861,7 @@ static void o2tests(void)
     { "bigfile", test_bigfile },
     { "symlink", test_symlink },
     { "lockstat", test_lockstat },
+    { "net", test_net },
     { "getppid", test_getppid },
     { "dup2", test_dup2 },
     { "lseek", test_lseek },
