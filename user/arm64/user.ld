@@ -13,6 +13,10 @@ SECTIONS
   . = 0x0;
 
   .text : {
+    /* no function at 0 or 1, which signal() takes for SIG_DFL and
+       SIG_IGN: start with 16 bytes of zeros (not an instruction, on
+       either arch) */
+    . += 16;
     *(.text .text.*)
   } :text
 
