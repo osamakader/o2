@@ -1,6 +1,7 @@
 #include "types.h"
 #include "user.h"
 #include "time.h"
+#include "socket.h"
 #include "stat.h"
 #include "fcntl.h"
 #include "syscall.h"
@@ -205,4 +206,26 @@ gmtime(uint64 t, struct tm *tm)
   tm->tm_mday = d;
   tm->tm_yday = days - days_from_civil(y, 1, 1);
   return tm;
+}
+
+// Parse a dotted IPv4 address "a.b.c.d" into *a (network byte order).
+// Returns 1, or 0 if s isn't one.
+int
+inet_aton(const char *s, struct in_addr *a)
+{
+  uint32 x = 0;
+  for(int i = 0; i < 4; i++){
+    if(*s < '0' || *s > '9')
+      return 0;
+    int n = 0;
+    while(*s >= '0' && *s <= '9')
+      n = n * 10 + *s++ - '0';
+    if(n > 255 || (i < 3 && *s++ != '.'))
+      return 0;
+    x = x << 8 | n;
+  }
+  if(*s)
+    return 0;
+  a->s_addr = htonl(x);
+  return 1;
 }

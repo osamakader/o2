@@ -12,6 +12,7 @@ struct timespec;
 struct tm;
 struct lockstat;
 struct sockaddr_in;
+struct in_addr;
 
 // system calls
 int fork(void);
@@ -76,6 +77,7 @@ char *strchr(const char *, char c);
 int atoi(const char *);
 uint64 time(void);
 struct tm *gmtime(uint64, struct tm *);
+int inet_aton(const char *, struct in_addr *);
 
 // umalloc.c
 void *malloc(uint);

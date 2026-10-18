@@ -255,6 +255,9 @@ UPROGS = \
   $(B)/user/_lockstat \
   $(B)/user/_ls \
   $(B)/user/_mkdir \
+  $(B)/user/_nettest \
+  $(B)/user/_nslookup \
+  $(B)/user/_ping \
   $(B)/user/_ps \
   $(B)/user/_pwd \
   $(B)/user/_rm \
