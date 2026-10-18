@@ -41,9 +41,10 @@ uint64 sys_waitpid(void) {
 }
 
 uint64 sys_kill(void) {
-    int pid;
+    int pid, sig;
     argint(0, &pid);
-    return kill(pid);
+    argint(1, &sig);
+    return kill(pid, sig);
 }
 
 uint64 sys_fork(void) {
@@ -83,7 +84,7 @@ uint64 sys_pause(void) {
     acquire(&tickslock);
     uint64 ticks0 = ticks;
     while (ticks - ticks0 < n) {
-        if (killed(myproc())) {
+        if (interrupted(myproc())) {
             release(&tickslock);
             return -1;
         }

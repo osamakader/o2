@@ -8,6 +8,7 @@
 #include "trap.h"
 #include "context.h"
 #include "fpstate.h"
+#include "signal.h"
 
 enum procstate { UNUSED, USED, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 
@@ -19,6 +20,7 @@ struct proc {
     enum procstate state;
     void *chan;      // if non-zero, sleeping on chan
     int killed;      // if non-zero, have been killed
+    uint32 sigpending;  // signals sent but not yet delivered, bit n = signal n
     int xstate;      // exit status to be returned to parent's wait
     int pid;         // process ID
 
@@ -35,6 +37,8 @@ struct proc {
     struct fpstate fp;            // user FP registers, when not live (fpu.h)
     struct file *ofile[NOFILE];   // open files
     struct inode *cwd;            // current directory
+    uint64 sighandler[NSIG];      // SIG_DFL, SIG_IGN or a user function;
+                                  // written with p->lock held
     char name[16];                // process name (debugging)
 };
 
@@ -58,7 +62,10 @@ int growproc(int n);
 int fork(void);
 void exit(int status) __attribute__((noreturn));
 int waitpid(int pid, uint64 addr, int options);
-int kill(int pid);
+int kill(int pid, int sig);
+int interrupted(struct proc *p);
+void usersignals(void);
+void sigexec(struct proc *p);
 int getppid(void);
 void setkilled(struct proc *p);
 int killed(struct proc *p);

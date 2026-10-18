@@ -209,7 +209,7 @@ $(B)/user/_%: $(B)/user/%.o $(ULIB) user/$(ARCH)/user.ld
 
 # xv6's own user programs (user/xv6), built unmodified: their
 # kernel/*.h and user/user.h includes resolve through user/xv6/include.
-$(B)/user/xv6/%.o: CFLAGS += -I user/xv6/include
+$(B)/user/xv6/%.o: CFLAGS += -iquote user/xv6/include
 
 $(B)/user/xv6/_%: $(B)/user/xv6/%.o $(ULIB) user/$(ARCH)/user.ld
 	$(LD) $(LDFLAGS) -T user/$(ARCH)/user.ld -o $@ $< $(ULIB)

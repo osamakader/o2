@@ -170,6 +170,7 @@ void usertrap(void)
     if (dev == DEV_TIMER)
         yield();
 
+    usersignals();
     usertrapret();
 }
 

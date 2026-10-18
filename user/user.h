@@ -2,6 +2,7 @@
 #define USER_H
 
 #include "types.h"
+#include "signal.h"
 
 #define SBRK_ERROR ((char *)-1)
 
@@ -14,7 +15,7 @@ int exit(int) __attribute__((noreturn));
 int wait(int *);
 int read(int, void *, int);
 int write(int, const void *, int);
-int kill(int);
+int kill(int, int);
 int exec(const char *, char **);
 int getpid(void);
 char *sys_sbrk(int, int);

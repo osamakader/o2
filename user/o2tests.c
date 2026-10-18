@@ -167,7 +167,7 @@ static void test_kill(void)
   if(pid == 0)
     spin();
   pause(5);
-  if(kill(pid) != 0)
+  if(kill(pid, SIGKILL) != 0)
     fail("kill", "kill");
   int status;
   if(wait(&status) != pid || status != -1)
@@ -903,6 +903,44 @@ static void test_script(void)
     fail("script", "bad scripts ran");
 }
 
+// Signals with their default actions: most terminate, SIGCHLD doesn't,
+// and they interrupt sleeping system calls.
+static void test_signals(void)
+{
+  int status;
+
+  int pid = fork();
+  if(pid == 0)
+    spin();
+  if(kill(pid, SIGTERM) != 0 || wait(&status) != pid || status != -1)
+    fail("signals", "SIGTERM didn't terminate");
+
+  // a sleeping process is woken and terminated
+  pid = fork();
+  if(pid == 0){
+    pause(1000);
+    exit(0);
+  }
+  pause(2);
+  if(kill(pid, SIGINT) != 0 || wait(&status) != pid || status != -1)
+    fail("signals", "SIGINT didn't end pause()");
+
+  // SIGCHLD is ignored by default
+  pid = fork();
+  if(pid == 0){
+    int t0 = uptime();
+    kill(getpid(), SIGCHLD);
+    pause(2);
+    exit(uptime() - t0 >= 2 ? 3 : 4);
+  }
+  if(wait(&status) != pid || status != 3)
+    fail("signals", "SIGCHLD wasn't ignored");
+
+  if(kill(pid, SIGTERM) != -1 || kill(getpid(), 0) != 0 ||
+     kill(getpid(), NSIG) != -1 || kill(getpid(), -1) != -1)
+    fail("signals", "bad pids or signals accepted");
+}
+
 static void o2tests(void)
 {
   struct { const char *name; void (*fn)(void); } tests[] = {
@@ -921,6 +959,7 @@ static void o2tests(void)
     { "lseek", test_lseek },
     { "waitpid", test_waitpid },
     { "script", test_script },
+    { "signals", test_signals },
     { "fp math", test_fp_math },
     { "fp regs", test_fp_regs },
     { "fp fork", test_fp_fork },

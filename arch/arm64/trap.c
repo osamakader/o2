@@ -90,18 +90,16 @@ void usertrap(struct trapframe *tf)
         setkilled(p);
     }
 
-    if (killed(p))
-        exit(-1);
+    usersignals();
 }
 
 // IRQ from EL0: handle it (a timer tick may yield), then make a killed
-// process exit instead of returning to user mode.
+// process exit instead of returning to user mode, and deliver signals.
 void usertrap_irq(struct trapframe *tf)
 {
     handle_irq(tf);
 
-    if (killed(myproc()))
-        exit(-1);
+    usersignals();
 }
 
 // Last step before returning to EL0 through tf: with interrupts off

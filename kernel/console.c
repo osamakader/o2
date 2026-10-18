@@ -326,7 +326,7 @@ void consoleintr(int c) {
 // Read up to n bytes of input into dst, a user address if user_dst
 // is set, sleeping until a whole line (or ^D) is available. Returns
 // the number of bytes read; 0 means end of file, -1 that the process
-// was killed while waiting.
+// was killed or got a signal while waiting.
 int consoleread(int user_dst, uint64 dst, int n) {
     int target = n;
 
@@ -336,7 +336,7 @@ int consoleread(int user_dst, uint64 dst, int n) {
         // cons_in.buf.
         while (cons_in.r == cons_in.w) {
             struct proc *p = myproc();
-            if (p->pagetable && killed(p)) {
+            if (p->pagetable && interrupted(p)) {
                 release(&cons_in.lock);
                 return -1;
             }

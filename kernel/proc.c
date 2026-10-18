@@ -141,6 +141,8 @@ static void freeproc(struct proc *p) {
     p->name[0] = 0;
     p->chan = 0;
     p->killed = 0;
+    p->sigpending = 0;
+    memset(p->sighandler, 0, sizeof(p->sighandler));
     p->xstate = 0;
     p->state = UNUSED;
 }
@@ -380,6 +382,9 @@ int fork(void) {
 
     fp_fork(p, np);
 
+    // signal handlers are inherited; pending signals aren't
+    memmove(np->sighandler, p->sighandler, sizeof(p->sighandler));
+
     // Cause fork to return 0 in the child.
     TF_RET(np->trapframe) = 0;
 
@@ -504,7 +509,7 @@ int waitpid(int pid, uint64 addr, int options) {
         }
 
         // No point waiting if we don't have any children.
-        if (!havekids || killed(p)) {
+        if (!havekids || interrupted(p)) {
             release(&wait_lock);
             return -1;
         }
@@ -518,15 +523,29 @@ int waitpid(int pid, uint64 addr, int options) {
     }
 }
 
-// Kill the process with the given pid. The victim won't exit until it
-// tries to return to user space (see usertrap()).
-int kill(int pid) {
+// Is sig ignored by p, explicitly or by default? p->lock held.
+static int sigignored(struct proc *p, int sig) {
+    uint64 h = p->sighandler[sig];
+    return h == SIG_IGN || (h == SIG_DFL && sig == SIGCHLD);
+}
+
+// Send signal sig to the user process with the given pid; sig 0 only
+// checks that it exists. SIGKILL kills it, other signals become
+// pending (unless ignored) and are acted on when it next returns to
+// user mode (usersignals()). Either way, a sleeping victim wakes up,
+// so that interruptible waits (see interrupted()) return early.
+int kill(int pid, int sig) {
+    if (sig < 0 || sig >= NSIG)
+        return -1;
     for (int i = 0; i < NPROC; i++) {
         struct proc *p = &ptable[i];
         acquire(&p->lock);
         if (p->pid == pid && p->pagetable != 0) {
-            p->killed = 1;
-            if (p->state == SLEEPING) {
+            if (sig == SIGKILL)
+                p->killed = 1;
+            else if (sig != 0 && !sigignored(p, sig))
+                p->sigpending |= 1U << sig;
+            if (p->state == SLEEPING && (p->killed || p->sigpending)) {
                 // Wake process from sleep().
                 p->state = RUNNABLE;
             }
@@ -536,6 +555,53 @@ int kill(int pid) {
         release(&p->lock);
     }
     return -1;
+}
+
+// Should p stop waiting and return to user mode? Yes if it was killed
+// or has a signal to handle. System calls that can wait indefinitely
+// check this and return -1.
+int interrupted(struct proc *p) {
+    acquire(&p->lock);
+    int r = p->killed || p->sigpending;
+    release(&p->lock);
+    return r;
+}
+
+// On the way back to user mode: exit if killed, and act on pending
+// signals: ignore them, or exit for those whose default action is to
+// terminate.
+void usersignals(void) {
+    struct proc *p = myproc();
+
+    for (;;) {
+        acquire(&p->lock);
+        if (p->killed) {
+            release(&p->lock);
+            exit(-1);
+        }
+        if (p->sigpending == 0) {
+            release(&p->lock);
+            return;
+        }
+        int sig = 1;
+        while (!(p->sigpending & (1U << sig)))
+            sig++;
+        p->sigpending &= ~(1U << sig);
+        int ignored = sigignored(p, sig);
+        release(&p->lock);
+        if (!ignored)
+            exit(-1);
+    }
+}
+
+// exec(): handlers are reset to the default action; ignored signals
+// stay ignored. Without p->lock (userinit() holds it already): a
+// concurrent kill() may see a handler before the reset, which only
+// makes a signal pending that usersignals() then ignores.
+void sigexec(struct proc *p) {
+    for (int sig = 1; sig < NSIG; sig++)
+        if (p->sighandler[sig] != SIG_IGN)
+            p->sighandler[sig] = SIG_DFL;
 }
 
 // The parent's pid; 0 for init, which has none.
