@@ -64,6 +64,7 @@ int fork(void);
 void exit(int status) __attribute__((noreturn));
 int waitpid(int pid, uint64 addr, int options);
 int kill(int pid, int sig);
+void killall(int sig);
 int interrupted(struct proc *p);
 void usersignals(void);
 void sigexec(struct proc *p);

@@ -251,6 +251,8 @@ int consolewrite(int user_src, uint64 src, int n) {
 //   ^U: kill the line
 //   ^D: end of file
 //   ^P: print the process list (procdump)
+//   ^C: discard the line and send SIGINT to all user processes but
+//       init (there are no process groups to pick a foreground job)
 // Characters are echoed; consoleread() returns whole lines.
 //
 
@@ -281,9 +283,18 @@ static void echo(int c) {
 
 // Called from the UART interrupt handler for each input character.
 void consoleintr(int c) {
+    int intr = 0;
+
     acquire(&cons_in.lock);
 
     switch (c) {
+    case C('C'):  // interrupt
+        cons_in.e = cons_in.w;
+        echo('^');
+        echo('C');
+        echo('\n');
+        intr = 1;
+        break;
     case C('P'):  // print process list
         procdump();
         break;
@@ -321,6 +332,9 @@ void consoleintr(int c) {
     }
 
     release(&cons_in.lock);
+
+    if (intr)
+        killall(SIGINT);
 }
 
 // Read up to n bytes of input into dst, a user address if user_dst

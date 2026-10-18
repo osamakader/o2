@@ -557,6 +557,17 @@ int kill(int pid, int sig) {
     return -1;
 }
 
+// Send sig to every user process but init.
+void killall(int sig) {
+    for (int i = 0; i < NPROC; i++) {
+        struct proc *p = &ptable[i];
+        acquire(&p->lock);
+        if (p->pagetable != 0 && p != initproc && p->state != ZOMBIE)
+            sigsend(p, sig);
+        release(&p->lock);
+    }
+}
+
 // Send sig to p, with p->lock held.
 static void sigsend(struct proc *p, int sig) {
     if (sig == SIGKILL)
