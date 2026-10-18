@@ -4,8 +4,8 @@
 #   tools/ci.sh arm64|riscv64 [quick]
 #
 # Boots the self-test build, then runs o2tests, xv6's usertests (-q with
-# quick), stressfs, a ^C check and a timed grind in the shell; on arm64
-# also o2tests with ARM64_ASID=1. Exits non-zero if anything fails or the
+# quick), stressfs, ^C and line editing checks and a timed grind in the
+# shell; on arm64 also o2tests with ARM64_ASID=1. Exits non-zero if anything fails or the
 # kernel panics. Logs are kept in build/ci/<arch>-<step>.log.
 
 ARCH=${1:?usage: tools/ci.sh arm64|riscv64 [quick]}
@@ -130,7 +130,19 @@ else
     fail ctrlc "command not interrupted, or the shell was"
 fi
 
-# 7. grind runs until stopped: no errors or panic within the time limit
+# 7. the shell's line editor: the up key brings back the last command,
+# left and typing edit it
+run lineedit 60 "^HIST-TWO$" -- "echo HIST-ONE" "$(printf '\033[A')" \
+    "$(printf '\033[A\033[D\033[D\033[DTWO\033[F\177\177\177')"
+if panicked lineedit; then
+    fail lineedit "kernel panic"
+elif [ "$(grep -c '^HIST-ONE$' "$LOGS/$ARCH-lineedit.log")" -eq 2 ] && has lineedit "^HIST-TWO$"; then
+    pass lineedit
+else
+    fail lineedit "history or editing didn't work"
+fi
+
+# 8. grind runs until stopped: no errors or panic within the time limit
 run grind $((GRIND + DELAY)) "^grind:" -- grind
 if panicked grind; then
     fail grind "kernel panic"
