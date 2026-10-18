@@ -3,6 +3,7 @@
 #include "types.h"
 #include "user.h"
 #include "fcntl.h"
+#include "syscall.h"
 
 // Parsed command representation
 #define EXEC  1
@@ -156,29 +157,37 @@ runcmd(struct cmd *cmd)
 
   case BACK:
     bcmd = (struct backcmd*)cmd;
-    if(fork1() == 0)
+    if(fork1() == 0){
+      // ^C is for the command in the foreground
+      signal(SIGINT, SIG_IGN);
       runcmd(bcmd->cmd);
+    }
     break;
   }
   exit(0);
 }
 
 // Read a command line from fd into buf, prompting if interactive, and
-// drop a "#" comment from it. Returns -1 at end of input.
+// drop a "#" comment from it. Returns -1 at end of input. An
+// interactive shell starts over when ^C interrupts the read.
 int
 getcmd(int fd, int interactive, char *buf, int nbuf)
 {
-  int i = 0;
+  int i, r;
   char c;
 
+again:
   if(interactive)
     write(2, "$ ", 2);
   memset(buf, 0, nbuf);
-  while(i + 1 < nbuf && read(fd, &c, 1) == 1){
+  i = r = 0;
+  while(i + 1 < nbuf && (r = read(fd, &c, 1)) == 1){
     buf[i++] = c;
     if(c == '\n' || c == '\r')
       break;
   }
+  if(r < 0 && interactive)
+    goto again;
   if(buf[0] == 0) // EOF
     return -1;
   for(i = 0; buf[i]; i++){
@@ -189,6 +198,11 @@ getcmd(int fd, int interactive, char *buf, int nbuf)
     }
   }
   return 0;
+}
+
+void
+interrupt(int sig)
+{
 }
 
 // The last NHIST command lines; the n-th line entered (from 1) is
@@ -261,6 +275,11 @@ main(int argc, char *argv[])
     exit(1);
   }
 
+  // ^C interrupts commands, not an interactive shell: it shows a new
+  // prompt instead (see getcmd()).
+  if(in == 0)
+    signal(SIGINT, interrupt);
+
   // Read and run input commands.
   while(getcmd(in, in == 0, buf, sizeof(buf)) >= 0){
     if(histexpand(buf) < 0)
@@ -297,12 +316,21 @@ main(int argc, char *argv[])
       *d = 0;
       continue;
     }
-    if(fork1() == 0){
+    int pid = fork1();
+    if(pid == 0){
       if(in != 0)
         close(in);
+      if(in == 0)
+        signal(SIGINT, SIG_DFL);
       runcmd(parsecmd(buf));
     }
-    wait(0);
+    // ^C interrupts waitpid() too: keep waiting until the command has
+    // exited (it gets SIGINT as well).
+    while(waitpid(pid, 0, 0) != pid && kill(pid, 0) == 0)
+      ;
+    // reap background commands that finished meanwhile
+    while(waitpid(-1, 0, WNOHANG) > 0)
+      ;
   }
   exit(0);
 }
