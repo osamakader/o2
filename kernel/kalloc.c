@@ -18,12 +18,18 @@ struct run {
 struct {
   struct spinlock lock;
   struct run *freelist;
+  // references to each page of RAM: page tables mapping it (pages
+  // shared copy-on-write after fork() have several), or 1 for other
+  // uses. Under lock.
+  ushort ref[(PHYSTOP - KERNBASE) / PGSIZE];
 } kmem;
 
+#define PAGEREF(pa) kmem.ref[(V2P(pa) - KERNBASE) / PGSIZE]
 
-// Free the page of physical memory pointed at by pa,
-// which normally should have been returned by a
-// call to kalloc().  (The exception is when
+
+// Drop a reference to the page of physical memory pointed at by pa,
+// which normally should have been returned by a call to kalloc(), and
+// free it if that was the last one. (The exception is when
 // initializing the allocator; see kinit above.)
 void kfree(void *pa)
 {
@@ -31,6 +37,14 @@ void kfree(void *pa)
 
   if(((uint64)pa % PGSIZE) != 0 || (char*)pa < end || (uint64)pa >= P2V(PHYSTOP))
     panic("kfree");
+
+  acquire(&kmem.lock);
+  if(PAGEREF(pa) == 0)
+    panic("kfree: free page");
+  int last = --PAGEREF(pa) == 0;
+  release(&kmem.lock);
+  if(!last)
+    return;
 
   // Fill with junk to catch dangling refs.
   memset(pa, 1, PGSIZE);
@@ -47,8 +61,10 @@ void freerange(void *pa_start, void *pa_end)
 {
   char *p;
   p = (char*)PGROUNDUP((uint64)pa_start);
-  for(; p + PGSIZE <= (char*)pa_end; p += PGSIZE)
+  for(; p + PGSIZE <= (char*)pa_end; p += PGSIZE){
+    PAGEREF(p) = 1;
     kfree(p);
+  }
 }
 
 void kinit()
@@ -67,13 +83,35 @@ void * kalloc(void)
 
   acquire(&kmem.lock);
   r = kmem.freelist;
-  if(r)
+  if(r){
     kmem.freelist = r->next;
+    PAGEREF(r) = 1;
+  }
   release(&kmem.lock);
 
   if(r)
     memset((char*)r, 5, PGSIZE); // fill with junk
   return (void*)r;
+}
+
+// Add a reference to the allocated page pa (another page table maps
+// it).
+void kref(void *pa)
+{
+  acquire(&kmem.lock);
+  if(PAGEREF(pa) == 0 || PAGEREF(pa) == 0xffff)
+    panic("kref");
+  PAGEREF(pa)++;
+  release(&kmem.lock);
+}
+
+// How many references to the allocated page pa?
+int krefs(void *pa)
+{
+  acquire(&kmem.lock);
+  int n = PAGEREF(pa);
+  release(&kmem.lock);
+  return n;
 }
 
 // Number of free pages, for leak checks.
