@@ -4,6 +4,8 @@
 #include "user.h"
 #include "fcntl.h"
 #include "syscall.h"
+#include "stat.h"
+#include "fs.h"
 
 // Parsed command representation
 #define EXEC  1
@@ -314,6 +316,142 @@ setline(char *s, int nbuf)
   redraw(0, oldlen);
 }
 
+// Insert n characters of s at the cursor.
+static void
+insert(char *s, int n, int nbuf)
+{
+  int i;
+
+  for(i = 0; i < n && len < nbuf - 2; i++){
+    memmove(line + pos + 1, line + pos, len - pos);
+    line[pos++] = s[i];
+    len++;
+  }
+  putstr(line + pos - i, i);
+  redraw(pos, len);
+}
+
+// Tab completion: the names that may complete the word at the cursor.
+#define NMATCH 64
+static char matches[NMATCH][DIRSIZ+1];
+static int matchdir[NMATCH];   // a directory: completes with '/'
+static int nmatch;
+
+// Add the names in directory dir that start with prefix (n bytes); for
+// a command (cmd), only files. Names starting with '.' only if prefix
+// does.
+static void
+addmatches(char *dir, char *prefix, int n, int cmd)
+{
+  char path[128], name[DIRSIZ+1];
+  struct dirent de;
+  struct stat st;
+  int fd;
+
+  if((fd = open(*dir ? dir : ".", O_RDONLY)) < 0)
+    return;
+  while(read(fd, &de, sizeof(de)) == sizeof(de) && nmatch < NMATCH){
+    if(de.inum == 0)
+      continue;
+    memmove(name, de.name, DIRSIZ);
+    name[DIRSIZ] = 0;
+    if(strlen(name) < n || memcmp(name, prefix, n) != 0 || (name[0] == '.' && prefix[0] != '.'))
+      continue;
+    if(strlen(dir) + 1 + strlen(name) + 1 > sizeof(path))
+      continue;
+    strcpy(path, *dir ? dir : ".");
+    strcpy(path + strlen(path), "/");
+    strcpy(path + strlen(path), name);
+    int isdir = stat(path, &st) == 0 && st.type == T_DIR;
+    if(cmd && (isdir || st.type == T_DEVICE))
+      continue;
+    int dup = 0;
+    for(int i = 0; i < nmatch; i++)
+      dup |= strcmp(matches[i], name) == 0;
+    if(!dup){
+      strcpy(matches[nmatch], name);
+      matchdir[nmatch++] = isdir;
+    }
+  }
+  close(fd);
+}
+
+// Complete the word before the cursor: a command name (first word of
+// a command, from PATH) or a file name. Fill in what all matches
+// share; with one match, also '/' or ' ' after it. If that adds
+// nothing, list the matches and show the line again.
+static void
+complete(int nbuf)
+{
+  int ws = pos, i;
+  char word[100], dir[100];
+
+  while(ws > 0 && !strchr(" \t|;&<>()", line[ws-1]))
+    ws--;
+  for(i = ws; i > 0 && (line[i-1] == ' ' || line[i-1] == '\t'); i--)
+    ;
+  int cmd = i == 0 || strchr("|;&(", line[i-1]);
+  int n = pos - ws;
+  memmove(word, line + ws, n);
+  word[n] = 0;
+
+  nmatch = 0;
+  char *slash = 0;
+  for(char *s = word; *s; s++)
+    if(*s == '/')
+      slash = s;
+  char *prefix = word;
+  if(slash){
+    // a path: look in its directory
+    int dn = slash - word;
+    memmove(dir, word, dn);
+    dir[dn] = 0;
+    if(dn == 0)
+      strcpy(dir, "/");
+    prefix = slash + 1;
+    addmatches(dir, prefix, strlen(prefix), 0);
+  } else if(cmd){
+    for(char *d = path; ; d++){
+      char *end = strchr(d, ':');
+      int dn = end ? end - d : strlen(d);
+      memmove(dir, d, dn);
+      dir[dn] = 0;
+      addmatches(dir, prefix, strlen(prefix), 1);
+      if(end == 0)
+        break;
+      d = end;
+    }
+  } else {
+    addmatches("", prefix, strlen(prefix), 0);
+  }
+  if(nmatch == 0)
+    return;
+
+  // what all the matches have in common, past the prefix
+  int have = strlen(prefix), common = strlen(matches[0]);
+  for(i = 1; i < nmatch; i++){
+    int j = 0;
+    while(j < common && matches[i][j] == matches[0][j])
+      j++;
+    common = j;
+  }
+  int added = common - have;
+  insert(matches[0] + have, added, nbuf);
+  if(nmatch == 1){
+    insert(matchdir[0] ? "/" : " ", 1, nbuf);
+  } else if(added == 0){
+    putstr("\n", 1);
+    for(i = 0; i < nmatch; i++){
+      putstr(matches[i], strlen(matches[i]));
+      putstr(matchdir[i] ? "/  " : "  ", matchdir[i] ? 3 : 2);
+    }
+    putstr("\n$ ", 3);
+    putstr(line, len);
+    for(i = len; i > pos; i--)
+      putstr("\b", 1);
+  }
+}
+
 int
 editline(char *buf, int nbuf, int echoed)
 {
@@ -404,13 +542,10 @@ editline(char *buf, int nbuf, int echoed)
         len--;
         redraw(pos, len + 1);
       }
-    } else if(c >= ' ' && c < 0x7f && len < nbuf - 2){
-      memmove(line + pos + 1, line + pos, len - pos);
-      line[pos] = c;
-      len++;
-      pos++;
-      putstr(line + pos - 1, 1);
-      redraw(pos, len);
+    } else if(c == '\t'){
+      complete(nbuf);
+    } else if(c >= ' ' && c < 0x7f){
+      insert(&c, 1, nbuf);
     }
   }
 }
