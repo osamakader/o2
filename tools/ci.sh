@@ -4,8 +4,8 @@
 #   tools/ci.sh arm64|riscv64 [quick]
 #
 # Boots the self-test build, then runs o2tests, xv6's usertests (-q with
-# quick), stressfs and a timed grind in the shell; on arm64 also
-# o2tests with ARM64_ASID=1. Exits non-zero if anything fails or the
+# quick), stressfs, a ^C check and a timed grind in the shell; on arm64
+# also o2tests with ARM64_ASID=1. Exits non-zero if anything fails or the
 # kernel panics. Logs are kept in build/ci/<arch>-<step>.log.
 
 ARCH=${1:?usage: tools/ci.sh arm64|riscv64 [quick]}
@@ -119,7 +119,18 @@ else
     fail stressfs "didn't finish with five readers"
 fi
 
-# 6. grind runs until stopped: no errors or panic within the time limit
+# 6. ^C interrupts a command in the shell (cat, reading the console),
+# but not the shell itself, which init would otherwise restart
+run ctrlc 60 "^AFTER CTRL-C$" -- cat "$(printf '\003')" "echo AFTER CTRL-C"
+if panicked ctrlc; then
+    fail ctrlc "kernel panic"
+elif has ctrlc "^AFTER CTRL-C$" && [ "$(grep -c 'init: starting sh' "$LOGS/$ARCH-ctrlc.log")" -eq 1 ]; then
+    pass ctrlc
+else
+    fail ctrlc "command not interrupted, or the shell was"
+fi
+
+# 7. grind runs until stopped: no errors or panic within the time limit
 run grind $((GRIND + DELAY)) "^grind:" -- grind
 if panicked grind; then
     fail grind "kernel panic"
