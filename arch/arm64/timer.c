@@ -17,6 +17,15 @@ void timerinithart(void) {
     timer_set();
 }
 
+// Nanoseconds counted by the system counter since it started (at
+// boot), the same on all CPUs.
+uint64 timer_ns(void) {
+    uint64 freq, cnt;
+    asm volatile("mrs %0, CNTFRQ_EL0" : "=r" (freq));
+    asm volatile("isb; mrs %0, CNTVCT_EL0" : "=r" (cnt));
+    return cnt / freq * 1000000000UL + cnt % freq * 1000000000UL / freq;
+}
+
 // Timer interrupt: schedule the next tick.
 void timer_rearm(void) {
     timer_set();

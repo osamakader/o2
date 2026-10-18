@@ -45,6 +45,7 @@ int main(int boot) {
         iinit();
         fileinit();
         consoleinit();
+        timeinit();
 
         userinit();   // first, so init is pid 1
 #ifdef SELFTEST

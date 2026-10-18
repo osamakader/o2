@@ -10,6 +10,9 @@
 #define UART0 0x9000000
 #define UART0_IRQ 33     // SPI 1
 
+// PL031 real-time clock
+#define RTC0 0x09010000
+
 // qemu puts interrupt controller (GICv3) here.
 #define GICv3 0x08000000
 

@@ -74,6 +74,7 @@ AOBJS = \
   fpsave.o \
   sbi.o \
   timer.o \
+  rtc.o \
   plic.o \
 
 QEMUOPTS = -machine virt -bios default
@@ -98,6 +99,7 @@ AOBJS = \
   psci.o \
   trap.o \
   timer.o \
+  rtc.o \
 
 QEMUOPTS = -machine virt,gic-version=3 -cpu cortex-a57
 endif

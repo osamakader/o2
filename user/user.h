@@ -8,6 +8,7 @@
 
 struct stat;
 struct procinfo;
+struct timespec;
 
 // system calls
 int fork(void);
@@ -40,6 +41,7 @@ int getppid(void);
 int dup2(int, int);
 int lseek(int, int, int);
 int waitpid(int, int *, int);
+int clock_gettime(int, struct timespec *);
 
 // ulib.c
 char *strcpy(char *, const char *);

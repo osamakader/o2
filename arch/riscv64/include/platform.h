@@ -10,6 +10,9 @@
 #define UART0 0x10000000
 #define UART0_IRQ 10
 
+// Goldfish real-time clock
+#define RTC0 0x101000
+
 // platform-level interrupt controller (PLIC)
 #define PLIC 0x0c000000
 #define PLIC_SIZE 0x400000

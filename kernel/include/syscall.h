@@ -34,6 +34,7 @@
 #define SYS_waitpid 28
 #define SYS_signal  29
 #define SYS_sigreturn 30
+#define SYS_clock_gettime 31
 
 // sbrk(n, type): allocate now, or only on first touch (page fault)
 #define SBRK_EAGER 1
