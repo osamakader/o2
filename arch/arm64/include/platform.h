@@ -30,8 +30,8 @@
 #define VIRTIO_MMIO_COUNT  32
 #define VIRTIO_MMIO_IRQ0   48
 
-// RAM starts here; qemu loads the kernel at 0x40080000 and puts the
-// DTB below it.
+// RAM starts here; qemu puts the device tree here and the kernel at
+// 0x40200000 (kernel.ld).
 #define KERNBASE 0x40000000
 
 #endif

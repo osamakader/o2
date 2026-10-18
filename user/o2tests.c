@@ -119,7 +119,7 @@ static void overflow_stack(void)
 
 // the start of kernel text on each arch
 #if defined(__aarch64__)
-#define KERNEL_TEXT 0xffffffc040080000UL
+#define KERNEL_TEXT 0xffffffc040200000UL
 #else
 #define KERNEL_TEXT 0xffffffc080200000UL
 #endif

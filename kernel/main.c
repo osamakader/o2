@@ -10,14 +10,18 @@
 #include "cpu.h"
 #include "uart.h"
 #include "fpu.h"
+#include "board.h"
 
 // Every CPU enters here from arch/<arch>/entry.S with the MMU on, on its
 // boot stack. boot is set on the one CPU that does the global setup
-// and then starts the others.
-int main(int boot) {
+// and then starts the others; it gets the device tree's physical
+// address in dtb, or 0.
+int main(int boot, uint64 dtb) {
     if (boot) {
+        board_init(dtb);
         uartinit();
         printf("cpu %d: starting kernel ...\n", cpuid());
+        board_report();
 
         kinit();
 

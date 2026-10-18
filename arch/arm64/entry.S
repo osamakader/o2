@@ -13,6 +13,9 @@ _entry:
         // mask interrupts
         msr daifset, #0xf
 
+        // qemu passes the device tree's physical address in x0
+        mov x20, x0
+
         mrs x19, MPIDR_EL1
         and x19, x19, #0xff
         cbnz x19, 2f
@@ -52,9 +55,10 @@ _entry:
         msr vbar_el1, x0
         isb
 
-        // main(boot) in main.c; CPU 0 is the boot CPU
+        // main(boot, dtb) in main.c; CPU 0 is the boot CPU
         cmp x19, #0
         cset w0, eq
+        mov x1, x20
         mov x29, xzr            // end of the frame chain (backtraces)
         bl main
         b .

@@ -48,6 +48,8 @@ KOBJS = \
   kernel/sysproc.o \
   kernel/signal.o \
   kernel/mmap.o \
+  kernel/fdt.o \
+  kernel/board.o \
   kernel/sysfile.o \
   kernel/initcode.o \
 

@@ -22,6 +22,7 @@ _entry_secondary:
         csrw sie, zero
         csrci sstatus, 2        // SIE off
         mv tp, a0               // tp = hartid while in the kernel
+        mv s2, a1               // the device tree's physical address
 
         beqz s1, 3f
 
@@ -61,8 +62,9 @@ _entry_secondary:
         la t0, kernelvec
         csrw stvec, t0
 
-        // main(boot) in main.c
+        // main(boot, dtb) in main.c
         mv a0, s1
+        mv a1, s2
         li s0, 0                // end of the frame chain (backtraces)
         call main
 6:      wfi
