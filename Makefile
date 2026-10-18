@@ -62,6 +62,7 @@ KOBJS = \
   kernel/socket.o \
   kernel/fb.o \
   kernel/virtio_gpu.o \
+  kernel/rpi_mbox.o \
   kernel/rpi_fb.o \
   kernel/sdhci.o \
   kernel/disk.o \

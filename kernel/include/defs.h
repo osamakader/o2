@@ -111,6 +111,10 @@ int sd_init(uint64 *sectors);
 int sd_rw(uint64 sector, char *data, int write);
 void virtio_gpu_init(void);
 void rpi_fb_init(void);
+
+// rpi_mbox.c
+int rpi_mbox_call(uint32 *msg, int words);
+uint32 rpi_clock_rate(uint32 id);
 int virtio_disk_present(void);
 struct buf;
 void virtio_disk_rw(struct buf *b, int write);

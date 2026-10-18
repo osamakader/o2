@@ -1,9 +1,8 @@
 // The Raspberry Pi firmware's framebuffer, asked for through the
-// mailbox property interface (channel 8): the display's size, 32 bits
+// mailbox property interface (rpi_mbox.c): the display's size, 32 bits
 // per pixel in BGR order (a little-endian uint32 is 0x00RRGGBB, as
 // virtio_gpu.c's), and memory the GPU scans out by itself, so flushing
-// does nothing; it is mapped uncached so that writes reach it. The
-// mailbox needs the message's physical address, below 4GB.
+// does nothing; it is mapped uncached so that writes reach it.
 
 #include "types.h"
 #include "param.h"
@@ -14,14 +13,6 @@
 #include "fb.h"
 #include "vm.h"
 
-#define MBOX_READ    0x00
-#define MBOX_STATUS  0x18   // of the mailbox we read
-#define MBOX_WRITE   0x20
-#define MBOX_STATUS1 0x38   // of the one we write
-#define MBOX_FULL    0x80000000
-#define MBOX_EMPTY   0x40000000
-#define CHANNEL      8      // property tags, ARM to VideoCore
-
 #define TAG_GET_PHYS_WH  0x00040003
 #define TAG_SET_PHYS_WH  0x00048003
 #define TAG_SET_VIRT_WH  0x00048004
@@ -30,45 +21,14 @@
 #define TAG_SET_VOFFSET  0x00048009
 #define TAG_ALLOCATE     0x00040001
 #define TAG_GET_PITCH    0x00040008
-#define RESPONSE_OK      0x80000000
 
-static uint32 msg[64] __attribute__((aligned(64)));
+static uint32 msg[64];
 static struct fbdev fbdev;
 static uint64 fbbase;   // the framebuffer's physical address
 
-static uint32 rd(uint32 r)
-{
-    return *(volatile uint32 *)(P2V(board.mbox) + r);
-}
-
-static void wr(uint32 r, uint32 v)
-{
-    *(volatile uint32 *)(P2V(board.mbox) + r) = v;
-}
-
-// Make msg visible to the GPU, or the GPU's answer to us.
-static void sync_msg(void)
-{
-    for (uint64 a = (uint64)msg; a < (uint64)msg + sizeof(msg); a += 64)
-        dcache_flush_line(a);
-}
-
-// Send msg; returns 0 if the firmware answered it.
 static int call(void)
 {
-    uint32 addr = V2P(msg);
-    sync_msg();
-    while (rd(MBOX_STATUS1) & MBOX_FULL)
-        ;
-    wr(MBOX_WRITE, addr | CHANNEL);
-    for (;;) {
-        while (rd(MBOX_STATUS) & MBOX_EMPTY)
-            ;
-        if (rd(MBOX_READ) == (addr | CHANNEL))
-            break;
-    }
-    sync_msg();
-    return msg[1] == RESPONSE_OK ? 0 : -1;
+    return rpi_mbox_call(msg, NELEM(msg));
 }
 
 static uint64 page(uint64 n)

@@ -86,13 +86,16 @@ static void wr(uint32 r, uint32 v)
     *(volatile uint32 *)(sd.base + r) = v;
 }
 
-// Wait until (reg & mask) == want; returns 0, or -1 after a while.
+#define TIMEOUT_NS 1000000000UL   // a second
+
+// Wait until (reg & mask) == want; returns 0, or -1 after TIMEOUT_NS.
 static int waitfor(uint32 r, uint32 mask, uint32 want)
 {
-    for (uint64 i = 0; i < 100000000UL; i++)
-        if ((rd(r) & mask) == want)
-            return 0;
-    return -1;
+    uint64 t0 = timer_ns();
+    while ((rd(r) & mask) != want)
+        if (timer_ns() - t0 > TIMEOUT_NS)
+            return -1;
+    return 0;
 }
 
 // Send command cmd with argument arg; for data commands, the caller
@@ -106,7 +109,7 @@ static int command(int cmd, uint32 flags, uint32 arg, int data_read)
     wr(SD_ARG1, arg);
     uint32 tm = (flags & CMD_DATA) && data_read ? TM_READ : 0;
     wr(SD_CMDTM, (uint32)cmd << 24 | flags << 16 | tm);
-    for (uint64 i = 0; i < 100000000UL; i++) {
+    for (uint64 t0 = timer_ns(); timer_ns() - t0 < TIMEOUT_NS; ) {
         uint32 s = rd(SD_INTERRUPT);
         if (s & INT_ERROR) {
             wr(SD_INTERRUPT, 0xffffffff);
@@ -128,12 +131,22 @@ static int appcommand(int cmd, uint32 flags, uint32 arg)
     return command(cmd, flags, arg, 0);
 }
 
-// The card's clock: base / (2 * div), at most hz.
-static int setclock(uint32 hz)
+#define RPI_CLOCK_EMMC2 12
+
+// The controller's base clock: from its capabilities, or else (the Pi
+// 4's EMMC2, 200MHz there) from the firmware, or a guess.
+static uint32 baseclock(void)
 {
     uint32 base = ((rd(SD_CAPS) >> 8) & 0xff) * 1000000;
     if (base == 0)
-        base = 100000000;   // not in the capabilities: the Pi 4's EMMC2
+        base = rpi_clock_rate(RPI_CLOCK_EMMC2);
+    return base ? base : 100000000;
+}
+
+// The card's clock: base / (2 * div), at most hz.
+static int setclock(uint32 hz)
+{
+    uint32 base = baseclock();
     uint32 div = (base + 2 * hz - 1) / (2 * hz);
     if (div > 0x3ff)
         div = 0x3ff;
@@ -215,8 +228,8 @@ int sd_init(uint64 *sectors)
         sd.base = P2V(board.sdhci[i]);
         if (card_init() == 0) {
             *sectors = sd.sectors;
-            printf("sd: %s card at %p, %lu MB\n", sd.sdhc ? "SDHC" : "SD",
-                   (void *)board.sdhci[i], sd.sectors / 2048);
+            printf("sd: %s card at %p, %lu MB, base clock %d MHz\n", sd.sdhc ? "SDHC" : "SD",
+                   (void *)board.sdhci[i], sd.sectors / 2048, baseclock() / 1000000);
             return 0;
         }
     }
