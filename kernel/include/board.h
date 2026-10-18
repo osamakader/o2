@@ -2,6 +2,7 @@
 #define BOARD_H
 
 #include "types.h"
+#include "param.h"
 
 // The machine, as the device tree describes it (board.c).
 struct board {
@@ -10,6 +11,10 @@ struct board {
     uint64 ram_start, ram_end;  // RAM [start, end), physical
     int nreserved;              // memory not to use: [start, end)
     struct { uint64 start, end; } reserved[8];
+    int ncpu;                   // CPUs: hart ids (riscv64) or MPIDRs
+    uint64 cpu[NCPU];
+    uint64 timebase;            // riscv64 timer frequency (Hz), or 0
+    int psci_smc;               // arm64: PSCI calls through smc, not hvc
 };
 
 extern struct board board;

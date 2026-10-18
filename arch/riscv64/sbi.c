@@ -7,6 +7,7 @@
 #include "memlayout.h"
 #include "defs.h"
 #include "console.h"
+#include "board.h"
 #include "cpu.h"
 
 #define SBI_EXT_TIME 0x54494D45   // "TIME"
@@ -63,12 +64,30 @@ void start_cpus(void)
 {
     extern char _entry_secondary[];
 
-    for (int i = 0; i < NCPU; i++) {
-        if (i == cpuid())
+    if (board.ncpu == 0) {
+        // no device tree: try every hart id
+        for (int i = 0; i < NCPU; i++) {
+            if (i == cpuid())
+                continue;
+            long r = sbi_hart_start(i, V2P(_entry_secondary), 0);
+            if (r != SBI_SUCCESS && r != SBI_ERR_INVALID_PARAM)
+                printf("cpu %d: sbi_hart_start failed: %ld\n", i, r);
+        }
+        return;
+    }
+    // the harts the device tree lists. cpuid() is the hart id, which
+    // must be below NCPU.
+    for (int i = 0; i < board.ncpu && i < NCPU; i++) {
+        uint64 hart = board.cpu[i];
+        if (hart == cpuid())
             continue;
-        long r = sbi_hart_start(i, V2P(_entry_secondary), 0);
-        if (r != SBI_SUCCESS && r != SBI_ERR_INVALID_PARAM)
-            printf("cpu %d: sbi_hart_start failed: %ld\n", i, r);
+        if (hart >= NCPU) {
+            printf("hart %lu: id too large (NCPU %d), not started\n", hart, NCPU);
+            continue;
+        }
+        long r = sbi_hart_start(hart, V2P(_entry_secondary), 0);
+        if (r != SBI_SUCCESS)
+            printf("hart %lu: sbi_hart_start failed: %ld\n", hart, r);
     }
 }
 

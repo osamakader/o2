@@ -54,6 +54,29 @@ void board_init(uint64 dtb) {
         }
     }
 
+    // the CPUs: /cpus/cpu@...
+    for (int n = fdt_next_node(-1, 0); n >= 0; n = fdt_next_node(n, 0)) {
+        const char *type = fdt_getprop(n, "device_type", 0);
+        const char *status = fdt_getprop(n, "status", 0);
+        uint64 id, size;
+        if (type == 0 || strncmp(type, "cpu", 4) != 0 || fdt_reg(n, 0, &id, &size) < 0)
+            continue;
+        if (status && strncmp(status, "okay", 5) != 0 && strncmp(status, "ok", 3) != 0)
+            continue;
+        if (board.ncpu < NCPU)
+            board.cpu[board.ncpu] = id;
+        board.ncpu++;
+    }
+    int cpus = fdt_next_node(-1, 0);
+    while (cpus >= 0 && strncmp(fdt_name(cpus), "cpus", 5) != 0)
+        cpus = fdt_next_node(cpus, 0);
+    board.timebase = fdt_cells(cpus, "timebase-frequency", 0);
+
+    const char *method;
+    for (int n = fdt_next_node(-1, 0); n >= 0; n = fdt_next_node(n, 0))
+        if (strncmp(fdt_name(n), "psci", 4) == 0 && (method = fdt_getprop(n, "method", 0)))
+            board.psci_smc = strncmp(method, "smc", 4) == 0;
+
     // memory the firmware keeps for itself
     uint64 addr, size;
     for (int i = 0; fdt_memreserve(i, &addr, &size) == 0; i++)
@@ -80,4 +103,10 @@ void board_report(void) {
     for (int i = 0; i < board.nreserved; i++)
         printf("board: reserved %p-%p\n", (void *)board.reserved[i].start,
                (void *)board.reserved[i].end);
+    printf("board: %d cpus", board.ncpu);
+    if (board.ncpu > NCPU)
+        printf(", using %d (NCPU)", NCPU);
+    if (board.timebase)
+        printf(", timebase %lu Hz", board.timebase);
+    printf("\n");
 }
