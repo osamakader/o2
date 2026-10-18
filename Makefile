@@ -250,6 +250,7 @@ UPROGS = \
   $(B)/user/_date \
   $(B)/user/_dmesg \
   $(B)/user/_echo \
+  $(B)/user/_gfx \
   $(B)/user/_grep \
   $(B)/user/_init \
   $(B)/user/_kill \
