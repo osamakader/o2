@@ -2,7 +2,7 @@
 # Boot the kernel non-interactively and print its serial output.
 #
 #   tools/run.sh [-a arch] [-c cpus] [-t seconds] [-i input] [-d delay]
-#                [-l line-delay] [-f] [-s] [-A] [-e pattern]
+#                [-l line-delay] [-f] [-s] [-A] [-e pattern] [-D file]
 #
 # -i feeds the file to the console, -d seconds after boot (default 3);
 # with -l, one line at a time (ending in CR, like a terminal) with
@@ -11,12 +11,14 @@
 # with arm64 ASIDs. -e stops as soon as the output contains pattern
 # (grep -E), instead of running until the timeout. While running, the
 # raw output is in build/run.<arch>.<pid>.log.
-# -f starts from a freshly made fs.img (it otherwise persists).
+# -f starts from a freshly made fs.img (it otherwise persists). -D saves
+# a screen dump (PPM) to file when the -e pattern shows up, through the
+# QEMU monitor, which listens on build/run.<arch>.<pid>.mon.
 # Uses the QEMU command line from the Makefile (make print-qemu).
 
 ARCH=arm64 CPUS=3 TIMEOUT=10 INPUT= DELAY=3 FRESH= LDELAY= SELFTEST=0 ASID=0
-EXITPAT=
-while getopts a:c:t:i:d:l:fsAe: o; do
+EXITPAT= SHOT=
+while getopts a:c:t:i:d:l:fsAe:D: o; do
     case $o in
     a) ARCH=$OPTARG ;;
     c) CPUS=$OPTARG ;;
@@ -28,6 +30,7 @@ while getopts a:c:t:i:d:l:fsAe: o; do
     s) SELFTEST=1 ;;
     A) ASID=1 ;;
     e) EXITPAT=$OPTARG ;;
+    D) SHOT=$OPTARG ;;
     *) exit 2 ;;
     esac
 done
@@ -39,8 +42,9 @@ $M || exit 1
 CMD=$($M CPUS="$CPUS" print-qemu) || exit 1
 
 # -nographic would multiplex the monitor onto stdio; use a plain serial
-# port on stdio instead.
-CMD=$(echo "$CMD" | sed 's/ -nographic/ -display none -monitor none -serial stdio/')
+# port on stdio instead, and the monitor on a socket.
+MON=build/run.$ARCH.$$.mon
+CMD=$(echo "$CMD" | sed "s| -nographic| -display none -monitor unix:$MON,server=on,wait=off -serial stdio|")
 
 feed() {
     sleep "$DELAY"
@@ -69,6 +73,17 @@ RUN=$!
 while kill -0 $RUN 2>/dev/null; do
     if [ -n "$EXITPAT" ] && tr -d '\r' < "$LOG" | grep -qE -- "$EXITPAT"; then
         sleep 1   # let the rest of the line arrive
+        if [ -n "$SHOT" ]; then
+            python3 - "$MON" "$SHOT" <<'PY'
+import socket, sys, time
+s = socket.socket(socket.AF_UNIX)
+s.connect(sys.argv[1])
+s.settimeout(5)
+s.recv(4096)                       # the banner and prompt
+s.sendall(b"screendump " + sys.argv[2].encode() + b"\n")
+time.sleep(1)
+PY
+        fi
         pkill -TERM -P $RUN
         break
     fi
@@ -77,5 +92,5 @@ done
 wait $RUN 2>/dev/null
 
 tr -d '\r' < "$LOG"
-rm -f "$LOG"
+rm -f "$LOG" "$MON"
 exit 0

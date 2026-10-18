@@ -4,9 +4,9 @@
 #   tools/ci.sh arm64|riscv64 [quick]
 #
 # Boots the self-test build, then runs o2tests, xv6's usertests (-q with
-# quick), stressfs, ^C, line editing and network checks and a timed
-# grind in the shell; on arm64 also o2tests with ARM64_ASID=1. The
-# network check needs python3 on the host. Exits non-zero if anything fails or the
+# quick), stressfs, ^C, line editing, network and graphics checks and a
+# timed grind in the shell; on arm64 also o2tests with ARM64_ASID=1.
+# The network and graphics checks need python3 on the host. Exits non-zero if anything fails or the
 # kernel panics. Logs are kept in build/ci/<arch>-<step>.log.
 
 ARCH=${1:?usage: tools/ci.sh arm64|riscv64 [quick]}
@@ -161,7 +161,18 @@ else
     fail net "datagrams or pings lost"
 fi
 
-# 9. grind runs until stopped: no errors or panic within the time limit
+# 9. graphics: gfx draws its test picture; a screen dump must show it
+rm -f "$LOGS/$ARCH-gfx.ppm"
+run gfx 60 "gfx: .*done" -D "$PWD/$LOGS/$ARCH-gfx.ppm" -- gfx
+if panicked gfx; then
+    fail gfx "kernel panic"
+elif python3 tools/checkshot.py "$LOGS/$ARCH-gfx.ppm" >> "$LOGS/$ARCH-gfx.log" 2>&1; then
+    pass gfx
+else
+    fail gfx "the screen doesn't show the picture"
+fi
+
+# 10. grind runs until stopped: no errors or panic within the time limit
 run grind $((GRIND + DELAY)) "^grind:" -- grind
 if panicked grind; then
     fail grind "kernel panic"
