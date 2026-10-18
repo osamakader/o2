@@ -16,6 +16,7 @@
 #include "param.h"
 
 #define UART0     0xfe201000   // PL011 (uart0)
+#define UART_CLOCK 0           // the firmware set its baud rate: keep it
 #define UART0_IRQ (32 + 121)   // SPI 121
 #define RTC0      0            // no real-time clock
 
@@ -56,6 +57,7 @@
 
 // qemu puts UART registers here in physical memory.
 #define UART0 0x9000000
+#define UART_CLOCK 24000000    // the PL011's reference clock
 #define UART0_IRQ 33     // SPI 1
 
 // PL031 real-time clock

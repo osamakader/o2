@@ -88,10 +88,13 @@ static int pl011_reset(const struct pl011 *dev)
     // flush FIFOs
     write_reg(dev, LCR_OFFSET, (lcr & ~LCR_FEN));
 
-    // set frequency divisors
-    calculate_divisors(dev, &ibrd, &fbrd);
-    write_reg(dev, IBRD_OFFSET, ibrd);
-    write_reg(dev, FBRD_OFFSET, fbrd);
+    // set frequency divisors, unless the clock isn't known (the
+    // firmware set the baud rate up)
+    if (dev->base_clock) {
+        calculate_divisors(dev, &ibrd, &fbrd);
+        write_reg(dev, IBRD_OFFSET, ibrd);
+        write_reg(dev, FBRD_OFFSET, fbrd);
+    }
 
     // configure data frame format according to the parameters (UARTLCR_H).
 
@@ -139,9 +142,10 @@ void uartputc_sync(int c)
     write_reg(dev, DR_OFFSET, c);
 }
 
-// Set up the console UART: qemu virt's PL011 runs off a 24MHz clock.
+// Set up the console UART: on qemu virt the PL011 runs off a 24MHz
+// clock; on the Raspberry Pi, the firmware has set it up (UART_CLOCK).
 void uartinit(void) {
-    pl011_setup(&sdev, P2V(board.uart), 24000000);
+    pl011_setup(&sdev, P2V(board.uart), UART_CLOCK);
 }
 
 // Read one input character, or -1 if the RX FIFO is empty.
