@@ -1246,11 +1246,122 @@ static void test_timestamps(void)
   unlink("ts.tmp");
 }
 
+// Fill n pages at p with a pattern from seed; check it, returning the
+// number of pages that differ.
+static void fill_pages(char *p, int n, int seed)
+{
+  for(int i = 0; i < n; i++)
+    for(int j = 0; j < 4096; j += 512)
+      p[i * 4096 + j] = seed + i + j / 512;
+}
+
+static int check_pages(char *p, int n, int seed)
+{
+  int bad = 0;
+  for(int i = 0; i < n; i++)
+    for(int j = 0; j < 4096; j += 512)
+      if(p[i * 4096 + j] != (char)(seed + i + j / 512)){
+        bad++;
+        break;
+      }
+  return bad;
+}
+
+// fork() shares memory copy-on-write: each process sees only its own
+// writes, also those the kernel makes (read()), and a process using
+// more than half of RAM can still fork.
+static void test_cow(void)
+{
+  enum { N = 64 };
+  char *mem = sbrk(N * 4096);
+  int fds[2], back[2], status;
+  char c;
+
+  fill_pages(mem, N, 1);
+  pipe(fds);
+  pipe(back);
+  int pid = fork();
+  if(pid == 0){
+    int bad = check_pages(mem, N, 1);
+    fill_pages(mem, N, 2);              // the child's own copy
+    write(back[1], "x", 1);
+    read(fds[0], &c, 1);                // wait for the parent's writes
+    bad += check_pages(mem, N, 2);
+    exit(bad);
+  }
+  read(back[0], &c, 1);
+  close(back[0]);
+  close(back[1]);
+  if(check_pages(mem, N, 1) != 0)
+    fail("cow", "the child's writes showed in the parent");
+  fill_pages(mem, N / 2, 3);
+  write(fds[1], "y", 1);
+  waitpid(pid, &status, 0);
+  if(status != 0)
+    fail("cow", "the parent's writes showed in the child");
+
+  // the kernel writing into a shared page (read() from a pipe)
+  pid = fork();
+  if(pid == 0){
+    read(fds[0], mem + 4096 * 10, 1);
+    exit(mem[4096 * 10] == 'z' ? 0 : 1);
+  }
+  write(fds[1], "z", 1);
+  waitpid(pid, &status, 0);
+  if(status != 0 || mem[4096 * 10] == 'z')
+    fail("cow", "read() into a shared page");
+  close(fds[0]);
+  close(fds[1]);
+
+  // processes writing to the same shared pages at once
+  for(int i = 0; i < 4; i++){
+    if(fork() == 0){
+      int bad = 0;
+      for(int round = 0; round < 20; round++){
+        fill_pages(mem, N, 10 * i + round);
+        bad += check_pages(mem, N, 10 * i + round);
+      }
+      exit(bad);
+    }
+  }
+  for(int i = 0; i < 4; i++){
+    wait(&status);
+    if(status != 0)
+      fail("cow", "concurrent writers");
+  }
+  if(check_pages(mem + N / 2 * 4096, N / 2, 1 + N / 2) != 0)
+    fail("cow", "the parent's memory changed");
+  sbrk(-N * 4096);
+
+  // 72 of the 128 MB of RAM: forking needs copy-on-write
+  int big = 72 * 1024 * 1024;
+  char *p = sbrk(big);
+  if(p == SBRK_ERROR){
+    fail("cow", "sbrk");
+    return;
+  }
+  for(int i = 0; i < big; i += 4096)
+    p[i] = 1;
+  pid = fork();
+  if(pid < 0){
+    fail("cow", "fork of a big process");
+  } else if(pid == 0){
+    p[0] = 2;   // one page of its own
+    exit(p[4096] == 1 && p[0] == 2 ? 0 : 1);
+  } else {
+    waitpid(pid, &status, 0);
+    if(status != 0 || p[0] != 1)
+      fail("cow", "big process");
+  }
+  sbrk(-big);
+}
+
 static void o2tests(void)
 {
   struct { const char *name; void (*fn)(void); } tests[] = {
     { "forkwait", test_forkwait },
     { "forkloop", test_forkloop },
+    { "cow", test_cow },
     { "faults", test_faults },
     { "badptr", test_badptr },
     { "kill", test_kill },
