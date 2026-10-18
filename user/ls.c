@@ -25,15 +25,23 @@ fmtname(char *path)
   return buf;
 }
 
-// name, type, inode number, size, and when it was last modified (UTC)
+// name, type, inode number, size, and when it was last modified (UTC);
+// for a symbolic link (path) also its target
 void
-printstat(char *name, struct stat *st)
+printstat(char *name, char *path, struct stat *st)
 {
   struct tm tm;
+  char target[128];
 
   gmtime(st->mtime, &tm);
-  printf("%s %d %3d %6d %d-%02d-%02d %02d:%02d\n", name, st->type, st->ino,
+  printf("%s %d %3d %6d %d-%02d-%02d %02d:%02d", name, st->type, st->ino,
          (int)st->size, tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min);
+  int n;
+  if(st->type == T_SYMLINK && (n = readlink(path, target, sizeof(target) - 1)) >= 0){
+    target[n] = 0;
+    printf(" -> %s", target);
+  }
+  printf("\n");
 }
 
 void
@@ -45,7 +53,10 @@ ls(char *path)
   struct stat st;
 
   if((fd = open(path, O_RDONLY)) < 0){
-    fprintf(2, "ls: cannot open %s\n", path);
+    if(lstat(path, &st) == 0 && st.type == T_SYMLINK)
+      printstat(fmtname(path), path, &st);   // a link to nothing
+    else
+      fprintf(2, "ls: cannot open %s\n", path);
     return;
   }
 
@@ -58,7 +69,7 @@ ls(char *path)
   switch(st.type){
   case T_DEVICE:
   case T_FILE:
-    printstat(fmtname(path), &st);
+    printstat(fmtname(path), path, &st);
     break;
 
   case T_DIR:
@@ -74,11 +85,11 @@ ls(char *path)
         continue;
       memmove(p, de.name, DIRSIZ);
       p[DIRSIZ] = 0;
-      if(stat(buf, &st) < 0){
+      if(lstat(buf, &st) < 0){
         printf("ls: cannot stat %s\n", buf);
         continue;
       }
-      printstat(fmtname(buf), &st);
+      printstat(fmtname(buf), buf, &st);
     }
     break;
   }
