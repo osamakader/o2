@@ -28,7 +28,8 @@
 // stand for the interrupt controller.
 #define UART_COMPAT "ns16550a"
 #define RTC_COMPAT  "google,goldfish-rtc"
-#define INTC_COMPAT "riscv,plic0"
+#define INTC_COMPATS { "riscv,plic0", "sifive,plic-1.0.0" }
+#define INTC_KIND   0
 #define INTC_BASE   PLIC
 #define INTC_SIZE   PLIC_SIZE
 #define INTC2_BASE  0

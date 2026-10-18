@@ -106,6 +106,8 @@ AOBJS = \
   swtch.o \
   irq.o \
   uart.o \
+  gic.o \
+  gicv2.o \
   gicv3.o \
   mmu.o \
   fpu.o \

@@ -1,4 +1,4 @@
-// Interrupt dispatch through the GICv3 CPU interface.
+// Interrupt dispatch through the GIC (gic.c).
 
 #include "types.h"
 #include "param.h"
@@ -9,6 +9,7 @@
 #include "timer.h"
 #include "intc.h"
 #include "trap.h"
+#include "gic.h"
 
 #define TIMER_IRQ 27   // EL1 virtual timer PPI
 
@@ -17,8 +18,7 @@ void timer_rearm(void);
 // IRQ from EL1 or EL0 (via usertrap_irq()).
 void handle_irq(struct trapframe *tf)
 {
-  uint32 id = 0;
-  asm volatile("mrs %0, ICC_IAR1_EL1" : "=r" (id));
+  uint32 id = gic_ack();
 
   // 1020-1023 are special/spurious INTIDs: nothing to handle or EOI.
   if (id >= 1020)
@@ -35,7 +35,7 @@ void handle_irq(struct trapframe *tf)
     break;
   }
 
-  asm volatile("msr ICC_EOIR1_EL1, %0" : : "r" (id));
+  gic_eoi(id);
 
   // Preempt the running thread on each tick. This runs on the thread's
   // kstack, after EOI so the GIC keeps delivering ticks while it is

@@ -6,6 +6,7 @@
 #include "memlayout.h"
 #include "cpu.h"
 #include "board.h"
+#include "gic.h"
 
 #define GICD_BASE P2V(board.intc)
 #define GICR_BASE P2V(board.intc2)
@@ -99,7 +100,7 @@ static void gicd_wait_rwp(void)
 }
 
 // Global GIC setup, once, on the boot CPU.
-void intc_init(void) {
+void gicv3_init(void) {
     log_msg("Initializing GICv3\n");
 
     // Affinity routing first (needed for GICD_IROUTER), then enable
@@ -114,7 +115,7 @@ void intc_init(void) {
 
 // Configure a level-triggered SPI (INTID 32..1019) as group 1, route it
 // to the CPU with MPIDR Aff0 = cpu, and enable it.
-void intc_enable(uint32 intid, int cpu) {
+void gicv3_enable(uint32 intid, int cpu) {
     if (intid < 32 || intid >= 1020)
         panic("intc_enable: bad SPI %d", intid);
 
@@ -139,7 +140,7 @@ void intc_enable(uint32 intid, int cpu) {
 }
 
 // Per-CPU setup: this CPU's redistributor and CPU interface.
-void intc_inithart(void) {
+void gicv3_inithart(void) {
     uint64 rd = gicr_base();
 
     // wake up the redistributor
@@ -163,4 +164,17 @@ void intc_inithart(void) {
     isb();
     write_icc_igrpen1_el1(1);
     isb();
+}
+
+// The highest priority pending interrupt, now active; 1020-1023 if none.
+uint32 gicv3_ack(void)
+{
+    uint64 id;
+    asm volatile("mrs %0, ICC_IAR1_EL1" : "=r" (id));
+    return id;
+}
+
+void gicv3_eoi(uint32 id)
+{
+    asm volatile("msr ICC_EOIR1_EL1, %0" : : "r" ((uint64)id));
 }

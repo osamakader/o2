@@ -21,8 +21,9 @@ struct board {
     uint64 uart;
     int uart_irq;
     uint64 rtc;                 // 0: none
-    uint64 intc, intc_size;     // GICv3 distributor, or the PLIC
-    uint64 intc2, intc2_size;   // GICv3 redistributors
+    int intc_kind;              // which one (platform.h's INTC_COMPATS)
+    uint64 intc, intc_size;     // GIC distributor, or the PLIC
+    uint64 intc2, intc2_size;   // GICv3 redistributors, GICv2 CPU interface
     int nvirtio;                // virtio-mmio transports
     struct { uint64 base; int irq; } virtio[32];
 };

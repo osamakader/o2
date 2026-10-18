@@ -1,6 +1,10 @@
 #ifndef PLATFORM_H
 #define PLATFORM_H
 
+// interrupt controllers o2 drives, as the device tree calls them:
+// board.intc_kind is the index of the one found
+#define INTC_COMPATS { "arm,gic-v3", "arm,gic-400", "arm,cortex-a15-gic" }
+
 #ifdef PLATFORM_RPI4
 
 // Raspberry Pi 4 (BCM2711; qemu -machine raspi4b), in the "low
@@ -28,7 +32,7 @@
 
 #define UART_COMPAT "arm,pl011"
 #define RTC_COMPAT  "none"
-#define INTC_COMPAT "arm,gic-400"
+#define INTC_KIND   1   // the GIC-400 (INTC_COMPATS)
 #define INTC_BASE   GICD
 #define INTC_SIZE   GICD_SIZE
 #define INTC2_BASE  GICC
@@ -78,7 +82,7 @@
 // stand for the interrupt controller: distributor, redistributors.
 #define UART_COMPAT "arm,pl011"
 #define RTC_COMPAT  "arm,pl031"
-#define INTC_COMPAT "arm,gic-v3"
+#define INTC_KIND   0   // a GICv3 (INTC_COMPATS)
 #define INTC_BASE   GICD
 #define INTC_SIZE   GICD_SIZE
 #define INTC2_BASE  GICR

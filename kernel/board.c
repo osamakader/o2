@@ -16,6 +16,7 @@ struct board board = {
     .uart = UART0,
     .uart_irq = UART0_IRQ,
     .rtc = RTC0,
+    .intc_kind = INTC_KIND,
     .intc = INTC_BASE,
     .intc_size = INTC_SIZE,
     .intc2 = INTC2_BASE,
@@ -62,7 +63,10 @@ static int find_device(const char *compat, int i, uint64 *addr, uint64 *size) {
 }
 
 static void find_devices(void) {
-    intc_node = find_device(INTC_COMPAT, 0, &board.intc, &board.intc_size);
+    static const char *intcs[] = INTC_COMPATS;
+    for (int i = 0; i < NELEM(intcs) && intc_node < 0; i++)
+        if ((intc_node = find_device(intcs[i], 0, &board.intc, &board.intc_size)) >= 0)
+            board.intc_kind = i;
     if (intc_node >= 0 && INTC2_SIZE)
         fdt_reg(intc_node, 1, &board.intc2, &board.intc2_size);
 
