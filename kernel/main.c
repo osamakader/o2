@@ -11,6 +11,8 @@
 #include "uart.h"
 #include "fpu.h"
 #include "board.h"
+#include "socket.h"
+#include "net.h"
 
 // Every CPU enters here from arch/<arch>/entry.S with the MMU on, on its
 // boot stack. boot is set on the one CPU that does the global setup
@@ -45,6 +47,8 @@ int main(int boot, uint64 dtb) {
         irq_register(board.uart_irq, uartintr, cpuid());
 
         virtio_disk_init();
+        sockinit();
+        virtio_net_init();
         binit();
         iinit();
         fileinit();

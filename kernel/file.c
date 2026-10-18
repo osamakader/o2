@@ -72,6 +72,8 @@ void fileclose(struct file *f)
 
     if (ff.type == FD_PIPE) {
         pipeclose(ff.pipe, ff.writable);
+    } else if (ff.type == FD_SOCK) {
+        sock_close(ff.sock);
     } else if (ff.type == FD_INODE || ff.type == FD_DEVICE) {
         begin_op();
         iput(ff.ip);
@@ -106,7 +108,9 @@ int fileread(struct file *f, uint64 addr, int n)
     if (f->readable == 0)
         return -1;
 
-    if (f->type == FD_PIPE) {
+    if (f->type == FD_SOCK) {
+        r = sockread(f->sock, addr, n);
+    } else if (f->type == FD_PIPE) {
         r = piperead(f->pipe, addr, n);
     } else if (f->type == FD_DEVICE) {
         if (f->major < 0 || f->major >= NDEV || !devsw[f->major].read)
@@ -156,7 +160,9 @@ int filewrite(struct file *f, uint64 addr, int n)
     if (f->writable == 0)
         return -1;
 
-    if (f->type == FD_PIPE) {
+    if (f->type == FD_SOCK) {
+        ret = sockwrite(f->sock, addr, n);
+    } else if (f->type == FD_PIPE) {
         ret = pipewrite(f->pipe, addr, n);
     } else if (f->type == FD_DEVICE) {
         if (f->major < 0 || f->major >= NDEV || !devsw[f->major].write)

@@ -42,6 +42,12 @@
 #define SYS_readlink 36
 #define SYS_lstat   37
 #define SYS_lockstat 38
+#define SYS_socket  39
+#define SYS_bind    40
+#define SYS_connect 41
+#define SYS_sendto  42
+#define SYS_recvfrom 43
+#define SYS_setsockopt 44
 
 // sbrk(n, type): allocate now, or only on first touch (page fault)
 #define SBRK_EAGER 1

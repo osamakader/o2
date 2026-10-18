@@ -48,6 +48,14 @@ void fileinit(void);
 int fileread(struct file *f, uint64 addr, int n);
 int filestat(struct file *f, uint64 addr);
 int filewrite(struct file *f, uint64 addr, int n);
+int fdalloc(struct file *f);
+
+// socket.c
+struct sock;
+void sockinit(void);
+void sock_close(struct sock *s);
+int sockread(struct sock *s, uint64 dst, int n);
+int sockwrite(struct sock *s, uint64 src, int n);
 int fileseek(struct file *f, int off, int whence);
 
 // pipe.c

@@ -11,6 +11,7 @@ struct procinfo;
 struct timespec;
 struct tm;
 struct lockstat;
+struct sockaddr_in;
 
 // system calls
 int fork(void);
@@ -51,6 +52,12 @@ int symlink(const char *, const char *);
 int readlink(const char *, char *, int);
 int lstat(const char *, struct stat *);
 int lockstat(struct lockstat *, int);
+int socket(int, int, int);
+int bind(int, const struct sockaddr_in *, int);
+int connect(int, const struct sockaddr_in *, int);
+int sendto(int, const void *, int, int, const struct sockaddr_in *, int);
+int recvfrom(int, void *, int, int, struct sockaddr_in *, int *);
+int setsockopt(int, int, int, const void *, int);
 
 // ulib.c
 char *strcpy(char *, const char *);

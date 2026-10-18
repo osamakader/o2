@@ -50,6 +50,9 @@ KOBJS = \
   kernel/mmap.o \
   kernel/fdt.o \
   kernel/board.o \
+  kernel/virtio_net.o \
+  kernel/net.o \
+  kernel/socket.o \
   kernel/sysfile.o \
   kernel/initcode.o \
 
@@ -231,6 +234,7 @@ CPUS := 3
 endif
 # RAM for qemu; the kernel finds out how much from the device tree
 MEM ?= 128M
+NET ?= 1
 
 # mkfs runs on the host
 $(MKFS): mkfs/mkfs.c kernel/include/fs.h kernel/include/param.h kernel/include/stat.h
@@ -270,8 +274,13 @@ $(FSIMG): $(MKFS) $(B)/README $(UPROGS)
 	$(MKFS) $@ $(B)/README $(UPROGS) > /dev/null
 
 QEMUOPTS += -kernel $(KERNEL) -m $(MEM) -smp $(CPUS) -nographic
-# no network card: none is used, and its boot ROM may not be installed
+# a virtio network card on qemu's user-mode network (NET=0: none); not
+# -nic, whose PCI card wants a boot ROM that may not be installed
+ifeq ($(NET), 0)
 QEMUOPTS += -nic none
+else
+QEMUOPTS += -netdev user,id=net0 -device virtio-net-device,netdev=net0,bus=virtio-mmio-bus.1
+endif
 QEMUOPTS += -global virtio-mmio.force-legacy=false
 QEMUOPTS += -drive file=$(FSIMG),if=none,format=raw,id=x0
 QEMUOPTS += -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0

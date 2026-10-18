@@ -90,6 +90,12 @@ extern uint64 sys_symlink(void);
 extern uint64 sys_readlink(void);
 extern uint64 sys_lstat(void);
 extern uint64 sys_lockstat(void);
+extern uint64 sys_socket(void);
+extern uint64 sys_bind(void);
+extern uint64 sys_connect(void);
+extern uint64 sys_sendto(void);
+extern uint64 sys_recvfrom(void);
+extern uint64 sys_setsockopt(void);
 
 // An array mapping syscall numbers from syscall.h to the function that
 // handles the system call.
@@ -132,6 +138,12 @@ static uint64 (*syscalls[])(void) = {
     [SYS_readlink] sys_readlink,
     [SYS_lstat]    sys_lstat,
     [SYS_lockstat] sys_lockstat,
+    [SYS_socket]   sys_socket,
+    [SYS_bind]     sys_bind,
+    [SYS_connect]  sys_connect,
+    [SYS_sendto]   sys_sendto,
+    [SYS_recvfrom] sys_recvfrom,
+    [SYS_setsockopt] sys_setsockopt,
 };
 
 void syscall(void) {

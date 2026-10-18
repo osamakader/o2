@@ -10,6 +10,8 @@
 #include "time.h"
 #include "console.h"
 #include "defs.h"
+#include "socket.h"
+#include "net.h"
 
 // Timer interrupts seen by CPU 0. Every CPU has its own timer, so
 // counting on all of them would advance ticks ncpu times per tick.
@@ -25,6 +27,7 @@ void clockintr(void)
         ticks++;
         wakeup(&ticks);
         release(&tickslock);
+        sock_tick();
     }
 }
 
