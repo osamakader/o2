@@ -41,6 +41,7 @@
 #define SYS_symlink 35
 #define SYS_readlink 36
 #define SYS_lstat   37
+#define SYS_lockstat 38
 
 // sbrk(n, type): allocate now, or only on first touch (page fault)
 #define SBRK_EAGER 1

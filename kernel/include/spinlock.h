@@ -12,6 +12,7 @@ struct spinlock {
     // for debugging:
     const char *name;  // name of lock.
     struct cpu *cpu;   // the cpu holding the lock.
+    ushort stat;       // its statistics' slot + 1 (spinlock.c); 0: none yet
 };
 
 void initlock(struct spinlock *lk, const char *name);

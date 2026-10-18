@@ -89,6 +89,7 @@ extern uint64 sys_munmap(void);
 extern uint64 sys_symlink(void);
 extern uint64 sys_readlink(void);
 extern uint64 sys_lstat(void);
+extern uint64 sys_lockstat(void);
 
 // An array mapping syscall numbers from syscall.h to the function that
 // handles the system call.
@@ -130,6 +131,7 @@ static uint64 (*syscalls[])(void) = {
     [SYS_symlink]  sys_symlink,
     [SYS_readlink] sys_readlink,
     [SYS_lstat]    sys_lstat,
+    [SYS_lockstat] sys_lockstat,
 };
 
 void syscall(void) {

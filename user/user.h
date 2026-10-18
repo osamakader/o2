@@ -10,6 +10,7 @@ struct stat;
 struct procinfo;
 struct timespec;
 struct tm;
+struct lockstat;
 
 // system calls
 int fork(void);
@@ -49,6 +50,7 @@ int munmap(void *, uint64);
 int symlink(const char *, const char *);
 int readlink(const char *, char *, int);
 int lstat(const char *, struct stat *);
+int lockstat(struct lockstat *, int);
 
 // ulib.c
 char *strcpy(char *, const char *);

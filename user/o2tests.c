@@ -9,6 +9,7 @@
 #include "syscall.h"
 #include "time.h"
 #include "mman.h"
+#include "lockstat.h"
 
 #define PGSIZE 4096
 
@@ -1765,6 +1766,29 @@ static void test_symlink(void)
   unlink("sl.d");
 }
 
+// lockstat() counts acquires per lock name.
+static void test_lockstat(void)
+{
+  static struct lockstat ls[64], ls2[64];
+  int n = lockstat(ls, 64);
+  int proc = -1;
+  for(int i = 0; i < n; i++)
+    if(strcmp(ls[i].name, "proc") == 0)
+      proc = i;
+  if(n <= 0 || proc < 0 || ls[proc].acquire == 0){
+    fail("lockstat", "no proc locks");
+    return;
+  }
+  getpid();
+  int pid = fork();
+  if(pid == 0)
+    exit(0);
+  wait(0);
+  if(lockstat(ls2, 64) < n || ls2[proc].acquire <= ls[proc].acquire ||
+     lockstat(ls2, 1) != 1 || lockstat((void *)0x7000000000UL, 64) != -1)
+    fail("lockstat", "counts");
+}
+
 static void o2tests(void)
 {
   struct { const char *name; void (*fn)(void); } tests[] = {
@@ -1786,6 +1810,7 @@ static void o2tests(void)
     { "timestamps", test_timestamps },
     { "bigfile", test_bigfile },
     { "symlink", test_symlink },
+    { "lockstat", test_lockstat },
     { "getppid", test_getppid },
     { "dup2", test_dup2 },
     { "lseek", test_lseek },
