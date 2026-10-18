@@ -200,34 +200,59 @@ void uvmfree(pagetable_t pagetable, uint64 sz) {
     freewalk(pagetable, 2);
 }
 
-// Given a parent process's page table, copy its memory into a child's
-// page table, both the page table and the physical memory, with the
-// same permissions. Returns 0 on success, -1 on failure; frees any
-// allocated pages on failure.
+// Given a parent process's page table, share its memory with a child's
+// page table (fork()): map the same pages, with writable ones made
+// copy-on-write in both, so that the first write to one gives the
+// writer a copy of its own (uvmcow()). The caller must flush the old
+// page table's TLB entries. Returns 0 on success, -1 if out of memory
+// for page-table pages, after undoing the child's mappings.
 int uvmcopy(pagetable_t old, pagetable_t new, uint64 sz) {
     uint64 i;
 
     for (i = 0; i < sz; i += PGSIZE) {
         pte_t *pte = walk(old, i, 0);
         if (pte == 0 || (*pte & PTE_VALID) == 0)
-            continue;  // not allocated yet (lazy): nothing to copy
+            continue;  // not allocated yet (lazy): nothing to share
+        if (PTE_IS_USER_W(*pte))
+            *pte = PTE_MAKE_COW(*pte);
         uint64 pa = PTE2PA(*pte);
-        uint64 flags = PTE_FLAGS(*pte);
-
-        char *mem = kalloc();
-        if (mem == 0)
+        if (mappages(new, i, PGSIZE, pa, PTE_FLAGS(*pte)) != 0)
             goto err;
-        memmove(mem, (char *)P2V(pa), PGSIZE);
-        if (mappages(new, i, PGSIZE, V2P(mem), flags) != 0) {
-            kfree(mem);
-            goto err;
-        }
+        kref((void *)P2V(pa));
     }
     return 0;
 
 err:
     uvmunmap(new, 0, i / PGSIZE, 1);
     return -1;
+}
+
+// A write to va in the current process, whose page table is pagetable,
+// hit a copy-on-write page: give the process a copy of the page, or if
+// no other page table maps it any more, the page itself, and make it
+// writable. Returns the page's physical address, or 0 if va isn't a
+// copy-on-write page or memory ran out.
+uint64 uvmcow(pagetable_t pagetable, uint64 va) {
+    if (va >= MAXVA)
+        return 0;
+    pte_t *pte = walk(pagetable, PGROUNDDOWN(va), 0);
+    if (pte == 0 || (*pte & PTE_VALID) == 0 || !PTE_IS_COW(*pte))
+        return 0;
+
+    uint64 pa = PTE2PA(*pte);
+    if (krefs((void *)P2V(pa)) > 1) {
+        char *mem = kalloc();
+        if (mem == 0)
+            return 0;
+        memmove(mem, (char *)P2V(pa), PGSIZE);
+        *pte = PA2PTE(V2P(mem)) | PTE_FLAGS(*pte);
+        kfree((void *)P2V(pa));
+        pa = V2P(mem);
+    }
+    *pte = PTE_UNCOW(*pte);
+    // the read-only entry may be in the TLB
+    asid_flush(myproc()->asid);
+    return pa;
 }
 
 // Mark a PTE invalid for user access. Used by exec for the user stack
@@ -275,6 +300,8 @@ int copyout(pagetable_t pagetable, uint64 dstva, const char *src, uint64 len) {
         pte_t *pte = walk(pagetable, va0, 0);
         if ((pte == 0 || (*pte & PTE_VALID) == 0) && vmfault(pagetable, va0) != 0)
             pte = walk(pagetable, va0, 0);
+        if (pte && (*pte & PTE_VALID) && PTE_IS_COW(*pte) && uvmcow(pagetable, va0) == 0)
+            return -1;
         if (pte == 0 || (*pte & PTE_VALID) == 0 || !PTE_IS_USER_W(*pte))
             return -1;
         uint64 n = PGSIZE - (dstva - va0);

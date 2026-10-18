@@ -378,6 +378,8 @@ int fork(void) {
         release(&np->lock);
         return -1;
     }
+    // the parent's writable pages are copy-on-write now
+    asid_flush(p->asid);
     np->sz = p->sz;
 
     // copy saved user registers.

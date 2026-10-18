@@ -48,6 +48,13 @@
 #define PTE_IS_USER_W(pte)  (((pte) & (PTE_U | PTE_W)) == (PTE_U | PTE_W))
 #define PTE_CLEAR_USER(pte) ((pte) & ~PTE_U)
 
+// copy-on-write (see uvmcopy()): a page shared read-only after fork()
+// that the process may write, marked with a bit reserved for software
+#define PTE_COW            (_UL(1) << 8)
+#define PTE_IS_COW(pte)    (((pte) & PTE_COW) != 0)
+#define PTE_MAKE_COW(pte)  (((pte) & ~PTE_W) | PTE_COW)
+#define PTE_UNCOW(pte)     (((pte) & ~PTE_COW) | PTE_W)
+
 // Sv39: bits [63:39] must equal bit 38. The lower half is user space,
 // the upper half the kernel's.
 #define VA_VALID(va)  ((((long)(va)) << 25 >> 25) == (long)(va))

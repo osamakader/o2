@@ -68,6 +68,7 @@ void serr_handler(struct trapframe *tf)
 #define EC_FP_LOW    0x07   // SIMD/FP access from EL0
 #define EC_SVC64     0x15
 #define EC_DABT_LOW  0x24   // data abort from EL0
+#define ESR_WNR      (1UL << 6)   // data abort on a write
 
 // Synchronous exception from EL0, on the process's kernel stack with
 // interrupts masked.
@@ -93,6 +94,9 @@ void usertrap(struct trapframe *tf)
     } else if (ESR_EC(tf->esr) == EC_DABT_LOW && (tf->esr & 0x3c) == 0x04 &&
                vmfault(p->pagetable, tf->far) != 0) {
         // translation fault (DFSC 0b0001xx) on lazily allocated memory
+    } else if (ESR_EC(tf->esr) == EC_DABT_LOW && (tf->esr & 0x3c) == 0x0c &&
+               (tf->esr & ESR_WNR) && uvmcow(p->pagetable, tf->far) != 0) {
+        // write permission fault (DFSC 0b0011xx) on a copy-on-write page
     } else if (!sigfault(p, ec_signal(ESR_EC(tf->esr)))) {
         // a fault in the user program, which will terminate it
         printf("usertrap(): %s (esr %p) pid=%d %s\n            elr=%p far=%p\n",

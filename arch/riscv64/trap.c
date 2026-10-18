@@ -167,6 +167,8 @@ void usertrap(void)
     } else if ((tf->cause == 13 || tf->cause == 15) &&
                vmfault(p->pagetable, tf->tval) != 0) {
         // load/store page fault on lazily allocated memory
+    } else if (tf->cause == 15 && uvmcow(p->pagetable, tf->tval) != 0) {
+        // store page fault on a copy-on-write page
     } else if (!sigfault(p, cause_signal(tf->cause))) {
         // a fault in the user program, which will terminate it
         printf("usertrap(): %s (scause 0x%lx) pid=%d %s\n            sepc=%p stval=%p\n",

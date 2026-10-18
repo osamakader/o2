@@ -108,4 +108,11 @@ void uvmswitch(uint64 *pagetable, int asid);
 // make a user leaf EL1-only (AP = 00), e.g. for the stack guard page
 #define PTE_CLEAR_USER(pte) ((pte) & ~PTE_AP_MASK)
 
+// copy-on-write (see uvmcopy()): a page shared read-only after fork()
+// that the process may write, marked with a software bit
+#define PTE_COW            (_UL(1) << 55)
+#define PTE_IS_COW(pte)    (((pte) & PTE_COW) != 0)
+#define PTE_MAKE_COW(pte)  (((pte) & ~PTE_AP_MASK) | PTE_AP_RO_USER | PTE_COW)
+#define PTE_UNCOW(pte)     (((pte) & ~(PTE_AP_MASK | PTE_COW)) | PTE_AP_RW_USER)
+
 #endif
