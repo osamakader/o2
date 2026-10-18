@@ -6,11 +6,12 @@
 #define MAXARG 32 // max exec arguments
 #define USERSTACK 1 // user stack pages
 #define ROOTDEV       1  // device number of file system root disk
-#define MAXOPBLOCKS  10  // max # of blocks any FS op writes
+#define MAXOPBLOCKS  20  // max # of blocks any FS op writes (deleting a
+                         // MAXFILE file frees blocks in ~10 bitmap blocks)
 #define LOGBLOCKS    (MAXOPBLOCKS*3)  // max data blocks in on-disk log
 #define NBUF         (LOGBLOCKS+MAXOPBLOCKS*3)  // size of disk block cache:
                          // the log pins up to LOGBLOCKS between commits
-#define FSSIZE       2000  // size of file system in blocks
+#define FSSIZE      70000  // size of file system in blocks (> MAXFILE)
 #define NINODE       50  // maximum number of active i-nodes
 #define NFILE       100  // open files per system
 #define NOFILE       16  // open files per process

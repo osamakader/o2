@@ -1615,6 +1615,56 @@ static void test_mmap_file(void)
   munmap(p, 4096);
 }
 
+// Files past what direct and single-indirect blocks hold (268 KB).
+static void test_bigfile(void)
+{
+  enum { CHUNK = 8192, SIZE = 2 * 1024 * 1024 };
+  static char buf[CHUNK];
+  struct stat st;
+
+  for(int round = 0; round < 2; round++){
+    int fd = open("big.tmp", O_CREATE | O_RDWR | O_TRUNC);
+    if(fd < 0){
+      fail("bigfile", "create");
+      return;
+    }
+    for(int off = 0; off < SIZE; off += CHUNK){
+      for(int i = 0; i < CHUNK; i += 512)
+        *(int *)(buf + i) = off + i + round;
+      if(write(fd, buf, CHUNK) != CHUNK){
+        fail("bigfile", "write");
+        close(fd);
+        unlink("big.tmp");
+        return;
+      }
+    }
+    if(fstat(fd, &st) < 0 || st.size != SIZE)
+      fail("bigfile", "size");
+    // read back, from the end and from the start
+    int bad = 0;
+    for(int k = 0; k < 2; k++){
+      int off = k ? 0 : SIZE - CHUNK;
+      lseek(fd, off, SEEK_SET);
+      for(; off < SIZE; off += CHUNK){
+        if(read(fd, buf, CHUNK) != CHUNK){
+          bad++;
+          break;
+        }
+        for(int i = 0; i < CHUNK; i += 512)
+          bad += *(int *)(buf + i) != off + i + round;
+      }
+    }
+    if(bad)
+      fail("bigfile", "contents");
+    close(fd);
+    // the second round truncates the first round's file (O_TRUNC),
+    // freeing its double-indirect blocks, and writes it anew
+  }
+  unlink("big.tmp");
+  if(sync() != 0)
+    fail("bigfile", "sync");
+}
+
 static void o2tests(void)
 {
   struct { const char *name; void (*fn)(void); } tests[] = {
@@ -1634,6 +1684,7 @@ static void o2tests(void)
     { "printf", test_printf },
     { "time", test_time },
     { "timestamps", test_timestamps },
+    { "bigfile", test_bigfile },
     { "getppid", test_getppid },
     { "dup2", test_dup2 },
     { "lseek", test_lseek },

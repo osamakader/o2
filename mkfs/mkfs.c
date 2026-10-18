@@ -23,7 +23,7 @@
 #define static_assert(a, b) do { switch (0) case 0: case (a): ; } while (0)
 #endif
 
-#define NINODES 200
+#define NINODES 1000
 
 // Disk layout:
 // [ boot block | sb block | log | inode blocks | free bit map | data blocks ]
@@ -279,7 +279,7 @@ iappend(uint inum, void *xp, int n)
   // printf("append inum %d at off %d sz %d\n", inum, off, n);
   while(n > 0){
     fbn = off / BSIZE;
-    assert(fbn < MAXFILE);
+    assert(fbn < NDIRECT + NINDIRECT);   // no double-indirect blocks here
     if(fbn < NDIRECT){
       if(xint(din.addrs[fbn]) == 0){
         din.addrs[fbn] = xint(freeblock++);
