@@ -21,6 +21,13 @@ tests, `o2tests`.
 `tools/ci.sh <arch> [quick]` runs the whole test suite the way CI does
 (GitHub Actions, `.github/workflows/ci.yml`, on every push).
 
+The machine is described by the firmware's device tree (FDT): RAM size
+(`make MEM=1G qemu`; up to 16GB) and reserved memory, the CPUs, the
+riscv64 timer frequency, and the UART, RTC, interrupt controller and
+virtio-mmio devices with their interrupts. Without one, qemu virt's
+layout is built in. On arm64 qemu puts the tree at the start of RAM,
+which is why the kernel loads at 0x40200000.
+
 Needs the `aarch64-linux-gnu-` / `riscv64-linux-gnu-` toolchains and
 QEMU (`qemu-system-arm`, `qemu-system-misc`). riscv64 runs in S-mode
 under the OpenSBI firmware QEMU loads by default.
