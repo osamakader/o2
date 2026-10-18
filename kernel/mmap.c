@@ -119,9 +119,27 @@ static void vma_unmap_range(pagetable_t pagetable, uint64 a, uint64 b) {
     uvmunmap(pagetable, a, (b - a) / PGSIZE, 1);
 }
 
+// Map a device's pages (devsw[].mmap()) into [start, end) of new
+// mapping v, sharing them: each mapping holds a reference. Returns 0,
+// or -1 if the device has fewer pages.
+static int vma_load_device(struct proc *p, struct vma *v) {
+    uint64 (*page)(uint64) = devsw[v->file->major].mmap;
+    for (uint64 va = v->start; va < v->end; va += PGSIZE) {
+        uint64 pa = page((v->off + va - v->start) / PGSIZE);
+        if (pa == 0 || mappages(p->pagetable, va, PGSIZE, pa, PTE_USER(prot2perm(v->prot))) != 0) {
+            vma_unmap_range(p->pagetable, v->start, va);
+            return -1;
+        }
+        kref((void *)P2V(pa));
+    }
+    return 0;
+}
+
 // Read the file's pages into [start, end) of new mapping v; pages past
 // the end of the file stay zero. Returns 0, or -1 if out of memory.
 static int vma_load(struct proc *p, struct vma *v) {
+    if (v->file && v->file->type == FD_DEVICE)
+        return vma_load_device(p, v);
     struct inode *ip = v->file ? v->file->ip : 0;
     int r = 0;
 
@@ -148,7 +166,8 @@ static int vma_load(struct proc *p, struct vma *v) {
 // Write the pages of [a, b) of mapping v back to its file, if it is a
 // writable MAP_SHARED file mapping; only what lies within the file.
 static void vma_writeback(struct proc *p, struct vma *v, uint64 a, uint64 b) {
-    if (v->file == 0 || !(v->flags & MAP_SHARED) || !(v->prot & PROT_WRITE))
+    if (v->file == 0 || v->file->type != FD_INODE || !(v->flags & MAP_SHARED) ||
+        !(v->prot & PROT_WRITE))
         return;
     struct inode *ip = v->file->ip;
     for (uint64 va = a; va < b; va += PGSIZE) {
@@ -193,15 +212,22 @@ uint64 sys_mmap(void) {
     struct file *f = 0;
     if (!(flags & MAP_ANONYMOUS)) {
         // a regular file, open for reading, and for writing if writes
-        // are to go to it
-        if (fd < 0 || fd >= NOFILE || (f = p->ofile[fd]) == 0 || f->type != FD_INODE ||
-            !f->readable || (type == MAP_SHARED && (prot & PROT_WRITE) && !f->writable))
+        // are to go to it; or a device that can be mapped, shared
+        if (fd < 0 || fd >= NOFILE || (f = p->ofile[fd]) == 0 || !f->readable ||
+            (type == MAP_SHARED && (prot & PROT_WRITE) && !f->writable))
             return -1;
-        ilock(f->ip);
-        int regular = f->ip->type == T_FILE;
-        iunlock(f->ip);
-        if (!regular)
-            return -1;
+        if (f->type == FD_DEVICE) {
+            if (type != MAP_SHARED || f->major < 0 || f->major >= NDEV || !devsw[f->major].mmap)
+                return -1;
+        } else {
+            if (f->type != FD_INODE)
+                return -1;
+            ilock(f->ip);
+            int regular = f->ip->type == T_FILE;
+            iunlock(f->ip);
+            if (!regular)
+                return -1;
+        }
     }
     len = PGROUNDUP(len);
 
