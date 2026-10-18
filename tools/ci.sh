@@ -131,15 +131,17 @@ else
 fi
 
 # 7. the shell's line editor: the up key brings back the last command,
-# left and typing edit it
-run lineedit 60 "^HIST-TWO$" -- "echo HIST-ONE" "$(printf '\033[A')" \
-    "$(printf '\033[A\033[D\033[D\033[DTWO\033[F\177\177\177')"
+# left and typing edit it, tab completes a command name
+run lineedit 60 "^TAB-DONE$" -- "echo HIST-ONE" "$(printf '\033[A')" \
+    "$(printf '\033[A\033[D\033[D\033[DTWO\033[F\177\177\177')" \
+    "$(printf 'ec\tTAB-DONE')"
 if panicked lineedit; then
     fail lineedit "kernel panic"
-elif [ "$(grep -c '^HIST-ONE$' "$LOGS/$ARCH-lineedit.log")" -eq 2 ] && has lineedit "^HIST-TWO$"; then
+elif [ "$(grep -c '^HIST-ONE$' "$LOGS/$ARCH-lineedit.log")" -eq 2 ] && has lineedit "^HIST-TWO$" &&
+     has lineedit "^TAB-DONE$"; then
     pass lineedit
 else
-    fail lineedit "history or editing didn't work"
+    fail lineedit "history, editing or completion didn't work"
 fi
 
 # 8. grind runs until stopped: no errors or panic within the time limit
