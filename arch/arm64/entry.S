@@ -7,6 +7,20 @@
 #define BOOT_NORMAL (PTE_ATTRIDX(MT_NORMAL) | PTE_SH_INNER | PTE_AP_RW | \
                      PTE_AF | PTE_VALID)
 
+// Bring-up aid on boards whose firmware has set up the console UART
+// (platform.h's EARLY_UART, a PL011): one character straight to it, at
+// its physical address, so that how far a CPU got shows before the
+// kernel's own console works: A at entry, B in EL1, C with the MMU on.
+.macro early_putc ch
+#ifdef EARLY_UART
+        ldr x9, =EARLY_UART
+99:     ldr w10, [x9, #0x18]            // FR: wait while TXFF
+        tbnz w10, #5, 99b
+        mov w10, #\ch
+        str w10, [x9]                   // DR
+#endif
+.endm
+
 .section .text.boot, "ax"
 .global _entry
 _entry:
@@ -29,6 +43,7 @@ _entry:
         // qemu and the Raspberry Pi firmware pass the device tree's
         // physical address in x0 (qemu virt: 0, see board_init())
         mov x20, x0
+        early_putc 'A'
 
         // The Raspberry Pi firmware starts the kernel in EL2 (qemu virt
         // with virtualization=on too); o2 runs in EL1: drop there.
@@ -66,7 +81,7 @@ _entry:
         adr x0, 5f
         msr elr_el2, x0
         eret
-5:
+5:      early_putc 'B'
         // this CPU's index (cpuid()): Aff0 + Aff1, one of which is 0 on
         // the machines o2 knows (qemu virt and the Pi 4: Aff0; the Pi 5:
         // Aff1)
@@ -88,6 +103,7 @@ _entry:
         b 1b
 
 2:      bl mmu_on
+        early_putc 'C'                  // the UART is identity-mapped too
 
         // Jump from the physical (identity-mapped) address to the
         // high-half link address of the code below.

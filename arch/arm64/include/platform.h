@@ -17,6 +17,7 @@
 
 #define UART0     0xfe201000   // PL011 (uart0)
 #define UART_CLOCK 0           // the firmware set its baud rate: keep it
+#define EARLY_UART UART0       // so entry.S can write to it right away
 #define UART0_IRQ (32 + 121)   // SPI 121
 #define RTC0      0            // no real-time clock
 

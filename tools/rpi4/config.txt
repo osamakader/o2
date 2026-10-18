@@ -8,3 +8,6 @@ kernel_address=0x200000
 # baud, rather than the mini UART: Bluetooth gets neither
 enable_uart=1
 dtoverlay=disable-bt
+# the firmware's own log on that console too, while bringing o2 up: it
+# shows whether kernel8.img and the device tree were loaded
+uart_2ndstage=1
