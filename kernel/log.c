@@ -10,7 +10,15 @@
 // its start and end. Usually begin_op() just increments
 // the count of in-progress FS system calls and returns.
 // But if it thinks the log is close to running out, it
-// sleeps until the last outstanding end_op() commits.
+// commits, or sleeps until the last outstanding end_op().
+//
+// Unlike xv6, end_op() doesn't commit: finished system calls
+// collect in the log until it is full (begin_op()), a second
+// has passed (logflusher()), or sync() asks. Their updates are
+// in the buffer cache meanwhile, so everyone sees them; a crash
+// loses at most the last second's, never half of one. Blocks
+// many calls write (an inode, the bitmap) go to the disk once
+// per commit rather than once per call.
 //
 // The log is a physical re-do log containing disk blocks.
 // The on-disk log format:
@@ -30,6 +38,7 @@
 #include "proc.h"
 #include "fs.h"
 #include "buf.h"
+#include "timer.h"
 
 // Contents of the header block, used for both the on-disk header block
 // and to keep track in memory of logged block# before commit.
@@ -51,6 +60,7 @@ static struct log log;
 
 static void recover_from_log(void);
 static void commit(void);
+static void logflusher(void *arg);
 
 void initlog(int dev, struct superblock *sb)
 {
@@ -61,6 +71,8 @@ void initlog(int dev, struct superblock *sb)
     log.start = sb->logstart;
     log.dev = dev;
     recover_from_log();
+    if (kthread_create(logflusher, 0) == 0)
+        panic("initlog: logflusher");
 }
 
 // Copy committed blocks from log to their home location
@@ -114,6 +126,20 @@ static void recover_from_log(void)
 }
 
 // called at the start of each FS system call.
+// Commit the finished system calls in the log. Called with log.lock
+// held, no system call in progress and none committing; releases the
+// lock while writing to the disk.
+static void commit_locked(void)
+{
+    log.committing = 1;
+    release(&log.lock);
+    commit();
+    acquire(&log.lock);
+    log.committing = 0;
+    log.ncommit++;
+    wakeup(&log);
+}
+
 void begin_op(void)
 {
     acquire(&log.lock);
@@ -121,8 +147,12 @@ void begin_op(void)
         if (log.committing) {
             sleep(&log, &log.lock);
         } else if (log.lh.n + (log.outstanding + 1) * MAXOPBLOCKS > LOGBLOCKS) {
-            // this op might exhaust log space; wait for commit.
-            sleep(&log, &log.lock);
+            // this op might exhaust log space: commit what is there,
+            // or wait for the ops in progress to end first.
+            if (log.outstanding == 0)
+                commit_locked();
+            else
+                sleep(&log, &log.lock);
         } else {
             log.outstanding += 1;
             release(&log.lock);
@@ -135,32 +165,34 @@ void begin_op(void)
 // commits if this was the last outstanding operation.
 void end_op(void)
 {
-    int do_commit = 0;
-
     acquire(&log.lock);
     log.outstanding -= 1;
     if (log.committing)
         panic("log.committing");
-    if (log.outstanding == 0) {
-        do_commit = 1;
-        log.committing = 1;
-    } else {
-        // begin_op() may be waiting for log space,
-        // and decrementing log.outstanding has decreased
-        // the amount of reserved space.
-        wakeup(&log);
-    }
+    // begin_op() may be waiting for log space, and decrementing
+    // log.outstanding has decreased the amount of reserved space;
+    // sync() may be waiting for no op to be in progress.
+    wakeup(&log);
     release(&log.lock);
+}
 
-    if (do_commit) {
-        // call commit w/o holding locks, since not allowed
-        // to sleep with locks.
-        commit();
-        acquire(&log.lock);
-        log.committing = 0;
-        log.ncommit++;
-        wakeup(&log);
-        release(&log.lock);
+// Commit whatever the log holds, once no op is in progress.
+static void flush(void)
+{
+    acquire(&log.lock);
+    while (log.committing || log.outstanding > 0)
+        sleep(&log, &log.lock);
+    if (log.lh.n > 0)
+        commit_locked();
+    release(&log.lock);
+}
+
+// Kernel thread: commit at least once a second.
+static void logflusher(void *arg)
+{
+    for (;;) {
+        sleep_ticks(HZ);
+        flush();
     }
 }
 
@@ -219,16 +251,9 @@ void log_write(struct buf *b)
     release(&log.lock);
 }
 
-// sync(): wait until file system operations in progress (or being
-// committed) when called are on disk. Returns 0.
+// sync(): commit everything so far to the disk. Returns 0.
 uint64 sys_sync(void)
 {
-    acquire(&log.lock);
-    if (log.committing || log.outstanding > 0) {
-        int n = log.ncommit + 1;
-        while (log.ncommit < n)
-            sleep(&log, &log.lock);
-    }
-    release(&log.lock);
+    flush();
     return 0;
 }
