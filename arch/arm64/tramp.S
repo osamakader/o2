@@ -31,6 +31,13 @@
     ldr x30, [x30]          // tramp_data[0]: kernel TTBR1
     msr ttbr1_el1, x30      // ... then map the kernel, under ASID 0
     isb
+    // Both TTBR1 tables map the kernel's region, differently, under
+    // ASID 0: the TLB's walk cache may still hold the trampoline
+    // table's intermediate entries for it (qemu has none, a Cortex-A72
+    // does), which lead nowhere in the kernel. Drop ASID 0's.
+    tlbi aside1, xzr
+    dsb nsh
+    isb
     ldr x30, 2f
     br x30
     .balign 8
