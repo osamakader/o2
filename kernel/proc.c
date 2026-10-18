@@ -211,14 +211,15 @@ void sleep(void *chan, struct spinlock *lk) {
     struct proc *p = myproc();
 
     // Must acquire p->lock in order to change p->state and then call
-    // sched(). Once we hold p->lock, we can be guaranteed that we won't
-    // miss any wakeup (wakeup locks p->lock), so it's okay to release
-    // lk.
+    // sched(). Set chan and state before releasing lk: wakeup() looks
+    // at them without p->lock first, and its callers hold lk, so they
+    // must see them by the time they can get lk. Holding p->lock until
+    // sched() switches away keeps wakeup() from marking us RUNNABLE
+    // before then.
     acquire(&p->lock);
-    release(lk);
-
     p->chan = chan;
     p->state = SLEEPING;
+    release(lk);
 
     sched();
 
@@ -239,6 +240,12 @@ void wakeup(void *chan) {
     for (int i = 0; i < NPROC; i++) {
         struct proc *p = &ptable[i];
         if (p == me)
+            continue;
+        // Without p->lock first, to skip the processes not sleeping on
+        // chan. A sleeper sets state and chan before it releases the
+        // condition lock the caller holds now, so it can't be missed.
+        if (__atomic_load_n(&p->state, __ATOMIC_RELAXED) != SLEEPING ||
+            __atomic_load_n(&p->chan, __ATOMIC_RELAXED) != chan)
             continue;
         acquire(&p->lock);
         if (p->state == SLEEPING && p->chan == chan)
@@ -280,6 +287,10 @@ void scheduler(void) {
         int found = 0;
         for (int i = 0; i < NPROC; i++) {
             struct proc *p = &ptable[i];
+            // a look without the lock first, so that idle CPUs don't
+            // take every slot's lock on every pass; checked again below
+            if (__atomic_load_n(&p->state, __ATOMIC_RELAXED) != RUNNABLE)
+                continue;
             acquire(&p->lock);
             if (p->state == RUNNABLE) {
                 p->state = RUNNING;
