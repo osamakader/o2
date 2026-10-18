@@ -164,14 +164,16 @@ void uart_enable_rx_irq(void)
     write_reg(dev, IMSC_OFFSET, INT_RX | INT_RT);
 }
 
-// UART interrupt: drain the RX FIFO into the console.
+// UART interrupt: drain the RX FIFO into the console. Clear the
+// interrupt first: cleared after draining, it would also clear the
+// interrupt for a byte that arrived meanwhile, which then sits in the
+// FIFO unnoticed (qemu raises RX again only when the FIFO fills up to
+// its trigger level, which it already has).
 void uartintr(void)
 {
     int c;
 
+    write_reg(&sdev, ICR_OFFSET, INT_RX | INT_RT);
     while ((c = uartgetc()) >= 0)
         consoleintr(c);
-
-    // reading the FIFO empty already deasserts RX/RT; clear any left
-    write_reg(&sdev, ICR_OFFSET, INT_RX | INT_RT);
 }
