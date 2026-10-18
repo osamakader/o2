@@ -173,6 +173,24 @@ struct buf *bread(uint dev, uint blockno)
     return b;
 }
 
+// A locked buf for the indicated block, without reading it from the
+// disk: the caller overwrites all of its data.
+struct buf *bclaim(uint dev, uint blockno)
+{
+    struct buf *b = bget(dev, blockno);
+    b->valid = 1;
+    return b;
+}
+
+// Write the n locked bufs to disk, as one batch of requests.
+void bwritev(struct buf **bufs, int n)
+{
+    for (int i = 0; i < n; i++)
+        if (!holdingsleep(&bufs[i]->lock))
+            panic("bwritev");
+    virtio_disk_rwv(bufs, n, 1);
+}
+
 // Write b's contents to disk.  Must be locked.
 void bwrite(struct buf *b)
 {

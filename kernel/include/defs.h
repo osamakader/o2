@@ -34,6 +34,8 @@ void binit(void);
 struct buf *bread(uint dev, uint blockno);
 void brelse(struct buf *b);
 void bwrite(struct buf *b);
+struct buf *bclaim(uint dev, uint blockno);
+void bwritev(struct buf **bufs, int n);
 void bpin(struct buf *b);
 void bunpin(struct buf *b);
 

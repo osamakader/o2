@@ -78,13 +78,24 @@ void initlog(int dev, struct superblock *sb)
 // Copy committed blocks from log to their home location
 static void install_trans(int recovering)
 {
+    if (!recovering) {
+        // the blocks are pinned in the cache, with what the log holds:
+        // write them home from there, all at once
+        struct buf *home[LOGBLOCKS];
+        for (int tail = 0; tail < log.lh.n; tail++)
+            home[tail] = bread(log.dev, log.lh.block[tail]);
+        bwritev(home, log.lh.n);
+        for (int tail = 0; tail < log.lh.n; tail++) {
+            bunpin(home[tail]);
+            brelse(home[tail]);
+        }
+        return;
+    }
     for (int tail = 0; tail < log.lh.n; tail++) {
         struct buf *lbuf = bread(log.dev, log.start + tail + 1); // read log block
         struct buf *dbuf = bread(log.dev, log.lh.block[tail]); // read dst
         memmove(dbuf->data, lbuf->data, BSIZE);  // copy block to dst
         bwrite(dbuf);  // write dst to disk
-        if (recovering == 0)
-            bunpin(dbuf);
         brelse(lbuf);
         brelse(dbuf);
     }
@@ -199,14 +210,17 @@ static void logflusher(void *arg)
 // Copy modified blocks from cache to log.
 static void write_log(void)
 {
+    struct buf *to[LOGBLOCKS];
+
     for (int tail = 0; tail < log.lh.n; tail++) {
-        struct buf *to = bread(log.dev, log.start + tail + 1); // log block
+        to[tail] = bclaim(log.dev, log.start + tail + 1); // log block
         struct buf *from = bread(log.dev, log.lh.block[tail]); // cache block
-        memmove(to->data, from->data, BSIZE);
-        bwrite(to);  // write the log
+        memmove(to[tail]->data, from->data, BSIZE);
         brelse(from);
-        brelse(to);
     }
+    bwritev(to, log.lh.n);  // write the log, all at once
+    for (int tail = 0; tail < log.lh.n; tail++)
+        brelse(to[tail]);
 }
 
 static void commit(void)
