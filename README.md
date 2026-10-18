@@ -33,6 +33,55 @@ Needs the `aarch64-linux-gnu-` / `riscv64-linux-gnu-` toolchains and
 QEMU (`qemu-system-arm`, `qemu-system-misc`). riscv64 runs in S-mode
 under the OpenSBI firmware QEMU loads by default.
 
+## Raspberry Pi 4
+
+`make PLATFORM=rpi4` builds o2 for the Pi 4 (arm64): `kernel8.img`
+(the raw kernel, with an arm64 Image header) and `sd.img`, an SD card
+image with the file system in a partition of type 0x6f. `make
+PLATFORM=rpi4 qemu` runs it on qemu's raspi4b (qemu 9.0 or later),
+which is how it is tested (`tools/ci.sh rpi4`).
+
+What differs from qemu virt: RAM from 0, entry in EL2, a GIC-400
+(GICv2), the CPUs started from the firmware's spin table, the SD card
+(SDHCI) for storage, the firmware's framebuffer (mailbox) for the
+screen, and no RTC (the time starts at 1970), network, or keyboard.
+
+On a real Pi 4 (not tried yet: expect rough edges, see below):
+
+1. You need a micro SD card whose contents may go (all of it is
+   erased), a 3.3V USB-serial adapter on the GPIO header (adapter RX
+   to pin 8, GPIO 14; adapter TX to pin 10, GPIO 15; GND to pin 6),
+   and on the host sudo, curl and mkfs.vfat (dosfstools). HDMI is
+   optional: it shows the boot animation.
+2. Build: `make ARCH=arm64 PLATFORM=rpi4`.
+3. With the card in the host's reader, as /dev/sdX (the whole card;
+   check with `lsblk`), back it up if anything on it matters
+   (`sudo dd if=/dev/sdX of=card-backup.img bs=4M`), then
+   `tools/rpi4-card.sh /dev/sdX`. It shows the card and asks you to
+   type yes, unmounts it, writes `sd.img`, then formats the first
+   partition FAT32 and copies the firmware (`start4.elf`,
+   `fixup4.dat`, the device tree, the `disable-bt` overlay, all from
+   the pinned firmware release), `tools/rpi4/config.txt` and
+   `kernel8.img` to it.
+4. Open the serial console at 115200 baud, 8N1, e.g. `picocom -b
+   115200 /dev/ttyUSB0`, put the card in the Pi and power it on. The
+   firmware loads `kernel8.img` at 0x200000 and starts it in EL2;
+   o2 prints its boot messages, plays the animation on HDMI and starts
+   the shell on the serial console.
+
+`config.txt` makes the PL011 (uart0) the console on GPIO 14/15
+(`enable_uart=1`, `dtoverlay=disable-bt`); o2 keeps the baud rate the
+firmware set. If nothing shows up there, check the wiring (TX and RX
+cross) and that the adapter is 3.3V. Things most likely to need work
+on the hardware, since qemu doesn't model them: the SD card's clock
+(o2 assumes a 100MHz base clock for EMMC2 when the controller doesn't
+say), caches around the mailbox and the framebuffer, and the SD card
+controller itself (qemu puts the card on the other one, so on the Pi
+EMMC2 is driven for the first time).
+
+The Pi 5 isn't supported yet; much of this (EL2 entry, GICv2, CPU
+numbering, the device tree's ranges, SD cards) is meant to carry over.
+
 ## Layout
 
 - `kernel/`: architecture-independent kernel
