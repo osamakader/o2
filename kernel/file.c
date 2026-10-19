@@ -34,6 +34,7 @@ struct file *filealloc(void)
     for (struct file *f = ftable.file; f < ftable.file + NFILE; f++) {
         if (f->ref == 0) {
             f->ref = 1;
+            f->nonblock = 0;   // the rest its user sets
             release(&ftable.lock);
             return f;
         }
@@ -109,13 +110,13 @@ int fileread(struct file *f, uint64 addr, int n)
         return -1;
 
     if (f->type == FD_SOCK) {
-        r = sockread(f->sock, addr, n);
+        r = sockread(f->sock, addr, n, f->nonblock);
     } else if (f->type == FD_PIPE) {
-        r = piperead(f->pipe, addr, n);
+        r = piperead(f->pipe, addr, n, f->nonblock);
     } else if (f->type == FD_DEVICE) {
         if (f->major < 0 || f->major >= NDEV || !devsw[f->major].read)
             return -1;
-        r = devsw[f->major].read(1, addr, n);
+        r = devsw[f->major].read(1, addr, n, f->nonblock);
     } else if (f->type == FD_INODE) {
         ilock(f->ip);
         if ((r = readi(f->ip, 1, addr, f->off, n)) > 0)

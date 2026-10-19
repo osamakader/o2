@@ -55,7 +55,7 @@ int fdalloc(struct file *f);
 struct sock;
 void sockinit(void);
 void sock_close(struct sock *s);
-int sockread(struct sock *s, uint64 dst, int n);
+int sockread(struct sock *s, uint64 dst, int n, int nonblock);
 int sockwrite(struct sock *s, uint64 src, int n);
 int fileseek(struct file *f, int off, int whence);
 
@@ -63,7 +63,7 @@ int fileseek(struct file *f, int off, int whence);
 struct pipe;
 int pipealloc(struct file **f0, struct file **f1);
 void pipeclose(struct pipe *pi, int writable);
-int piperead(struct pipe *pi, uint64 addr, int n);
+int piperead(struct pipe *pi, uint64 addr, int n, int nonblock);
 int pipewrite(struct pipe *pi, uint64 addr, int n);
 
 // fs.c

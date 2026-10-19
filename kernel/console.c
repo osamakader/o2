@@ -376,8 +376,9 @@ static int consoleioctl(int req, uint64 arg) {
 // Read up to n bytes of input into dst, a user address if user_dst
 // is set, sleeping until a whole line (or ^D) is available. Returns
 // the number of bytes read; 0 means end of file, -1 that the process
-// was killed or got a signal while waiting.
-int consoleread(int user_dst, uint64 dst, int n) {
+// was killed or got a signal while waiting, or with nonblock that there
+// was nothing to read.
+int consoleread(int user_dst, uint64 dst, int n, int nonblock) {
     int target = n;
 
     acquire(&cons_in.lock);
@@ -389,6 +390,10 @@ int consoleread(int user_dst, uint64 dst, int n) {
             if (p->pagetable && interrupted(p)) {
                 release(&cons_in.lock);
                 return -1;
+            }
+            if (nonblock) {
+                release(&cons_in.lock);
+                return n < target ? target - n : -1;
             }
             sleep(&cons_in.r, &cons_in.lock);
         }

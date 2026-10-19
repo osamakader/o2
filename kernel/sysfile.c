@@ -142,6 +142,26 @@ uint64 sys_ioctl(void)
     return devsw[f->major].ioctl(req, arg);
 }
 
+// fcntl(fd, cmd, arg): F_GETFL the open flags, F_SETFL O_NONBLOCK.
+uint64 sys_fcntl(void)
+{
+    struct file *f;
+    int cmd, arg;
+
+    argint(1, &cmd);
+    argint(2, &arg);
+    if (argfd(0, 0, &f) < 0)
+        return -1;
+    if (cmd == F_GETFL)
+        return (f->readable && f->writable ? O_RDWR : f->writable ? O_WRONLY : O_RDONLY) |
+               (f->nonblock ? O_NONBLOCK : 0);
+    if (cmd == F_SETFL) {
+        f->nonblock = (arg & O_NONBLOCK) != 0;
+        return 0;
+    }
+    return -1;
+}
+
 uint64 sys_close(void)
 {
     int fd;
@@ -479,6 +499,7 @@ uint64 sys_open(void)
         f->off = 0;
     }
     f->ip = ip;
+    f->nonblock = (omode & O_NONBLOCK) != 0;
     f->readable = !(omode & O_WRONLY);
     f->writable = (omode & O_WRONLY) || (omode & O_RDWR);
 

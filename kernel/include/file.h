@@ -13,6 +13,7 @@ struct file {
     int ref; // reference count
     char readable;
     char writable;
+    char nonblock;     // O_NONBLOCK: reads don't wait
     struct pipe *pipe; // FD_PIPE
     struct inode *ip;  // FD_INODE and FD_DEVICE
     uint off;          // FD_INODE
@@ -39,7 +40,7 @@ struct inode {
 
 // map major device number to device functions.
 struct devsw {
-    int (*read)(int user_dst, uint64 dst, int n);
+    int (*read)(int user_dst, uint64 dst, int n, int nonblock);
     int (*write)(int user_src, uint64 src, int n);
     int (*ioctl)(int req, uint64 arg);   // may be 0
     uint64 (*mmap)(uint64 pgoff);        // physical address of page pgoff

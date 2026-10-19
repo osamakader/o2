@@ -96,6 +96,7 @@ extern uint64 sys_connect(void);
 extern uint64 sys_sendto(void);
 extern uint64 sys_recvfrom(void);
 extern uint64 sys_setsockopt(void);
+extern uint64 sys_fcntl(void);
 
 // An array mapping syscall numbers from syscall.h to the function that
 // handles the system call.
@@ -144,6 +145,7 @@ static uint64 (*syscalls[])(void) = {
     [SYS_sendto]   sys_sendto,
     [SYS_recvfrom] sys_recvfrom,
     [SYS_setsockopt] sys_setsockopt,
+    [SYS_fcntl]    sys_fcntl,
 };
 
 void syscall(void) {

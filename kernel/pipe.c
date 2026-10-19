@@ -102,7 +102,7 @@ int pipewrite(struct pipe *pi, uint64 addr, int n)
     return i;
 }
 
-int piperead(struct pipe *pi, uint64 addr, int n)
+int piperead(struct pipe *pi, uint64 addr, int n, int nonblock)
 {
     int i;
     struct proc *pr = myproc();
@@ -110,7 +110,7 @@ int piperead(struct pipe *pi, uint64 addr, int n)
 
     acquire(&pi->lock);
     while (pi->nread == pi->nwrite && pi->writeopen) {  //DOC: pipe-empty
-        if (interrupted(pr)) {
+        if (interrupted(pr) || nonblock) {
             release(&pi->lock);
             return -1;
         }

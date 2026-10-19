@@ -195,11 +195,11 @@ static int sock_send(struct sock *s, uint64 src, int n, uint32 dst, uint16 dport
     return r < 0 ? -1 : n;
 }
 
-int sockread(struct sock *s, uint64 dst, int n)
+int sockread(struct sock *s, uint64 dst, int n, int nonblock)
 {
     uint32 src;
     uint16 sport;
-    return sock_recv(s, dst, n, 0, &src, &sport);
+    return sock_recv(s, dst, n, nonblock, &src, &sport);
 }
 
 int sockwrite(struct sock *s, uint64 src, int n)

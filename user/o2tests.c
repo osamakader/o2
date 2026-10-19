@@ -1891,6 +1891,28 @@ static void test_fb(void)
   close(fd);
 }
 
+// O_NONBLOCK: reads that would wait return -1 instead.
+static void test_nonblock(void)
+{
+  int fds[2];
+  char c;
+  pipe(fds);
+  if(fcntl(fds[0], F_GETFL, 0) != O_RDONLY || fcntl(fds[0], F_SETFL, O_NONBLOCK) != 0 ||
+     fcntl(fds[0], F_GETFL, 0) != (O_RDONLY | O_NONBLOCK))
+    fail("nonblock", "fcntl");
+  if(read(fds[0], &c, 1) != -1)
+    fail("nonblock", "empty pipe");
+  write(fds[1], "x", 1);
+  if(read(fds[0], &c, 1) != 1 || c != 'x')
+    fail("nonblock", "pipe with data");
+  close(fds[1]);
+  if(read(fds[0], &c, 1) != 0)
+    fail("nonblock", "pipe at its end");
+  close(fds[0]);
+  if(fcntl(99, F_GETFL, 0) != -1 || fcntl(1, 99, 0) != -1)
+    fail("nonblock", "bad fcntl accepted");
+}
+
 static void o2tests(void)
 {
   struct { const char *name; void (*fn)(void); } tests[] = {
@@ -1915,6 +1937,7 @@ static void o2tests(void)
     { "lockstat", test_lockstat },
     { "net", test_net },
     { "fb", test_fb },
+    { "nonblock", test_nonblock },
     { "getppid", test_getppid },
     { "dup2", test_dup2 },
     { "lseek", test_lseek },
