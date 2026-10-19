@@ -7,6 +7,7 @@
 #include "fcntl.h"
 #include "file.h"
 #include "fb.h"
+#include "input.h"
 
 char *argv[] = { "sh", 0 };
 
@@ -26,6 +27,8 @@ main(void)
   struct stat st;
   if(stat("fb", &st) < 0)
     mknod("fb", FB, 0);
+  if(stat("input", &st) < 0)
+    mknod("input", INPUT, 0);
 
   // the boot animation, if there is a screen to show it on
   char *splash[] = { "splash", 0 };
