@@ -200,9 +200,24 @@ elif python3 tools/checkshot.py "$LOGS/$NAME-gfx.ppm" >> "$LOGS/$NAME-gfx.log" 2
 else
     fail gfx "the screen doesn't show the picture"
 fi
+
+# 10. input (virt only: raspi4b has no virtio): a key and a mouse click
+# from the QEMU monitor reach /input
+if [ "$NAME" != rpi4 ]; then
+    printf '%s\n' "sendkey a" "mouse_move 100 50" "mouse_button 1" "mouse_button 0" \
+        > "$LOGS/$NAME-input.mon"
+    run input 60 "code 272 value 0" -m "$PWD/$LOGS/$NAME-input.mon" -- "evtest 8"
+    if panicked input; then
+        fail input "kernel panic"
+    elif has input "type 1 code 30 value 1" && has input "code 272 value 0"; then
+        pass input
+    else
+        fail input "the events didn't arrive"
+    fi
+fi
 unset GPU
 
-# 10. grind runs until stopped: no errors or panic within the time limit
+# 11. grind runs until stopped: no errors or panic within the time limit
 run grind $((GRIND + DELAY)) "^grind:" -- grind
 if panicked grind; then
     fail grind "kernel panic"

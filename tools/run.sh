@@ -3,7 +3,7 @@
 #
 #   tools/run.sh [-a arch] [-c cpus] [-t seconds] [-i input] [-d delay]
 #                [-l line-delay] [-f] [-s] [-A] [-e pattern] [-D file]
-#                [-m monitor-commands]
+#                [-m monitor-commands-file]
 #
 # -i feeds the file to the console, -d seconds after boot (default 3);
 # with -l, one line at a time (ending in CR, like a terminal) with
@@ -15,8 +15,8 @@
 # -f starts from a freshly made fs.img (it otherwise persists). -D saves
 # a screen dump (PPM) to file when the -e pattern shows up, through the
 # QEMU monitor, which listens on build/run.<arch>.<pid>.mon. -m sends
-# it commands (separated by ;), like sendkey or mouse_move, two seconds
-# after the input.
+# it the commands in a file, one per line (like sendkey a or mouse_move
+# 10 20), two seconds after the input.
 # Uses the QEMU command line from the Makefile (make print-qemu).
 
 ARCH=arm64 CPUS=3 TIMEOUT=10 INPUT= DELAY=3 FRESH= LDELAY= SELFTEST=0 ASID=0
@@ -68,7 +68,7 @@ s = socket.socket(socket.AF_UNIX)
 s.connect(sys.argv[1])
 s.settimeout(5)
 s.recv(4096)
-for cmd in sys.argv[2].split(";"):
+for cmd in open(sys.argv[2]):
     s.sendall(cmd.strip().encode() + b"\n")
     time.sleep(0.3)
 PY
