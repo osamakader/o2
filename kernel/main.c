@@ -53,6 +53,7 @@ int main(int boot, uint64 dtb) {
 #ifdef CONFIG_GPU
         virtio_gpu_init();
         rpi_fb_init();
+        virtio_input_init();
 #endif
         binit();
         iinit();

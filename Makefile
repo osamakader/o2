@@ -147,6 +147,7 @@ endif
 
 ifeq ($(GPU), 1)
 KOBJS += kernel/fb.o kernel/virtio_gpu.o kernel/rpi_fb.o
+KOBJS += kernel/input.o kernel/virtio_input.o
 CFLAGS += -DCONFIG_GPU
 endif
 
@@ -353,6 +354,9 @@ endif
 # monitor's screendump does
 ifeq ($(GPU), 1)
 QEMUOPTS += -device virtio-gpu-device,bus=virtio-mmio-bus.2
+# and a keyboard and a tablet (an absolute pointer: the host's mouse)
+QEMUOPTS += -device virtio-keyboard-device,bus=virtio-mmio-bus.3
+QEMUOPTS += -device virtio-tablet-device,bus=virtio-mmio-bus.4
 endif
 QEMUOPTS += -global virtio-mmio.force-legacy=false
 QEMUOPTS += -drive file=$(FSIMG),if=none,format=raw,id=x0
