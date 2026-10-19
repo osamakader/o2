@@ -364,9 +364,11 @@ QEMUOPTS += -device virtio-gpu-device,bus=virtio-mmio-bus.2
 # and a keyboard and a tablet (an absolute pointer: the host's mouse)
 QEMUOPTS += -device virtio-keyboard-device,bus=virtio-mmio-bus.3
 QEMUOPTS += -device virtio-tablet-device,bus=virtio-mmio-bus.4
-# and a relative mouse, like a real one: the monitor's mouse_move
-# moves it (the tablet takes the GUI's pointer)
-QEMUOPTS += -device virtio-mouse-device,bus=virtio-mmio-bus.5
+# and, without a window, a relative mouse for the monitor's mouse_move
+# to move (tests). Not with one: qemu would make it the current mouse
+# and send it the window's pointer, relative, so the guest's pointer
+# couldn't follow the host's to the edges.
+QEMUMOUSE = -device virtio-mouse-device,bus=virtio-mmio-bus.5
 endif
 QEMUOPTS += -global virtio-mmio.force-legacy=false
 QEMUOPTS += -drive file=$(FSIMG),if=none,format=raw,id=x0
@@ -374,7 +376,7 @@ QEMUOPTS += -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0
 endif
 
 qemu: $(KERNEL) $(IMAGE) $(FSIMG) $(SDIMG) $(DTB)
-	$(QEMU) $(QEMUOPTS)
+	$(QEMU) $(QEMUOPTS) $(QEMUMOUSE)
 
 # the same with a window showing the framebuffer; the console stays here
 qemu-gui: $(KERNEL) $(IMAGE) $(FSIMG) $(SDIMG) $(DTB)
@@ -382,7 +384,7 @@ qemu-gui: $(KERNEL) $(IMAGE) $(FSIMG) $(SDIMG) $(DTB)
 
 # the QEMU command line and disk image, for tools/run.sh
 print-qemu:
-	@echo $(QEMU) $(QEMUOPTS)
+	@echo $(QEMU) $(QEMUOPTS) $(QEMUMOUSE)
 
 print-fsimg:
 	@echo $(FSIMG)
