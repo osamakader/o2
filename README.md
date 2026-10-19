@@ -161,19 +161,31 @@ and ioctl `FB_INFO` and `FB_FLUSH` (fb.h); `gfx` draws a test picture,
 -D shot.ppm` saves a screen dump through the monitor, and CI checks
 gfx's picture in one. `make GPU=1 qemu-gui` opens a window showing it.
 
-`desk`, also with GPU=1, is a small desktop: terminal windows, each
-running a shell through pipes, which move by their title bars and close
-with the box on it; a taskbar with a "+ terminal" button and a clock;
-a mouse pointer. Keys and the mouse come from the `input` device:
-evdev-style events (input.h; `evtest` prints them) from qemu's virtio
-keyboard, tablet (the GUI's pointer) and mouse. The terminal edits the
-line itself: ^U, ^C (interrupts what its shell runs), ^D (ends the
-shell). Without a keyboard, as on the Pi for now, lines typed on the
-serial console go to the top window. Ctrl-Alt-Backspace, or a line
-`~.` on the serial console, quits. The font is Spleen 8x16
-(BSD-2-Clause, user/font.h, made by tools/bdf2c.py). `tools/run.sh -m
-file` sends monitor commands (`sendkey`, `mouse_move`, `mouse_button`)
-to drive it in tests.
+`desk`, also with GPU=1, is a small desktop: a window manager. It
+draws the window frames (move them by the title bar, close them with
+the box on it), a taskbar (buttons that start apps, one per window, a
+clock) and the mouse pointer, and passes keys and clicks to the top
+window. Apps are programs it starts with three files: a pipe of
+events, a pipe of requests, and the window's pixels in shared memory
+(`memfd()`); user/win.h is the protocol and user/libwin.c does it for
+them. The apps:
+
+- `term [command]`: a terminal running a shell through pipes. It edits
+  the line itself: ^U, ^C (interrupts what its shell runs), ^D (ends
+  the shell).
+- `files [dir]`: a file explorer. Double-click or Enter opens: a folder
+  goes in, a text file opens in `view`, a program runs (in a terminal,
+  unless it is an app). Up or Backspace goes to the parent.
+- `view file`: a text viewer; the wheel, arrows and Page Up/Down scroll.
+
+Keys and the mouse come from the `input` device: evdev-style events
+(input.h; `evtest` prints them) from qemu's virtio keyboard, tablet
+(the GUI's pointer) and mouse. Without a keyboard, as on the Pi for
+now, lines typed on the serial console go to the top window.
+Ctrl-Alt-Backspace, or a line `~.` on the serial console, quits. The
+font is Spleen 8x16 (BSD-2-Clause, user/font.h, made by
+tools/bdf2c.py). `tools/run.sh -m file` sends monitor commands
+(`sendkey`, `mouse_move`, `mouse_button`) to drive it in tests.
 
 Time comes from the RTC (PL031 on arm64, Goldfish on riscv64), read at
 boot, plus the system counter; `date` shows it. Inodes are 128 bytes
