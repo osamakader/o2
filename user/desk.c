@@ -1,12 +1,12 @@
-// desk: a small desktop on the framebuffer. Terminal windows, each
-// running a shell through pipes; a taskbar with a button for a new
-// terminal and a clock; a mouse pointer. Windows move by their title
+// desk: the desktop, a small window manager on the framebuffer. Apps
+// (term, files, view) are programs it starts; each draws its window
+// in memory they share and tells desk what changed (win.h, libwin.c).
+// desk draws the frames, the taskbar (buttons that start apps, one per
+// window, a clock) and the mouse pointer; windows move by their title
 // bars and close with the box at the right of it.
 //
 // Keys come from /input (a keyboard), or, as lines, from the serial
-// console, for boards without one. A terminal echoes and edits the line
-// itself and hands it to its shell with Enter: ^U kills the line, ^C
-// interrupts what the shell runs, ^D on an empty line ends the shell.
+// console, for boards without one; they go to the top window.
 // Ctrl-Alt-Backspace, or a line "~." on the serial console, quits.
 
 #include "types.h"
@@ -15,19 +15,17 @@
 #include "mman.h"
 #include "fb.h"
 #include "input.h"
-#include "procinfo.h"
 #include "syscall.h"
 #include "time.h"
+#include "win.h"
 #include "font.h"
 
-#define NWIN     8
-#define COLS     80
-#define ROWS     24
-#define BORDER   2
-#define TITLE_H  20
-#define PAD      4
+#define NWIN      8
+#define BORDER    2
+#define TITLE_H   20
 #define TASKBAR_H 24
-#define NEWTERM_W 104   // the taskbar's "new terminal" button
+#define CLOSE_W   18       // the close box, at the title bar's right
+#define TASK_W    120      // a window's taskbar button
 
 // colors
 #define C_DESK_TOP  0x2a4a6a
@@ -36,43 +34,53 @@
 #define C_TITLE     0x3a4048
 #define C_TITLE_ACT 0x2f6fb8
 #define C_CLOSE     0xc04040
-#define C_TERM_BG   0x101214
-#define C_TERM_FG   0xd8d8d8
 #define C_TASKBAR   0x1c1f24
 #define C_BUTTON    0x30353c
+#define C_BUTTON_ACT 0x3d5a80
 #define C_TEXT      0xf0f0f0
+
+// the taskbar's buttons that start apps
+static struct {
+  char *label, *cmd;
+  int x, w;
+} launchers[] = {
+  { "Terminal", "term" },
+  { "Files", "files" },
+};
+#define NLAUNCH (sizeof(launchers) / sizeof(launchers[0]))
 
 struct rect {
   int x, y, w, h;
 };
 
+// an app, and its window
 struct win {
   int used;
-  int x, y, w, h;           // the frame, on the screen
-  char title[16];
-  int pid;                  // its shell
-  int in, out;              // the shell's stdin (we write) and stdout
-  char text[ROWS][COLS];
-  int cx, cy;               // the cursor
-  int esc;                  // in an escape sequence the shell printed
-  char line[128];           // being typed
-  int len;
+  int pid;
+  int ev, req, buf;   // events (we write), requests (we read), pixels
+  int shown;          // has it asked to show its window?
+  int closing;        // asked to close
+  uint32 *px;         // its pixels, w x h
+  int w, h;
+  int x, y;           // the frame, on the screen
+  char title[44];
 };
 
 static uint32 *fb, *back;   // the screen, and where we draw it
 static struct fb_info info;
 static int W, H;
 static int fbfd;
-static int cols, rows;      // a terminal's size
 
 static struct win wins[NWIN];
-static int order[NWIN], nwin;   // windows bottom to top; the top one has the keys
-static int nterms;              // ever opened, for titles
+static int order[NWIN], nwin;   // shown windows, bottom to top; the top
+                                // one has the keys
+static int nlaunched;           // for where windows go
 
 static struct rect clip;        // drawing stays inside
 static struct rect dirty;       // what to draw again
 static int mx, my, buttons;     // the mouse
-static struct win *dragging;
+static struct win *dragging;    // by its title bar
+static struct win *grab;        // has the mouse while a button is down
 static int dragx, dragy;
 static int ctrl, shift, alt;
 static int quit;
@@ -115,78 +123,97 @@ fill(int x, int y, int w, int h, uint32 c)
 }
 
 static void
-glyph(int x, int y, int ch, uint32 fg, uint32 bg, int opaque)
+glyph(int x, int y, int ch, uint32 fg)
 {
-  if(x + FONT_W <= clip.x || x >= clip.x + clip.w || y + FONT_H <= clip.y || y >= clip.y + clip.h)
+  if(ch <= ' ' || ch >= 127 || x + FONT_W <= clip.x || x >= clip.x + clip.w ||
+     y + FONT_H <= clip.y || y >= clip.y + clip.h)
     return;
-  const unsigned char *g = ch >= 32 && ch < 127 ? font[ch - 32] : font[0];
+  const unsigned char *g = font[ch - 32];
   for(int j = 0; j < FONT_H; j++){
     int py = y + j;
     if(py < clip.y || py >= clip.y + clip.h)
       continue;
     for(int i = 0; i < FONT_W; i++){
       int px = x + i;
-      if(px < clip.x || px >= clip.x + clip.w)
-        continue;
-      if(g[j] & (0x80 >> i))
+      if(px >= clip.x && px < clip.x + clip.w && (g[j] & (0x80 >> i)))
         back[py * W + px] = fg;
-      else if(opaque)
-        back[py * W + px] = bg;
     }
   }
 }
 
+// s, at most max characters of it
 static void
-text(int x, int y, char *s, uint32 c)
+text(int x, int y, char *s, int max, uint32 c)
 {
-  for(; *s; s++, x += FONT_W)
-    glyph(x, y, *s, c, 0, 0);
+  for(; *s && max > 0; s++, max--, x += FONT_W)
+    glyph(x, y, *s, c);
 }
 
 // ---- the scene
 
 static int
-termx(struct win *w)
+framew(struct win *w)
 {
-  return w->x + BORDER + PAD;
+  return w->w + 2 * BORDER;
 }
 
 static int
-termy(struct win *w)
+frameh(struct win *w)
 {
-  return w->y + TITLE_H + PAD;
+  return TITLE_H + w->h + BORDER;
+}
+
+static struct win *
+top(void)
+{
+  return nwin ? &wins[order[nwin - 1]] : 0;
 }
 
 static void
-drawwin(struct win *w, int active)
+drawwin(struct win *w)
 {
-  fill(w->x, w->y, w->w, w->h, C_FRAME);
-  fill(w->x + BORDER, w->y + BORDER, w->w - 2 * BORDER, TITLE_H - BORDER, active ? C_TITLE_ACT : C_TITLE);
-  text(w->x + 8, w->y + BORDER + 1, w->title, C_TEXT);
-  // the close box
-  int bx = w->x + w->w - BORDER - 18, by = w->y + BORDER + 1;
+  int x = w->x, y = w->y, fw = framew(w);
+  fill(x, y, fw, frameh(w), C_FRAME);
+  fill(x + BORDER, y + BORDER, fw - 2 * BORDER, TITLE_H - BORDER, w == top() ? C_TITLE_ACT : C_TITLE);
+  text(x + 8, y + BORDER + 1, w->title, (fw - 8 - CLOSE_W - 8) / FONT_W, C_TEXT);
+  int bx = x + fw - BORDER - CLOSE_W, by = y + BORDER + 1;
   fill(bx, by, 16, 16, C_CLOSE);
-  glyph(bx + 4, by, 'x', C_TEXT, 0, 0);
-  // the terminal
-  fill(w->x + BORDER, w->y + TITLE_H, w->w - 2 * BORDER, w->h - TITLE_H - BORDER, C_TERM_BG);
-  int tx = termx(w), ty = termy(w);
-  for(int r = 0; r < rows; r++)
-    for(int c = 0; c < cols; c++)
-      if(w->text[r][c] > ' ')
-        glyph(tx + c * FONT_W, ty + r * FONT_H, w->text[r][c], C_TERM_FG, 0, 0);
-  if(active){
-    int ch = w->text[w->cy][w->cx];
-    glyph(tx + w->cx * FONT_W, ty + w->cy * FONT_H, ch ? ch : ' ', C_TERM_BG, C_TERM_FG, 1);
-  }
+  glyph(bx + 4, by, 'x', C_TEXT);
+
+  // the app's pixels
+  int cx = x + BORDER, cy = y + TITLE_H;
+  int x0 = cx > clip.x ? cx : clip.x, y0 = cy > clip.y ? cy : clip.y;
+  int x1 = cx + w->w < clip.x + clip.w ? cx + w->w : clip.x + clip.w;
+  int y1 = cy + w->h < clip.y + clip.h ? cy + w->h : clip.y + clip.h;
+  if(x1 > x0)
+    for(int j = y0; j < y1; j++)
+      memmove(back + j * W + x0, w->px + (j - cy) * w->w + (x0 - cx), (x1 - x0) * 4);
 }
 
 static void
 drawtaskbar(void)
 {
-  int y = H - TASKBAR_H;
+  int y = H - TASKBAR_H, x = 4;
   fill(0, y, W, TASKBAR_H, C_TASKBAR);
-  fill(4, y + 3, NEWTERM_W, TASKBAR_H - 6, C_BUTTON);
-  text(12, y + 4, "+ terminal", C_TEXT);
+  for(int i = 0; i < NLAUNCH; i++){
+    launchers[i].x = x;
+    launchers[i].w = (strlen(launchers[i].label) + 2) * FONT_W;
+    fill(x, y + 3, launchers[i].w, TASKBAR_H - 6, C_BUTTON);
+    text(x + FONT_W, y + 4, launchers[i].label, 99, C_TEXT);
+    x += launchers[i].w + 4;
+  }
+  // one button per window, in the order they were started
+  x += 12;
+  for(int k = 0; k < NWIN; k++){
+    struct win *w = &wins[k];
+    if(!w->used || !w->shown)
+      continue;
+    if(x + TASK_W > W - 18 * FONT_W)
+      break;
+    fill(x, y + 3, TASK_W, TASKBAR_H - 6, w == top() ? C_BUTTON_ACT : C_BUTTON);
+    text(x + 6, y + 4, w->title, (TASK_W - 12) / FONT_W, C_TEXT);
+    x += TASK_W + 4;
+  }
 
   static char *days[] = { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" };
   static char *months[] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -208,7 +235,7 @@ drawtaskbar(void)
   s[14] = '0' + tm.tm_min / 10;
   s[15] = '0' + tm.tm_min % 10;
   s[16] = 0;
-  text(W - 17 * FONT_W, y + 4, s, C_TEXT);
+  text(W - 17 * FONT_W, y + 4, s, 16, C_TEXT);
 }
 
 // the mouse pointer: an arrow, # black, . white
@@ -265,7 +292,7 @@ redraw(struct rect r)
     fill(r.x, y, r.w, 1, c);
   }
   for(int i = 0; i < nwin; i++)
-    drawwin(&wins[order[i]], i == nwin - 1);
+    drawwin(&wins[order[i]]);
   drawtaskbar();
 
   // to the screen
@@ -286,73 +313,37 @@ redraw(struct rect r)
 static void
 damagewin(struct win *w)
 {
-  damage(w->x, w->y, w->w, w->h);
+  damage(w->x, w->y, framew(w), frameh(w));
 }
-
-// ---- terminals
 
 static void
-newline(struct win *w)
+damagetaskbar(void)
 {
-  w->cx = 0;
-  if(++w->cy < rows)
-    return;
-  memmove(w->text[0], w->text[1], sizeof(w->text[0]) * (rows - 1));
-  memset(w->text[rows - 1], 0, sizeof(w->text[0]));
-  w->cy = rows - 1;
+  damage(0, H - TASKBAR_H, W, TASKBAR_H);
 }
 
-// Put a character the shell printed, or one typed, on the terminal.
+// ---- apps
+
+// Tell w's app; dropped if it isn't reading.
 static void
-termput(struct win *w, int c)
+event(struct win *w, int type, int x, int y, int a, int b)
 {
-  // escape sequences: ESC [ ... letter; dropped
-  if(w->esc){
-    if(w->esc == 1 && c != '[')
-      w->esc = 0;
-    else if(w->esc == 2 && c >= '@' && c <= '~')
-      w->esc = 0;
-    else
-      w->esc = 2;
-    return;
-  }
-  switch(c){
-  case '\033':
-    w->esc = 1;
-    break;
-  case '\n':
-    newline(w);
-    break;
-  case '\r':
-    w->cx = 0;
-    break;
-  case '\b':
-    if(w->cx > 0)
-      w->text[w->cy][--w->cx] = 0;
-    break;
-  case '\t':
-    do
-      termput(w, ' ');
-    while(w->cx % 8);
-    break;
-  default:
-    if(c < ' ' || c >= 127)
-      break;
-    if(w->cx == cols)
-      newline(w);
-    w->text[w->cy][w->cx++] = c;
-  }
-}
-
-static struct win *
-top(void)
-{
-  return nwin ? &wins[order[nwin - 1]] : 0;
+  struct winmsg m;
+  memset(&m, 0, sizeof(m));
+  m.type = type;
+  m.x = x;
+  m.y = y;
+  m.a = a;
+  m.b = b;
+  write(w->ev, &m, sizeof(m));
 }
 
 static void
 raise(struct win *w)
 {
+  struct win *old = top();
+  if(old == w)
+    return;
   int k = w - wins, i;
   for(i = 0; order[i] != k; i++)
     ;
@@ -360,172 +351,235 @@ raise(struct win *w)
     order[i] = order[i + 1];
   order[nwin - 1] = k;
   damagewin(w);
-  // the old top window's title bar and cursor change too
-  if(nwin > 1)
-    damagewin(&wins[order[nwin - 2]]);
+  damagetaskbar();
+  if(old){
+    damagewin(old);   // its title bar
+    event(old, WE_FOCUS, 0, 0, 0, 0);
+  }
+  event(w, WE_FOCUS, 0, 0, 1, 0);
 }
 
+// Start the app in cmd ("name args...").
 static void
-newterm(void)
+launch(char *cmd)
 {
+  char buf[64], *argv[8];
+  int argc = 0;
+  strcpy(buf, "/");
+  int n = strlen(cmd);
+  if(n > sizeof(buf) - 2)
+    n = sizeof(buf) - 2;
+  memmove(buf + 1, cmd, n);
+  buf[n + 1] = 0;
+  for(char *s = buf; *s && argc < 7; ){
+    while(*s == ' ')
+      *s++ = 0;
+    if(*s == 0)
+      break;
+    argv[argc++] = s;
+    while(*s && *s != ' ')
+      s++;
+  }
+  argv[argc] = 0;
+  if(argc == 0)
+    return;
+
   int k;
   for(k = 0; k < NWIN && wins[k].used; k++)
     ;
   if(k == NWIN)
     return;
-  int toin[2], fromout[2];
-  if(pipe(toin) < 0)
+  int ev[2], req[2], buf_;
+  if(pipe(ev) < 0)
     return;
-  if(pipe(fromout) < 0){
-    close(toin[0]);
-    close(toin[1]);
+  if(pipe(req) < 0){
+    close(ev[0]);
+    close(ev[1]);
+    return;
+  }
+  if((buf_ = memfd(W * H * 4)) < 0){
+    close(ev[0]);
+    close(ev[1]);
+    close(req[0]);
+    close(req[1]);
     return;
   }
   int pid = fork();
   if(pid == 0){
-    dup2(toin[0], 0);
-    dup2(fromout[1], 1);
-    dup2(fromout[1], 2);
-    // nothing else of ours: other shells must see their pipes end
-    for(int fd = 3; fd < 16; fd++)
+    // its three files at 3, 4, 5, and nothing else of ours
+    int a = dup2(ev[0], 29), b = dup2(req[1], 30), c = dup2(buf_, 31);
+    for(int fd = 3; fd < 29; fd++)
       close(fd);
+    dup2(a, WIN_EVFD);
+    dup2(b, WIN_REQFD);
+    dup2(c, WIN_BUFFD);
+    close(a);
+    close(b);
+    close(c);
     signal(SIGINT, SIG_DFL);
     signal(SIGPIPE, SIG_DFL);
-    char *argv[] = { "sh", 0 };
-    exec("/sh", argv);
+    exec(argv[0], argv);
+    fprintf(2, "desk: cannot run %s\n", argv[0]);
     exit(1);
   }
-  close(toin[0]);
-  close(fromout[1]);
+  close(ev[0]);
+  close(req[1]);
   if(pid < 0){
-    close(toin[1]);
-    close(fromout[0]);
+    close(ev[1]);
+    close(req[0]);
+    close(buf_);
     return;
   }
-  fcntl(fromout[0], F_SETFL, O_NONBLOCK);
+  fcntl(ev[1], F_SETFL, O_NONBLOCK);
+  fcntl(req[0], F_SETFL, O_NONBLOCK);
 
   struct win *w = &wins[k];
   memset(w, 0, sizeof(*w));
   w->used = 1;
   w->pid = pid;
-  w->in = toin[1];
-  w->out = fromout[0];
-  w->w = cols * FONT_W + 2 * (BORDER + PAD);
-  w->h = TITLE_H + rows * FONT_H + 2 * PAD + BORDER;
-  w->x = 16 + (nterms % 6) * 28;
-  w->y = 16 + (nterms % 6) * 28;
-  nterms++;
-  strcpy(w->title, "terminal ");
-  w->title[9] = '0' + nterms % 10;
-  order[nwin++] = k;
-  raise(w);
+  w->ev = ev[1];
+  w->req = req[0];
+  w->buf = buf_;
+  // how big a window fits
+  event(w, WE_SCREEN, 0, 0, W - 2 * BORDER - 32, H - TASKBAR_H - TITLE_H - BORDER - 32);
 }
 
 static void
-closewin(struct win *w)
+hide(struct win *w)
 {
+  if(!w->shown)
+    return;
   damagewin(w);
-  if(dragging == w)
-    dragging = 0;
-  kill(w->pid, SIGKILL);
-  close(w->in);
-  close(w->out);
-  waitpid(w->pid, 0, 0);
-  w->used = 0;
+  damagetaskbar();
   int k = w - wins, i;
   for(i = 0; order[i] != k; i++)
     ;
   for(; i < nwin - 1; i++)
     order[i] = order[i + 1];
   nwin--;
-  if(nwin)
+  w->shown = 0;
+  if(top()){
     damagewin(top());
-}
-
-// SIGINT to what w's shell runs, and the shell (which prompts again)
-static void
-interrupt(struct win *w)
-{
-  static struct procinfo ps[64];
-  int n = getprocs(ps, 64);
-  for(int i = 0; i < n; i++){
-    // is w's shell an ancestor (or itself)?
-    int pid = ps[i].pid;
-    for(int hops = 0; pid && pid != w->pid && hops < n; hops++){
-      int j;
-      for(j = 0; j < n && ps[j].pid != pid; j++)
-        ;
-      pid = j < n ? ps[j].ppid : 0;
-    }
-    if(pid == w->pid && ps[i].state != PS_ZOMBIE)
-      kill(ps[i].pid, SIGINT);
+    event(top(), WE_FOCUS, 0, 0, 1, 0);
   }
 }
 
-// A key typed into w.
+// w's app is gone (or going).
 static void
-termkey(struct win *w, int c)
+forget(struct win *w)
 {
+  hide(w);
+  if(dragging == w)
+    dragging = 0;
+  if(grab == w)
+    grab = 0;
+  if(w->px)
+    munmap(w->px, w->w * w->h * 4);
+  close(w->ev);
+  close(w->req);
+  close(w->buf);
+  kill(w->pid, SIGKILL);
+  waitpid(w->pid, 0, 0);
+  w->used = 0;
+}
+
+static void
+show(struct win *w, struct winmsg *m)
+{
+  int ww = m->a, wh = m->b;
+  if(ww < 1 || wh < 1 || ww > W || wh > H || ww * wh > W * H)
+    return;
+  if(w->shown)
+    damagewin(w);
+  if(w->px)
+    munmap(w->px, w->w * w->h * 4);
+  w->px = mmap(0, ww * wh * 4, PROT_READ, MAP_SHARED, w->buf, 0);
+  if(w->px == MAP_FAILED){
+    w->px = 0;
+    hide(w);
+    return;
+  }
+  w->w = ww;
+  w->h = wh;
+  memmove(w->title, m->s, sizeof(w->title));
+  w->title[sizeof(w->title) - 1] = 0;
+  if(!w->shown){
+    // cascading from the top left, as far as it fits
+    int n = nlaunched++ % 8;
+    w->x = 16 + n * 28;
+    w->y = 16 + n * 28;
+    if(w->x + framew(w) > W)
+      w->x = W - framew(w) > 0 ? W - framew(w) : 0;
+    if(w->y + frameh(w) > H - TASKBAR_H)
+      w->y = H - TASKBAR_H - frameh(w) > 0 ? H - TASKBAR_H - frameh(w) : 0;
+    w->shown = 1;
+    order[nwin++] = w - wins;
+    if(nwin > 1){
+      // raise() it from just below the top
+      order[nwin - 1] = order[nwin - 2];
+      order[nwin - 2] = w - wins;
+      raise(w);
+    } else
+      event(w, WE_FOCUS, 0, 0, 1, 0);
+  }
   damagewin(w);
-  if(c == ('C' & 0x1f)){
-    termput(w, '^');
-    termput(w, 'C');
-    termput(w, '\n');
-    w->len = 0;
-    interrupt(w);
-  } else if(c == ('D' & 0x1f)){
-    if(w->len == 0){
-      close(w->in);   // the shell reads its end, and exits
-      w->in = -1;
-    }
-  } else if(c == ('U' & 0x1f)){
-    while(w->len > 0){
-      w->len--;
-      termput(w, '\b');
-    }
-  } else if(c == '\b' || c == 127){
-    if(w->len > 0){
-      w->len--;
-      termput(w, '\b');
-    }
-  } else if(c == '\n' || c == '\r'){
-    termput(w, '\n');
-    w->line[w->len++] = '\n';
-    if(w->in >= 0)
-      write(w->in, w->line, w->len);
-    w->len = 0;
-  } else if((c >= ' ' && c < 127) || c == '\t'){
-    if(w->len < sizeof(w->line) - 1){
-      w->line[w->len++] = c;
-      termput(w, c);
-    }
-  }
+  damagetaskbar();
 }
 
-// What the shells printed. Returns whether there was anything.
+// What the apps asked for. Returns whether they asked anything.
 static int
-readterms(void)
+requests(void)
 {
-  char buf[256];
+  struct winmsg m[8];
   int any = 0;
   for(int k = 0; k < NWIN; k++){
     struct win *w = &wins[k];
     if(!w->used)
       continue;
-    int n = read(w->out, buf, sizeof(buf));
+    int n = read(w->req, m, sizeof(m));
     if(n == 0){
-      closewin(w);   // the shell exited
+      forget(w);   // it exited
       any = 1;
       continue;
     }
-    if(n < 0)
-      continue;
-    for(int i = 0; i < n; i++)
-      termput(w, buf[i]);
-    damagewin(w);
-    any = 1;
+    for(int i = 0; i < n / (int)sizeof(m[0]); i++){
+      any = 1;
+      switch(m[i].type){
+      case WR_SHOW:
+        show(w, &m[i]);
+        break;
+      case WR_DAMAGE:
+        if(w->shown)
+          damage(w->x + BORDER + m[i].x, w->y + TITLE_H + m[i].y, m[i].a, m[i].b);
+        break;
+      case WR_TITLE:
+        memmove(w->title, m[i].s, sizeof(w->title));
+        w->title[sizeof(w->title) - 1] = 0;
+        if(w->shown){
+          damagewin(w);
+          damagetaskbar();
+        }
+        break;
+      case WR_LAUNCH:
+        m[i].s[sizeof(m[i].s) - 1] = 0;
+        launch(m[i].s);
+        break;
+      }
+    }
   }
   return any;
+}
+
+// The close box: ask the app; the second time, insist.
+static void
+closewin(struct win *w)
+{
+  if(w->closing){
+    forget(w);
+    return;
+  }
+  w->closing = 1;
+  event(w, WE_CLOSE, 0, 0, 0, 0);
 }
 
 // ---- input
@@ -546,6 +600,22 @@ static char shiftmap[58] =
 #define KEY_RIGHTCTRL 97
 #define KEY_RIGHTALT  100
 
+// evdev codes of keys that aren't characters
+static struct {
+  int code, key;
+} specials[] = {
+  { 102, KEY_HOME }, { 103, KEY_UP }, { 104, KEY_PGUP }, { 105, KEY_LEFT },
+  { 106, KEY_RIGHT }, { 107, KEY_END }, { 108, KEY_DOWN }, { 109, KEY_PGDN },
+  { 111, KEY_DEL },
+};
+
+static void
+typed(int c)
+{
+  if(top())
+    event(top(), WE_KEY, 0, 0, c, 0);
+}
+
 static void
 key(int code, int down)
 {
@@ -555,19 +625,47 @@ key(int code, int down)
     shift = down;
   else if(code == KEY_LEFTALT || code == KEY_RIGHTALT)
     alt = down;
-  if(!down || code >= 58)
+  if(!down)
     return;
   if(ctrl && alt && code == KEY_BACKSPACE){
     quit = 1;
     return;
   }
+  for(int i = 0; i < sizeof(specials) / sizeof(specials[0]); i++)
+    if(specials[i].code == code){
+      typed(specials[i].key);
+      return;
+    }
+  if(code >= 58)
+    return;
   int c = (shift ? shiftmap : keymap)[code];
   if(c == 0)
     return;
   if(ctrl && ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')))
     c &= 0x1f;
-  if(top())
-    termkey(top(), c);
+  typed(c);
+}
+
+// the window whose app area is at (x, y), or 0
+static struct win *
+appat(int x, int y)
+{
+  for(int i = nwin - 1; i >= 0; i--){
+    struct win *w = &wins[order[i]];
+    if(x >= w->x && x < w->x + framew(w) && y >= w->y && y < w->y + frameh(w)){
+      if(x >= w->x + BORDER && x < w->x + BORDER + w->w && y >= w->y + TITLE_H &&
+         y < w->y + TITLE_H + w->h)
+        return w;
+      return 0;
+    }
+  }
+  return 0;
+}
+
+static void
+mouse(struct win *w, int kind, int a)
+{
+  event(w, WE_MOUSE, mx - w->x - BORDER, my - w->y - TITLE_H, a, kind);
 }
 
 static void
@@ -581,6 +679,8 @@ pointer(int x, int y)
     x = W - 1;
   if(y >= H)
     y = H - 1;
+  if(x == mx && y == my)
+    return;
   damage(mx, my, ARROW_W, ARROW_H);
   if(dragging){
     damagewin(dragging);
@@ -596,24 +696,54 @@ pointer(int x, int y)
   mx = x;
   my = y;
   damage(mx, my, ARROW_W, ARROW_H);
+  if(grab)
+    mouse(grab, MOUSE_MOVE, buttons);
 }
 
 static void
-click(void)
+taskbarclick(void)
 {
+  for(int i = 0; i < NLAUNCH; i++)
+    if(mx >= launchers[i].x && mx < launchers[i].x + launchers[i].w){
+      launch(launchers[i].cmd);
+      return;
+    }
+  int x = launchers[NLAUNCH - 1].x + launchers[NLAUNCH - 1].w + 16;
+  for(int k = 0; k < NWIN; k++){
+    struct win *w = &wins[k];
+    if(!w->used || !w->shown)
+      continue;
+    if(mx >= x && mx < x + TASK_W){
+      raise(w);
+      return;
+    }
+    x += TASK_W + 4;
+  }
+}
+
+static void
+press(int button)
+{
+  buttons |= button;
+  if(grab){
+    mouse(grab, MOUSE_DOWN, buttons);
+    return;
+  }
   if(my >= H - TASKBAR_H){
-    if(mx >= 4 && mx < 4 + NEWTERM_W)
-      newterm();
+    if(button == 1)
+      taskbarclick();
     return;
   }
   for(int i = nwin - 1; i >= 0; i--){
     struct win *w = &wins[order[i]];
-    if(mx < w->x || mx >= w->x + w->w || my < w->y || my >= w->y + w->h)
+    if(mx < w->x || mx >= w->x + framew(w) || my < w->y || my >= w->y + frameh(w))
       continue;
-    if(i != nwin - 1)
-      raise(w);
-    if(my < w->y + TITLE_H){
-      if(mx >= w->x + w->w - BORDER - 18)
+    raise(w);
+    if(appat(mx, my) == w){
+      grab = w;
+      mouse(w, MOUSE_DOWN, buttons);
+    } else if(button == 1 && my < w->y + TITLE_H){
+      if(mx >= w->x + framew(w) - BORDER - CLOSE_W)
         closewin(w);
       else {
         dragging = w;
@@ -622,6 +752,19 @@ click(void)
       }
     }
     return;
+  }
+}
+
+static void
+release(int button)
+{
+  buttons &= ~button;
+  if(button == 1)
+    dragging = 0;
+  if(grab){
+    mouse(grab, MOUSE_UP, buttons);
+    if(buttons == 0)
+      grab = 0;
   }
 }
 
@@ -637,17 +780,15 @@ readinput(int fd)
   for(int i = 0; i < n / sizeof(ev[0]); i++){
     struct input_event *e = &ev[i];
     if(e->type == EV_KEY && e->code >= BTN_LEFT && e->code <= BTN_MIDDLE){
-      if(e->code == BTN_LEFT){
-        if(moved){
-          pointer(x, y);
-          moved = 0;
-        }
-        if(e->value)
-          click();
-        else
-          dragging = 0;
-        buttons = e->value;
+      if(moved){
+        pointer(x, y);
+        moved = 0;
       }
+      int b = e->code == BTN_LEFT ? 1 : e->code == BTN_RIGHT ? 2 : 4;
+      if(e->value)
+        press(b);
+      else
+        release(b);
     } else if(e->type == EV_KEY){
       key(e->code, e->value != 0);
     } else if(e->type == EV_ABS && e->code == ABS_X){
@@ -662,6 +803,10 @@ readinput(int fd)
     } else if(e->type == EV_REL && e->code == REL_Y){
       y += e->value;
       moved = 1;
+    } else if(e->type == EV_REL && e->code == REL_WHEEL){
+      struct win *w = grab ? grab : appat(mx, my);
+      if(w)
+        mouse(w, MOUSE_WHEEL, e->value);
     }
   }
   if(moved)
@@ -681,9 +826,8 @@ readserial(int fd)
     quit = 1;
     return 1;
   }
-  if(top())
-    for(int i = 0; i < n; i++)
-      termkey(top(), buf[i]);
+  for(int i = 0; i < n; i++)
+    typed(buf[i]);
   return 1;
 }
 
@@ -710,19 +854,13 @@ main(void)
   int in = open("/input", O_RDONLY | O_NONBLOCK);
   // a file of its own, so the shell's stays as it was
   int ser = open("/console", O_RDONLY | O_NONBLOCK);
-  // ^C on the console goes to everyone; and shells' pipes may close
+  // ^C on the console goes to everyone; and apps' pipes may close
   signal(SIGINT, SIG_IGN);
   signal(SIGPIPE, SIG_IGN);
 
-  cols = (W - 2 * (BORDER + PAD) - 48) / FONT_W;
-  if(cols > COLS)
-    cols = COLS;
-  rows = (H - TASKBAR_H - TITLE_H - 2 * PAD - BORDER - 48) / FONT_H;
-  if(rows > ROWS)
-    rows = ROWS;
   mx = W / 2;
   my = H / 2;
-  newterm();
+  launch("term");
   damage(0, 0, W, H);
 
   printf("desk: %dx%d; type ~. to quit\n", W, H);
@@ -730,11 +868,11 @@ main(void)
   while(!quit){
     int busy = readinput(in);
     busy |= readserial(ser);
-    busy |= readterms();
+    busy |= requests();
     int now = time() / 60;
     if(now != minute){
       minute = now;
-      damage(0, H - TASKBAR_H, W, TASKBAR_H);
+      damagetaskbar();
     }
     if(dirty.w){
       redraw(dirty);
@@ -744,9 +882,9 @@ main(void)
       pause(1);
   }
 
-  while(nwin)
-    closewin(top());
-  memset(back, 0, W * H * 4);
+  for(int k = 0; k < NWIN; k++)
+    if(wins[k].used)
+      forget(&wins[k]);
   for(int y = 0; y < H; y++)
     memset(fb + y * (info.stride / 4), 0, W * 4);
   ioctl(fbfd, FB_FLUSH, 0);
