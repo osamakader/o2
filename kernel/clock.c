@@ -79,3 +79,20 @@ uint64 sys_clock_gettime(void)
     ts.tv_nsec = ns % 1000000000UL;
     return copyout(myproc()->pagetable, addr, (char *)&ts, sizeof(ts));
 }
+
+// clock_settime(CLOCK_REALTIME, ts): set the wall-clock time (boards
+// without an RTC start at the epoch). It doesn't go to the RTC.
+uint64 sys_clock_settime(void)
+{
+    int clock;
+    uint64 addr;
+    struct timespec ts;
+
+    argint(0, &clock);
+    argaddr(1, &addr);
+    if (clock != CLOCK_REALTIME || copyin(myproc()->pagetable, (char *)&ts, addr, sizeof(ts)) < 0 ||
+        ts.tv_nsec >= 1000000000UL)
+        return -1;
+    boot_ns = ts.tv_sec * 1000000000UL + ts.tv_nsec - timer_ns();
+    return 0;
+}

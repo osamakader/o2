@@ -208,6 +208,15 @@ gmtime(uint64 t, struct tm *tm)
   return tm;
 }
 
+// The inverse: seconds since the epoch of the UTC date and time in *tm
+// (tm_wday and tm_yday are ignored).
+uint64
+timegm(struct tm *tm)
+{
+  long days = days_from_civil(tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday);
+  return days * 86400 + tm->tm_hour * 3600 + tm->tm_min * 60 + tm->tm_sec;
+}
+
 // Parse a dotted IPv4 address "a.b.c.d" into *a (network byte order).
 // Returns 1, or 0 if s isn't one.
 int

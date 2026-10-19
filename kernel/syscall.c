@@ -98,6 +98,7 @@ extern uint64 sys_recvfrom(void);
 extern uint64 sys_setsockopt(void);
 extern uint64 sys_fcntl(void);
 extern uint64 sys_memfd(void);
+extern uint64 sys_clock_settime(void);
 
 // An array mapping syscall numbers from syscall.h to the function that
 // handles the system call.
@@ -148,6 +149,7 @@ static uint64 (*syscalls[])(void) = {
     [SYS_setsockopt] sys_setsockopt,
     [SYS_fcntl]    sys_fcntl,
     [SYS_memfd]    sys_memfd,
+    [SYS_clock_settime] sys_clock_settime,
 };
 
 void syscall(void) {

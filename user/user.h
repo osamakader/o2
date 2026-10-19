@@ -61,6 +61,7 @@ int recvfrom(int, void *, int, int, struct sockaddr_in *, int *);
 int setsockopt(int, int, int, const void *, int);
 int fcntl(int, int, int);
 int memfd(uint64);
+int clock_settime(int, struct timespec *);
 
 // ulib.c
 char *strcpy(char *, const char *);
@@ -79,6 +80,7 @@ char *strchr(const char *, char c);
 int atoi(const char *);
 uint64 time(void);
 struct tm *gmtime(uint64, struct tm *);
+uint64 timegm(struct tm *);
 int inet_aton(const char *, struct in_addr *);
 
 // umalloc.c
