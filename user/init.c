@@ -8,8 +8,42 @@
 #include "file.h"
 #include "fb.h"
 #include "input.h"
+#include "fs.h"
+#include "time.h"
 
 char *argv[] = { "sh", 0 };
+
+// Without an RTC (the Raspberry Pi) the clock starts at the epoch.
+// Start it instead at the newest time a file in / was changed: the
+// file system's build, or the last write. Wrong, but not by decades,
+// and it doesn't go back; date -s sets it right.
+static void
+clockfromfiles(void)
+{
+  if(time() >= 946684800)   // 2000: there is an RTC
+    return;
+  int fd = open("/", O_RDONLY);
+  if(fd < 0)
+    return;
+  uint64 newest = 0;
+  struct dirent de;
+  struct stat st;
+  char path[DIRSIZ + 2] = "/";
+  while(read(fd, &de, sizeof(de)) == sizeof(de)){
+    if(de.inum == 0)
+      continue;
+    memmove(path + 1, de.name, DIRSIZ);
+    path[DIRSIZ + 1] = 0;
+    if(lstat(path, &st) == 0 && st.mtime > newest)
+      newest = st.mtime;
+  }
+  close(fd);
+  if(newest > time()){
+    struct timespec ts = { newest, 0 };
+    clock_settime(CLOCK_REALTIME, &ts);
+    printf("init: no RTC; the clock starts at the newest file's time (date -s sets it)\n");
+  }
+}
 
 int
 main(void)
@@ -22,6 +56,8 @@ main(void)
   }
   dup(0);  // stdout
   dup(0);  // stderr
+
+  clockfromfiles();
 
   // the framebuffer, for programs that draw (fb.h)
   struct stat st;
