@@ -7,7 +7,7 @@
 #define O_CREATE  0x200
 #define O_TRUNC   0x400
 #define O_NOFOLLOW 0x800   // fail if the path names a symbolic link
-#define O_NONBLOCK 0x1000  // reads return -1 at once when there is nothing
+#define O_NONBLOCK 0x1000  // reads (and pipe writes) return -1 instead of waiting
 
 // fcntl() commands
 #define F_GETFL 3

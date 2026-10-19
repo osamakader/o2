@@ -11,7 +11,7 @@
 #include "fs.h"
 #include "file.h"
 
-#define PIPESIZE 512
+#define PIPESIZE 2048   // the struct fits in a page
 
 struct pipe {
     struct spinlock lock;
@@ -74,7 +74,11 @@ void pipeclose(struct pipe *pi, int writable)
     }
 }
 
-int pipewrite(struct pipe *pi, uint64 addr, int n)
+// Writes of up to PIPESIZE bytes are atomic, like POSIX's PIPE_BUF:
+// they wait for room for all of it, so readers see none of it or all.
+// With nonblock, a write returns -1 instead of waiting, or as much as
+// it wrote of a longer one.
+int pipewrite(struct pipe *pi, uint64 addr, int n, int nonblock)
 {
     int i = 0;
     struct proc *pr = myproc();
@@ -85,7 +89,13 @@ int pipewrite(struct pipe *pi, uint64 addr, int n)
             release(&pi->lock);
             return -1;
         }
-        if (pi->nwrite == pi->nread + PIPESIZE) { //DOC: pipewrite-full
+        int need = i == 0 && n <= PIPESIZE ? n : 1;
+        if (pi->nwrite + need > pi->nread + PIPESIZE) { //DOC: pipewrite-full
+            if (nonblock) {
+                wakeup(&pi->nread);
+                release(&pi->lock);
+                return i ? i : -1;
+            }
             wakeup(&pi->nread);
             sleep(&pi->nwrite, &pi->lock);
         } else {
