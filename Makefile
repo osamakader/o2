@@ -357,6 +357,9 @@ QEMUOPTS += -device virtio-gpu-device,bus=virtio-mmio-bus.2
 # and a keyboard and a tablet (an absolute pointer: the host's mouse)
 QEMUOPTS += -device virtio-keyboard-device,bus=virtio-mmio-bus.3
 QEMUOPTS += -device virtio-tablet-device,bus=virtio-mmio-bus.4
+# and a relative mouse, like a real one: the monitor's mouse_move
+# moves it (the tablet takes the GUI's pointer)
+QEMUOPTS += -device virtio-mouse-device,bus=virtio-mmio-bus.5
 endif
 QEMUOPTS += -global virtio-mmio.force-legacy=false
 QEMUOPTS += -drive file=$(FSIMG),if=none,format=raw,id=x0
