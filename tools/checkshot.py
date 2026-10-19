@@ -47,8 +47,10 @@ if len(sys.argv) > 2 and sys.argv[2] == "splash":
     sys.exit(1 if bad else 0)
 
 if len(sys.argv) > 2 and sys.argv[2] == "desk":
-    # colors from desk.c; its first window is at (16, 16)
+    # colors from desk.c, term.c and view.c; the terminal is at (16,
+    # 16), view's window (the third) at (72, 72), under the terminal
     checks = [
+        ("view's status line", at(700, 592), (0xe0, 0xe2, 0xe6)),
         ("the title bar", at(200, 26), (0x2f, 0x6f, 0xb8)),
         ("the terminal", at(300, 300), (0x10, 0x12, 0x14)),
         ("the taskbar", at(w // 2, h - 4), (0x1c, 0x1f, 0x24)),

@@ -216,11 +216,31 @@ if [ "$NAME" != rpi4 ]; then
         fail input "the events didn't arrive"
     fi
 
-    # 11. the desktop: a command typed into its terminal runs, and the
-    # screen shows the window and the taskbar
-    for k in e c h o spc d e s k o k spc shift-dot spc c o n s o l e ret; do
-        echo "sendkey $k"
-    done > "$LOGS/$NAME-desk.mon"
+    # 11. the desktop: Files opens README in view; a command typed into
+    # the terminal runs; the screen shows them and the taskbar. The
+    # pointer starts in the middle of the 1280x800 screen.
+    {
+        echo "mouse_move -600 -400"
+        echo "mouse_move 70 787"       # the Files button
+        echo "mouse_button 1"
+        echo "mouse_button 0"
+        echo "mouse_move 0 0"          # (time for it to start)
+        echo "mouse_move 0 0"
+        echo "mouse_move 0 0"
+        echo "mouse_move 30 -688"      # README, its first entry
+        echo "mouse_button 1"
+        echo "mouse_button 0"
+        echo "sendkey ret"
+        echo "mouse_move 0 0"
+        echo "mouse_move 0 0"
+        echo "mouse_move 0 0"
+        echo "mouse_move -110 200"     # the terminal again
+        echo "mouse_button 1"
+        echo "mouse_button 0"
+        for k in e c h o spc d e s k o k spc shift-dot spc c o n s o l e ret; do
+            echo "sendkey $k"
+        done
+    } > "$LOGS/$NAME-desk.mon"
     rm -f "$LOGS/$NAME-desk.ppm"
     run desk 60 "^deskok" -m "$PWD/$LOGS/$NAME-desk.mon" -D "$PWD/$LOGS/$NAME-desk.ppm" -- desk
     if panicked desk; then
