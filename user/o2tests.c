@@ -1913,6 +1913,58 @@ static void test_nonblock(void)
     fail("nonblock", "bad fcntl accepted");
 }
 
+// memfd(): memory that processes map separately, and share.
+static void test_memfd(void)
+{
+  int fd = memfd(3 * 4096 + 1);
+  if(fd < 0)
+    fail("memfd", "memfd");
+  char c;
+  if(read(fd, &c, 1) != -1 || write(fd, "x", 1) != -1)
+    fail("memfd", "read or write worked");
+  if(mmap(0, 4096, PROT_READ, MAP_PRIVATE, fd, 0) != MAP_FAILED)
+    fail("memfd", "MAP_PRIVATE worked");
+  if(mmap(0, 5 * 4096, PROT_READ, MAP_SHARED, fd, 0) != MAP_FAILED)
+    fail("memfd", "mapped past its end");
+  int *a = mmap(0, 4 * 4096, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+  if(a == MAP_FAILED)
+    fail("memfd", "mmap");
+  if(a[0] != 0 || a[3 * 1024 + 5] != 0)
+    fail("memfd", "not zeroed");
+  a[1024] = 42;
+  // a child maps it again, at its own address, and writes
+  int pid = fork();
+  if(pid == 0){
+    munmap(a, 4 * 4096);
+    int *b = mmap(0, 4096, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 4096);
+    if(b == MAP_FAILED || b[0] != 42)
+      exit(1);
+    b[1] = 43;
+    exit(0);
+  }
+  int st;
+  wait(&st);
+  if(st != 0 || a[1025] != 43)
+    fail("memfd", "not shared");
+  // the memory stays while mapped, closed or not; and is freed: 100
+  // times 4MB is more than there is
+  close(fd);
+  a[0] = 1;
+  munmap(a, 4 * 4096);
+  for(int i = 0; i < 100; i++){
+    if((fd = memfd(4 << 20)) < 0)
+      fail("memfd", "leaks");
+    char *p = mmap(0, 4 << 20, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    if(p == MAP_FAILED)
+      fail("memfd", "leaks (mmap)");
+    p[(4 << 20) - 1] = 1;
+    close(fd);
+    munmap(p, 4 << 20);
+  }
+  if(memfd(0) != -1 || memfd(64 << 20) != -1)
+    fail("memfd", "bad sizes worked");
+}
+
 static void o2tests(void)
 {
   struct { const char *name; void (*fn)(void); } tests[] = {
@@ -1938,6 +1990,7 @@ static void o2tests(void)
     { "net", test_net },
     { "fb", test_fb },
     { "nonblock", test_nonblock },
+    { "memfd", test_memfd },
     { "getppid", test_getppid },
     { "dup2", test_dup2 },
     { "lseek", test_lseek },
