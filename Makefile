@@ -314,7 +314,7 @@ UPROGS = \
   $(B)/user/_wc \
 
 ifeq ($(GPU), 1)
-UPROGS += $(B)/user/_gfx $(B)/user/_splash $(B)/user/_evtest
+UPROGS += $(B)/user/_gfx $(B)/user/_splash $(B)/user/_evtest $(B)/user/_desk
 endif
 
 # README.md goes into the file system as README (xv6 tests read it)
