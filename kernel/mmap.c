@@ -141,7 +141,7 @@ static int vma_load_device(struct proc *p, struct vma *v) {
 
 // Map shared memory's pages (memfd()) into [start, end) of new
 // mapping v; each mapping holds a reference. Returns 0, or -1 if the
-// memory is smaller.
+// memory is smaller (or out of memory).
 static int vma_load_shm(struct proc *p, struct vma *v) {
     for (uint64 va = v->start; va < v->end; va += PGSIZE) {
         uint64 pa = shm_page(v->file->shm, (v->off + va - v->start) / PGSIZE);
