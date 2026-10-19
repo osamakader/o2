@@ -10,7 +10,7 @@ Minimal xv6-like kernel for arm64 and riscv64.
     make CPUS=8 qemu     # number of CPUs (default 3)
     make SELFTEST=1 qemu # with the kernel self-tests at boot
     make ARM64_ASID=1 qemu  # arm64: per-process ASIDs (see Isolation)
-    make GPU=1 qemu      # with graphics: the framebuffer, splash, gfx
+    make GPU=1 qemu      # with graphics: the framebuffer, splash, gfx, desk
     make GPU=1 qemu-gui  # ... and a window showing it
 
 The kernel boots into xv6's shell; programs live in `/` (`ls`, `cat`,
@@ -160,6 +160,20 @@ and ioctl `FB_INFO` and `FB_FLUSH` (fb.h); `gfx` draws a test picture,
 `gfx bounce` an animation. qemu runs without a window here; `tools/run.sh
 -D shot.ppm` saves a screen dump through the monitor, and CI checks
 gfx's picture in one. `make GPU=1 qemu-gui` opens a window showing it.
+
+`desk`, also with GPU=1, is a small desktop: terminal windows, each
+running a shell through pipes, which move by their title bars and close
+with the box on it; a taskbar with a "+ terminal" button and a clock;
+a mouse pointer. Keys and the mouse come from the `input` device:
+evdev-style events (input.h; `evtest` prints them) from qemu's virtio
+keyboard, tablet (the GUI's pointer) and mouse. The terminal edits the
+line itself: ^U, ^C (interrupts what its shell runs), ^D (ends the
+shell). Without a keyboard, as on the Pi for now, lines typed on the
+serial console go to the top window. Ctrl-Alt-Backspace, or a line
+`~.` on the serial console, quits. The font is Spleen 8x16
+(BSD-2-Clause, user/font.h, made by tools/bdf2c.py). `tools/run.sh -m
+file` sends monitor commands (`sendkey`, `mouse_move`, `mouse_button`)
+to drive it in tests.
 
 Time comes from the RTC (PL031 on arm64, Goldfish on riscv64), read at
 boot, plus the system counter; `date` shows it. Inodes are 128 bytes
