@@ -2,7 +2,7 @@
 // (term, files, view) are programs it starts; each draws its window
 // in memory they share and tells desk what changed (win.h, libwin.c).
 // desk draws the frames, the taskbar (buttons that start apps, one per
-// window, a clock) and the mouse pointer; windows move by their title
+// window, a clock that opens the calendar) and the mouse pointer; windows move by their title
 // bars and close with the box at the right of it.
 //
 // Keys come from /input (a keyboard), or, as lines, from the serial
@@ -46,6 +46,7 @@ static struct {
 } launchers[] = {
   { "Terminal", "term" },
   { "Files", "files" },
+  { "Calendar", "cal" },
 };
 #define NLAUNCH (sizeof(launchers) / sizeof(launchers[0]))
 
@@ -703,6 +704,10 @@ pointer(int x, int y)
 static void
 taskbarclick(void)
 {
+  if(mx >= W - 18 * FONT_W){
+    launch("cal");   // the clock
+    return;
+  }
   for(int i = 0; i < NLAUNCH; i++)
     if(mx >= launchers[i].x && mx < launchers[i].x + launchers[i].w){
       launch(launchers[i].cmd);

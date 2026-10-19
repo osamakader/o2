@@ -42,7 +42,7 @@ static int rows;              // entries that fit
 static int lastclick = -100, lastsel = -1;
 
 // desktop apps run by themselves; other programs in a terminal
-static char *apps[] = { "term", "files", "view" };
+static char *apps[] = { "term", "files", "view", "cal" };
 
 static void
 join(char *buf, char *dir, char *name)
