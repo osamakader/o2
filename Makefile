@@ -259,6 +259,12 @@ $(B)/user/_%: $(B)/user/%.o $(ULIB) user/$(ARCH)/user.ld
 	$(LD) $(LDFLAGS) -T user/$(ARCH)/user.ld -o $@ $< $(ULIB)
 	$(OBJDUMP) -S $@ > $(B)/user/$*.asm
 
+# desktop apps (GPU=1) draw their windows with libwin
+WINAPPS = $(B)/user/_term
+$(WINAPPS): $(B)/user/_%: $(B)/user/%.o $(B)/user/libwin.o $(ULIB) user/$(ARCH)/user.ld
+	$(LD) $(LDFLAGS) -T user/$(ARCH)/user.ld -o $@ $< $(B)/user/libwin.o $(ULIB)
+	$(OBJDUMP) -S $@ > $(B)/user/$*.asm
+
 # xv6's own user programs (user/xv6), built unmodified: their
 # kernel/*.h and user/user.h includes resolve through user/xv6/include.
 $(B)/user/xv6/%.o: CFLAGS += -iquote user/xv6/include
@@ -315,7 +321,7 @@ UPROGS = \
   $(B)/user/_wc \
 
 ifeq ($(GPU), 1)
-UPROGS += $(B)/user/_gfx $(B)/user/_splash $(B)/user/_evtest $(B)/user/_desk
+UPROGS += $(B)/user/_gfx $(B)/user/_splash $(B)/user/_evtest $(B)/user/_desk $(WINAPPS)
 endif
 
 # README.md goes into the file system as README (xv6 tests read it)
