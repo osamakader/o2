@@ -1979,6 +1979,17 @@ static void test_memfd(void)
     close(fd);
     munmap(p, 4 << 20);
   }
+  // pages come when mapped: 16MB, of which a page is used, 100 times
+  for(int i = 0; i < 100; i++){
+    if((fd = memfd(16 << 20)) < 0)
+      fail("memfd", "16MB");
+    char *p = mmap(0, 4096, PROT_READ | PROT_WRITE, MAP_SHARED, fd, (16 << 20) - 4096);
+    if(p == MAP_FAILED)
+      fail("memfd", "16MB (mmap)");
+    p[1] = 1;
+    munmap(p, 4096);
+    close(fd);
+  }
   if(memfd(0) != -1 || memfd(64 << 20) != -1)
     fail("memfd", "bad sizes worked");
 }
