@@ -10,7 +10,8 @@ Minimal xv6-like kernel for arm64 and riscv64.
     make CPUS=8 qemu     # number of CPUs (default 3)
     make SELFTEST=1 qemu # with the kernel self-tests at boot
     make ARM64_ASID=1 qemu  # arm64: per-process ASIDs (see Isolation)
-    make qemu-gui        # with a window showing the framebuffer
+    make GPU=1 qemu      # with graphics: the framebuffer, splash, gfx
+    make GPU=1 qemu-gui  # ... and a window showing it
 
 The kernel boots into xv6's shell; programs live in `/` (`ls`, `cat`,
 `echo`, `grep`, `wc`, `mkdir`, `rm`, `ln`, `kill [-sig]`, `ps`, `pwd`, `dmesg`, `date`), plus
@@ -53,8 +54,10 @@ the boot animation on HDMI work):
    erased), a 3.3V USB-serial adapter on the GPIO header (adapter RX
    to pin 8, GPIO 14; adapter TX to pin 10, GPIO 15; GND to pin 6),
    and on the host sudo, curl and mkfs.vfat (dosfstools). HDMI is
-   optional: it shows the boot animation.
-2. Build: `make ARCH=arm64 PLATFORM=rpi4`.
+   optional: with GPU=1 it shows the boot animation.
+2. Build: `make ARCH=arm64 PLATFORM=rpi4`, or with graphics `make
+   ARCH=arm64 PLATFORM=rpi4 GPU=1` (and `GPU=1` before the next
+   command too).
 3. With the card in the host's reader, as /dev/sdX (the whole card;
    check with `lsblk`), back it up if anything on it matters
    (`sudo dd if=/dev/sdX of=card-backup.img bs=4M`), then
@@ -67,7 +70,7 @@ the boot animation on HDMI work):
 4. Open the serial console at 115200 baud, 8N1, e.g. `picocom -b
    115200 /dev/ttyUSB0`, put the card in the Pi and power it on. The
    firmware loads `kernel8.img` at 0x200000 and starts it in EL2;
-   o2 prints its boot messages, plays the animation on HDMI and starts
+   o2 prints its boot messages, plays the animation on HDMI (GPU=1) and starts
    the shell on the serial console.
 
 `config.txt` makes the PL011 (uart0) the console on GPIO 14/15
@@ -149,13 +152,14 @@ out). Datagram sockets are files: `socket`, `bind`, `connect`,
 pings. `ping`, `nettest` (against `tools/udpecho.py` on the host) and
 `nslookup` use them. No TCP yet.
 
-Graphics: a virtio-gpu framebuffer (2D; 1280x800 under qemu, `make
-GPU=0` leaves it out). At boot, init plays `splash`, an animation of
-the o2 logo, before starting the shell. Programs mmap the `fb` device
+Graphics, with `make GPU=1` (off by default, to keep o2 small; it
+builds into build/<arch>-gpu): a framebuffer, virtio-gpu on qemu virt
+(2D, 1280x800) or the firmware's on the Pi. At boot, init plays
+`splash`, an animation of the o2 logo, before starting the shell. Programs mmap the `fb` device
 and ioctl `FB_INFO` and `FB_FLUSH` (fb.h); `gfx` draws a test picture,
 `gfx bounce` an animation. qemu runs without a window here; `tools/run.sh
 -D shot.ppm` saves a screen dump through the monitor, and CI checks
-gfx's picture in one. `make qemu-gui` opens a window showing it.
+gfx's picture in one. `make GPU=1 qemu-gui` opens a window showing it.
 
 Time comes from the RTC (PL031 on arm64, Goldfish on riscv64), read at
 boot, plus the system counter; `date` shows it. Inodes are 128 bytes

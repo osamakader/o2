@@ -50,8 +50,10 @@ int main(int boot, uint64 dtb) {
         virtio_disk_init();
         sockinit();
         virtio_net_init();
+#ifdef CONFIG_GPU
         virtio_gpu_init();
         rpi_fb_init();
+#endif
         binit();
         iinit();
         fileinit();

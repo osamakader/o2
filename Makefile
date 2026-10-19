@@ -13,6 +13,11 @@ ARM64_ASID ?= 0
 # qemu -machine raspi4b)
 PLATFORM ?= virt
 
+# Graphics, off by default to keep o2 small: make GPU=1 adds the
+# framebuffer (virtio-gpu on qemu virt, the firmware's on the Pi), the
+# programs that draw (splash, gfx) and qemu's display device.
+GPU ?= 0
+
 # Everything is built under build/$(ARCH), plus -selftest / -asid /
 # -rpi4 for those options, so both arches and all settings can be built
 # from the same tree without cleaning in between.
@@ -25,6 +30,9 @@ B := $(B)-asid
 endif
 ifeq ($(ARCH)$(PLATFORM), arm64rpi4)
 B := $(B)-rpi4
+endif
+ifeq ($(GPU), 1)
+B := $(B)-gpu
 endif
 KERNEL = $(B)/kernel.elf
 # file system image for the virtio block device, made by mkfs
@@ -60,10 +68,7 @@ KOBJS = \
   kernel/virtio_net.o \
   kernel/net.o \
   kernel/socket.o \
-  kernel/fb.o \
-  kernel/virtio_gpu.o \
   kernel/rpi_mbox.o \
-  kernel/rpi_fb.o \
   kernel/sdhci.o \
   kernel/disk.o \
   kernel/sysfile.o \
@@ -138,6 +143,11 @@ else
 KERNEL_LOAD = 0x40200000
 QEMUOPTS = -machine virt,gic-version=3 -cpu cortex-a57
 endif
+endif
+
+ifeq ($(GPU), 1)
+KOBJS += kernel/fb.o kernel/virtio_gpu.o kernel/rpi_fb.o
+CFLAGS += -DCONFIG_GPU
 endif
 
 ifeq ($(SELFTEST), 1)
@@ -269,7 +279,6 @@ endif
 # RAM for qemu; the kernel finds out how much from the device tree
 MEM ?= 128M
 NET ?= 1
-GPU ?= 1
 
 # mkfs runs on the host
 $(MKFS): mkfs/mkfs.c kernel/include/fs.h kernel/include/param.h kernel/include/stat.h
@@ -283,7 +292,6 @@ UPROGS = \
   $(B)/user/_date \
   $(B)/user/_dmesg \
   $(B)/user/_echo \
-  $(B)/user/_gfx \
   $(B)/user/_grep \
   $(B)/user/_init \
   $(B)/user/_kill \
@@ -298,12 +306,15 @@ UPROGS = \
   $(B)/user/_pwd \
   $(B)/user/_rm \
   $(B)/user/_sh \
-  $(B)/user/_splash \
   $(B)/user/_o2tests \
   $(B)/user/xv6/_usertests \
   $(B)/user/xv6/_grind \
   $(B)/user/xv6/_stressfs \
   $(B)/user/_wc \
+
+ifeq ($(GPU), 1)
+UPROGS += $(B)/user/_gfx $(B)/user/_splash
+endif
 
 # README.md goes into the file system as README (xv6 tests read it)
 $(B)/README: README.md
@@ -338,9 +349,9 @@ QEMUOPTS += -nic none
 else
 QEMUOPTS += -netdev user,id=net0 -device virtio-net-device,netdev=net0,bus=virtio-mmio-bus.1
 endif
-# a virtio GPU (GPU=0: none); with -nographic nobody sees it, but the
-# qemu monitor's screendump does
-ifneq ($(GPU), 0)
+# a virtio GPU (GPU=1); with -nographic nobody sees it, but the qemu
+# monitor's screendump does
+ifeq ($(GPU), 1)
 QEMUOPTS += -device virtio-gpu-device,bus=virtio-mmio-bus.2
 endif
 QEMUOPTS += -global virtio-mmio.force-legacy=false

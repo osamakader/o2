@@ -178,8 +178,9 @@ if [ "$NAME" != rpi4 ]; then
     fi
 fi
 
-# 9. graphics: the boot animation ends with the logo on the screen; gfx
-# draws its test picture
+# 9. graphics (a GPU=1 build): the boot animation ends with the logo on
+# the screen; gfx draws its test picture
+export GPU=1
 rm -f "$LOGS/$NAME-splash.ppm"
 run splash 60 "init: starting sh" -D "$PWD/$LOGS/$NAME-splash.ppm" --
 if panicked splash; then
@@ -199,6 +200,7 @@ elif python3 tools/checkshot.py "$LOGS/$NAME-gfx.ppm" >> "$LOGS/$NAME-gfx.log" 2
 else
     fail gfx "the screen doesn't show the picture"
 fi
+unset GPU
 
 # 10. grind runs until stopped: no errors or panic within the time limit
 run grind $((GRIND + DELAY)) "^grind:" -- grind

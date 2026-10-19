@@ -15,9 +15,13 @@ if [ -z "$DEV" ] || [ ! -b "$DEV" ]; then
 fi
 cd "$(dirname "$0")/.."
 
+# GPU=1 tools/rpi4-card.sh ...: the build with graphics (the boot
+# animation on HDMI)
+GPU=${GPU:-0}
 B=build/arm64-rpi4
+[ "$GPU" = 1 ] && B=$B-gpu
 FW=https://github.com/raspberrypi/firmware/raw/1.20260915/boot
-make -s ARCH=arm64 PLATFORM=rpi4
+make -s ARCH=arm64 PLATFORM=rpi4 GPU="$GPU"
 
 mkdir -p "$B/firmware/overlays"
 for f in start4.elf fixup4.dat bcm2711-rpi-4-b.dtb overlays/disable-bt.dtbo; do
