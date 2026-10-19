@@ -208,7 +208,14 @@ main(int argc, char *argv[])
   rows = (h - 2 * PAD) / FONT_H;
   if(rows > ROWS)
     rows = ROWS;
-  if(win_open(cols * FONT_W + 2 * PAD, rows * FONT_H + 2 * PAD, "terminal") < 0)
+  // titled after the command, if any
+  char title[44] = "terminal";
+  if(argc > 1){
+    strcpy(title + 8, ": ");
+    int n = strlen(argv[1]);
+    memmove(title + 10, argv[1], n < 33 ? n : 33);
+  }
+  if(win_open(cols * FONT_W + 2 * PAD, rows * FONT_H + 2 * PAD, title) < 0)
     exit(1);
   win_fill(0, 0, win_w, win_h, C_BG);
   win_update(0, 0, win_w, win_h);
@@ -217,12 +224,8 @@ main(int argc, char *argv[])
   signal(SIGPIPE, SIG_IGN);
   shell();
 
-  // a command to start with, typed for the user
-  for(int i = 1; i < argc; i++){
-    for(char *s = argv[i]; *s; s++)
-      key(*s);
-    key(i < argc - 1 ? ' ' : '\n');
-  }
+  // a command to start with, typed for the user at the first prompt
+  int typecmd = argc > 1;
 
   for(;;){
     int busy = 0;
@@ -248,6 +251,14 @@ main(int argc, char *argv[])
     for(int i = 0; i < n; i++)
       put(buf[i]);
     busy |= n > 0;
+    if(n > 0 && typecmd){
+      typecmd = 0;
+      for(int i = 1; i < argc; i++){
+        for(char *s = argv[i]; *s; s++)
+          key(*s);
+        key(i < argc - 1 ? ' ' : '\n');
+      }
+    }
 
     draw();
     if(!busy)
