@@ -1195,7 +1195,23 @@ static void test_time(void)
              tm.tm_wday, tm.tm_yday);
       fail("time", "gmtime");
     }
+    if(timegm(&tm) != cases[i].t)
+      fail("time", "timegm");
   }
+
+  // setting the clock: a day ahead, and back
+  struct timespec ts;
+  clock_gettime(CLOCK_REALTIME, &ts);
+  uint64 t0 = ts.tv_sec;
+  ts.tv_sec += 86400;
+  if(clock_settime(CLOCK_REALTIME, &ts) < 0 || time() < t0 + 86400 || time() > t0 + 86402)
+    fail("time", "clock_settime");
+  ts.tv_sec = t0;
+  clock_settime(CLOCK_REALTIME, &ts);
+  ts.tv_nsec = 1000000000;
+  if(clock_settime(CLOCK_MONOTONIC, &ts) != -1 || clock_settime(CLOCK_REALTIME, &ts) != -1 ||
+     time() > t0 + 2)
+    fail("time", "bad clock_settime worked");
 }
 
 // Wait until the wall clock's seconds change.
