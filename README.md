@@ -177,6 +177,8 @@ them. The apps:
   goes in, a text file opens in `view`, a program runs (in a terminal,
   unless it is an app). Up or Backspace goes to the parent.
 - `view file`: a text viewer; the wheel, arrows and Page Up/Down scroll.
+- `cal`: a calendar, a month at a time with today marked; the
+  taskbar's clock opens it too.
 
 Keys and the mouse come from the `input` device: evdev-style events
 (input.h; `evtest` prints them) from qemu's virtio keyboard, tablet
@@ -188,7 +190,11 @@ tools/bdf2c.py). `tools/run.sh -m file` sends monitor commands
 (`sendkey`, `mouse_move`, `mouse_button`) to drive it in tests.
 
 Time comes from the RTC (PL031 on arm64, Goldfish on riscv64), read at
-boot, plus the system counter; `date` shows it. Inodes are 128 bytes
+boot, plus the system counter; `date` shows it and `date -s YYYY-MM-DD
+HH:MM` sets it (`clock_settime()`, UTC). The Raspberry Pi has no RTC:
+init starts its clock at the newest time a file in / was changed (when
+the file system was built, or last written), which `date -s` then
+corrects. Inodes are 128 bytes
 on disk and record atime (creation only: reads don't update it), mtime
 and ctime, which `stat` returns and `ls` shows.
 
