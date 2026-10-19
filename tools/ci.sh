@@ -201,23 +201,41 @@ else
     fail gfx "the screen doesn't show the picture"
 fi
 
-# 10. input (virt only: raspi4b has no virtio): a key and a mouse click
-# from the QEMU monitor reach /input
+# 10. input (virt only: raspi4b has no virtio): a key, a mouse move
+# and a click from the QEMU monitor reach /input
 if [ "$NAME" != rpi4 ]; then
     printf '%s\n' "sendkey a" "mouse_move 100 50" "mouse_button 1" "mouse_button 0" \
         > "$LOGS/$NAME-input.mon"
-    run input 60 "code 272 value 0" -m "$PWD/$LOGS/$NAME-input.mon" -- "evtest 8"
+    run input 60 "code 272 value 0" -m "$PWD/$LOGS/$NAME-input.mon" -- "evtest 12"
     if panicked input; then
         fail input "kernel panic"
-    elif has input "type 1 code 30 value 1" && has input "code 272 value 0"; then
+    elif has input "type 1 code 30 value 1" && has input "type 2 code 0 value 100" &&
+         has input "code 272 value 0"; then
         pass input
     else
         fail input "the events didn't arrive"
     fi
+
+    # 11. the desktop: a command typed into its terminal runs, and the
+    # screen shows the window and the taskbar
+    for k in e c h o spc d e s k o k spc shift-dot spc c o n s o l e ret; do
+        echo "sendkey $k"
+    done > "$LOGS/$NAME-desk.mon"
+    rm -f "$LOGS/$NAME-desk.ppm"
+    run desk 60 "^deskok" -m "$PWD/$LOGS/$NAME-desk.mon" -D "$PWD/$LOGS/$NAME-desk.ppm" -- desk
+    if panicked desk; then
+        fail desk "kernel panic"
+    elif ! has desk "^deskok"; then
+        fail desk "the typed command didn't run"
+    elif python3 tools/checkshot.py "$LOGS/$NAME-desk.ppm" desk >> "$LOGS/$NAME-desk.log" 2>&1; then
+        pass desk
+    else
+        fail desk "the screen doesn't show the desktop"
+    fi
 fi
 unset GPU
 
-# 11. grind runs until stopped: no errors or panic within the time limit
+# 12. grind runs until stopped: no errors or panic within the time limit
 run grind $((GRIND + DELAY)) "^grind:" -- grind
 if panicked grind; then
     fail grind "kernel panic"

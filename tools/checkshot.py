@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-# checkshot.py shot.ppm [splash]: check a screen dump (a P6 PPM from
-# the QEMU monitor's screendump) of gfx's test picture: the colored bars
-# along the top and the circle in the middle; or with splash, of the
-# boot animation's last frame: the o2 logo and the full bar under it.
+# checkshot.py shot.ppm [splash|desk]: check a screen dump (a P6 PPM
+# from the QEMU monitor's screendump) of gfx's test picture: the colored
+# bars along the top and the circle in the middle; or with splash, of
+# the boot animation's last frame: the o2 logo and the full bar under
+# it; or with desk, of the desktop: a terminal window and the taskbar.
 # Exits 0 if they are there.
 import sys
 
@@ -41,6 +42,24 @@ if len(sys.argv) > 2 and sys.argv[2] == "splash":
     for name, p, ok in checks:
         if not ok(p):
             print("%s: %s" % (name, p))
+            bad += 1
+    print("%dx%d: %s" % (w, h, "ok" if bad == 0 else "%d wrong" % bad))
+    sys.exit(1 if bad else 0)
+
+if len(sys.argv) > 2 and sys.argv[2] == "desk":
+    # colors from desk.c; its first window is at (16, 16)
+    checks = [
+        ("the title bar", at(200, 26), (0x2f, 0x6f, 0xb8)),
+        ("the terminal", at(300, 300), (0x10, 0x12, 0x14)),
+        ("the taskbar", at(w // 2, h - 4), (0x1c, 0x1f, 0x24)),
+        ("the desktop", at(w - 4, 4), None),
+    ]
+    bad = 0
+    for name, got, want in checks:
+        # the desktop: bluish, and nothing else is there
+        ok = got[2] > got[0] + 32 and got[2] > 64 if want is None else got == want
+        if not ok:
+            print("%s: %s" % (name, got))
             bad += 1
     print("%dx%d: %s" % (w, h, "ok" if bad == 0 else "%d wrong" % bad))
     sys.exit(1 if bad else 0)
