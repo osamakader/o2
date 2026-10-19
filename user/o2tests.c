@@ -1909,6 +1909,24 @@ static void test_nonblock(void)
   if(read(fds[0], &c, 1) != 0)
     fail("nonblock", "pipe at its end");
   close(fds[0]);
+
+  // writes to a full pipe: -1, or what fit; and small ones are atomic
+  static char buf[3000];
+  pipe(fds);
+  fcntl(fds[1], F_SETFL, O_NONBLOCK);
+  int n = 0, r;
+  while((r = write(fds[1], buf, 100)) == 100)
+    n += 100;
+  if(r != -1 || n < 512)
+    fail("nonblock", "write to a full pipe");
+  close(fds[0]);
+  close(fds[1]);
+  pipe(fds);
+  fcntl(fds[1], F_SETFL, O_NONBLOCK);
+  if((r = write(fds[1], buf, sizeof(buf))) <= 0 || r >= sizeof(buf))
+    fail("nonblock", "long write");
+  close(fds[0]);
+  close(fds[1]);
   if(fcntl(99, F_GETFL, 0) != -1 || fcntl(1, 99, 0) != -1)
     fail("nonblock", "bad fcntl accepted");
 }
