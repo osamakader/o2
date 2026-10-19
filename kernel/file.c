@@ -75,6 +75,8 @@ void fileclose(struct file *f)
         pipeclose(ff.pipe, ff.writable);
     } else if (ff.type == FD_SOCK) {
         sock_close(ff.sock);
+    } else if (ff.type == FD_SHM) {
+        shm_free(ff.shm);
     } else if (ff.type == FD_INODE || ff.type == FD_DEVICE) {
         begin_op();
         iput(ff.ip);
@@ -122,6 +124,8 @@ int fileread(struct file *f, uint64 addr, int n)
         if ((r = readi(f->ip, 1, addr, f->off, n)) > 0)
             f->off += r;
         iunlock(f->ip);
+    } else if (f->type == FD_SHM) {
+        return -1;   // mmap() it
     } else {
         panic("fileread");
     }
@@ -195,6 +199,8 @@ int filewrite(struct file *f, uint64 addr, int n)
             i += r;
         }
         ret = (i == n ? n : -1);
+    } else if (f->type == FD_SHM) {
+        return -1;   // mmap() it
     } else {
         panic("filewrite");
     }

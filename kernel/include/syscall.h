@@ -49,6 +49,7 @@
 #define SYS_recvfrom 43
 #define SYS_setsockopt 44
 #define SYS_fcntl   45
+#define SYS_memfd   46
 
 // sbrk(n, type): allocate now, or only on first touch (page fault)
 #define SBRK_EAGER 1

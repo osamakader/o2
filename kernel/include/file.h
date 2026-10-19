@@ -7,9 +7,10 @@
 
 struct pipe;
 struct sock;
+struct shm;
 
 struct file {
-    enum { FD_NONE, FD_PIPE, FD_INODE, FD_DEVICE, FD_SOCK } type;
+    enum { FD_NONE, FD_PIPE, FD_INODE, FD_DEVICE, FD_SOCK, FD_SHM } type;
     int ref; // reference count
     char readable;
     char writable;
@@ -19,6 +20,7 @@ struct file {
     uint off;          // FD_INODE
     short major;       // FD_DEVICE
     struct sock *sock; // FD_SOCK
+    struct shm *shm;   // FD_SHM
 };
 
 // in-memory copy of an inode

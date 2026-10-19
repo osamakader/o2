@@ -51,6 +51,11 @@ int filestat(struct file *f, uint64 addr);
 int filewrite(struct file *f, uint64 addr, int n);
 int fdalloc(struct file *f);
 
+// shm.c
+struct shm;
+uint64 shm_page(struct shm *s, uint64 n);
+void shm_free(struct shm *s);
+
 // socket.c
 struct sock;
 void sockinit(void);

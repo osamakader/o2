@@ -63,6 +63,7 @@ KOBJS = \
   kernel/sysproc.o \
   kernel/signal.o \
   kernel/mmap.o \
+  kernel/shm.o \
   kernel/fdt.o \
   kernel/board.o \
   kernel/virtio_net.o \

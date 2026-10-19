@@ -60,6 +60,7 @@ int sendto(int, const void *, int, int, const struct sockaddr_in *, int);
 int recvfrom(int, void *, int, int, struct sockaddr_in *, int *);
 int setsockopt(int, int, int, const void *, int);
 int fcntl(int, int, int);
+int memfd(uint64);
 
 // ulib.c
 char *strcpy(char *, const char *);

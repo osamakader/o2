@@ -10,7 +10,8 @@
 // File mappings are read in whole by mmap() too: reading a page in on
 // a fault could deadlock, when the fault comes from a system call that
 // holds the file's inode lock already (write(fd, p) of a mapping of
-// fd's file). Writable MAP_SHARED mappings are written back to the
+// fd's file). memfd() memory and devices are mapped, not read in.
+// Writable MAP_SHARED mappings are written back to the
 // file by munmap(), exit() and exec(), without extending it. There is
 // no page cache: processes that map a file separately (not through
 // fork()) don't see each other's changes before they are written back.
@@ -138,11 +139,28 @@ static int vma_load_device(struct proc *p, struct vma *v) {
     return 0;
 }
 
+// Map shared memory's pages (memfd()) into [start, end) of new
+// mapping v; each mapping holds a reference. Returns 0, or -1 if the
+// memory is smaller.
+static int vma_load_shm(struct proc *p, struct vma *v) {
+    for (uint64 va = v->start; va < v->end; va += PGSIZE) {
+        uint64 pa = shm_page(v->file->shm, (v->off + va - v->start) / PGSIZE);
+        if (pa == 0 || mappages(p->pagetable, va, PGSIZE, pa, PTE_USER(prot2perm(v->prot))) != 0) {
+            vma_unmap_range(p->pagetable, v->start, va);
+            return -1;
+        }
+        kref((void *)P2V(pa));
+    }
+    return 0;
+}
+
 // Read the file's pages into [start, end) of new mapping v; pages past
 // the end of the file stay zero. Returns 0, or -1 if out of memory.
 static int vma_load(struct proc *p, struct vma *v) {
     if (v->file && v->file->type == FD_DEVICE)
         return vma_load_device(p, v);
+    if (v->file && v->file->type == FD_SHM)
+        return vma_load_shm(p, v);
     struct inode *ip = v->file ? v->file->ip : 0;
     int r = 0;
 
@@ -221,6 +239,9 @@ uint64 sys_mmap(void) {
             return -1;
         if (f->type == FD_DEVICE) {
             if (type != MAP_SHARED || f->major < 0 || f->major >= NDEV || !devsw[f->major].mmap)
+                return -1;
+        } else if (f->type == FD_SHM) {
+            if (type != MAP_SHARED)
                 return -1;
         } else {
             if (f->type != FD_INODE)
