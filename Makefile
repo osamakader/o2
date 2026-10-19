@@ -260,7 +260,7 @@ $(B)/user/_%: $(B)/user/%.o $(ULIB) user/$(ARCH)/user.ld
 	$(OBJDUMP) -S $@ > $(B)/user/$*.asm
 
 # desktop apps (GPU=1) draw their windows with libwin
-WINAPPS = $(B)/user/_term $(B)/user/_files $(B)/user/_view
+WINAPPS = $(B)/user/_term $(B)/user/_files $(B)/user/_view $(B)/user/_cal
 $(WINAPPS): $(B)/user/_%: $(B)/user/%.o $(B)/user/libwin.o $(ULIB) user/$(ARCH)/user.ld
 	$(LD) $(LDFLAGS) -T user/$(ARCH)/user.ld -o $@ $< $(B)/user/libwin.o $(ULIB)
 	$(OBJDUMP) -S $@ > $(B)/user/$*.asm
