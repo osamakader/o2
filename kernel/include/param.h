@@ -13,8 +13,8 @@
                          // the log pins between commits)
 #define FSSIZE      70000  // size of file system in blocks (> MAXFILE)
 #define NINODE       50  // maximum number of active i-nodes
-#define NFILE       100  // open files per system
-#define NOFILE       16  // open files per process
+#define NFILE       200  // open files per system
+#define NOFILE       32  // open files per process
 #define NDEV         10  // maximum major device number
 #define MAXPATH     128  // maximum file path name
 #define MAXSYMLINKS  10  // symbolic links followed in one path lookup
