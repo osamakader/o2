@@ -25,7 +25,8 @@ fmtname(char *path)
   return buf;
 }
 
-// name, type, inode number, size, and when it was last modified (UTC);
+// name, type, inode number, size, and when it was last modified (local
+// time, see tz);
 // for a symbolic link (path) also its target
 void
 printstat(char *name, char *path, struct stat *st)
@@ -33,7 +34,7 @@ printstat(char *name, char *path, struct stat *st)
   struct tm tm;
   char target[128];
 
-  gmtime(st->mtime, &tm);
+  localtime(st->mtime, &tm);
   printf("%s %d %3d %6d %d-%02d-%02d %02d:%02d", name, st->type, st->ino,
          (int)st->size, tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min);
   int n;
