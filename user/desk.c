@@ -48,6 +48,7 @@ static struct {
   { "Terminal", "term" },
   { "Files", "files" },
   { "Calendar", "cal" },
+  { "Power", "power" },
 };
 #define NLAUNCH (sizeof(launchers) / sizeof(launchers[0]))
 
