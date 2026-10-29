@@ -9,6 +9,7 @@
 #include "fcntl.h"
 #include "procinfo.h"
 #include "win.h"
+#include "poll.h"
 
 #define COLS 80
 #define ROWS 24
@@ -261,8 +262,11 @@ main(int argc, char *argv[])
     }
 
     draw();
-    if(!busy)
-      pause(1);
+    if(!busy){
+      // wait for a key or the shell
+      struct pollfd p[2] = { { WIN_EVFD, POLLIN, 0 }, { out, POLLIN, 0 } };
+      poll(p, 2, -1);
+    }
   }
 
 done:
