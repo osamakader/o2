@@ -222,7 +222,7 @@ drawtaskbar(void)
   static char *months[] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun",
                             "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
   struct tm tm;
-  gmtime(time(), &tm);
+  localtime(time(), &tm);
   // "Mon Oct 19 14:03"
   char s[17];
   memmove(s, days[tm.tm_wday], 3);
