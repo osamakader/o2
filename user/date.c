@@ -1,5 +1,6 @@
-// date: print the current date and time (UTC).
-// date -s YYYY-MM-DD HH:MM[:SS]: set it (UTC), for boards without an
+// date [-u]: print the current date and time, in the time zone (tz),
+// or with -u in UTC.
+// date [-u] -s YYYY-MM-DD HH:MM[:SS]: set it, for boards without an
 // RTC, like the Raspberry Pi.
 
 #include "types.h"
@@ -11,9 +12,10 @@ static char *months[] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun",
                           "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
 
 // Set the clock from "YYYY-MM-DD HH:MM[:SS]" (any separators) in the
-// arguments. Returns 0, or -1 if they aren't a date and time.
+// arguments, off seconds ahead of UTC. Returns 0, or -1 if they aren't
+// a date and time.
 static int
-set(int argc, char *argv[])
+set(int argc, char *argv[], long off)
 {
   int v[6] = { 0 }, n = 0;
   for(int i = 0; i < argc; i++){
@@ -34,7 +36,7 @@ set(int argc, char *argv[])
     return -1;
   struct tm tm = { .tm_year = v[0] - 1900, .tm_mon = v[1] - 1, .tm_mday = v[2],
                    .tm_hour = v[3], .tm_min = v[4], .tm_sec = v[5] };
-  struct timespec ts = { timegm(&tm), 0 };
+  struct timespec ts = { timegm(&tm) - off, 0 };
   return clock_settime(CLOCK_REALTIME, &ts);
 }
 
@@ -42,16 +44,23 @@ int
 main(int argc, char *argv[])
 {
   struct tm tm;
+  char name[12] = "UTC";
+  long off = 0;
 
-  if(argc > 1){
-    if(strcmp(argv[1], "-s") != 0 || set(argc - 2, argv + 2) < 0){
-      fprintf(2, "usage: date [-s YYYY-MM-DD HH:MM[:SS]]\n");
+  int i = 1;
+  if(i < argc && strcmp(argv[i], "-u") == 0)
+    i++;
+  else
+    off = tzoffset(name);
+  if(i < argc){
+    if(strcmp(argv[i], "-s") != 0 || set(argc - i - 1, argv + i + 1, off) < 0){
+      fprintf(2, "usage: date [-u] [-s YYYY-MM-DD HH:MM[:SS]]\n");
       exit(1);
     }
   }
 
-  gmtime(time(), &tm);
-  printf("%s %s %2d %02d:%02d:%02d UTC %d\n", days[tm.tm_wday], months[tm.tm_mon],
-         tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec, tm.tm_year + 1900);
+  gmtime(time() + off, &tm);
+  printf("%s %s %2d %02d:%02d:%02d %s %d\n", days[tm.tm_wday], months[tm.tm_mon],
+         tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec, name, tm.tm_year + 1900);
   exit(0);
 }
