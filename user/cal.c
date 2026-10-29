@@ -6,6 +6,7 @@
 #include "user.h"
 #include "time.h"
 #include "win.h"
+#include "poll.h"
 
 #define CELL_W  48
 #define CELL_H  36
@@ -227,7 +228,7 @@ main(void)
     exit(1);
   draw();
 
-  // wait for events, and look at the clock every second
+  // wait for events, looking at the clock every second
   for(;;){
     struct winmsg m;
     int r, changed = 0;
@@ -260,6 +261,7 @@ main(void)
     }
     if(changed)
       draw();
-    pause(10);
+    struct pollfd p = { WIN_EVFD, POLLIN, 0 };
+    poll(&p, 1, 1000);
   }
 }
