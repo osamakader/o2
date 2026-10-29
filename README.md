@@ -179,6 +179,10 @@ them. The apps:
 - `view file`: a text viewer; the wheel, arrows and Page Up/Down scroll.
 - `cal`: a calendar, a month at a time with today marked; the
   taskbar's clock opens it too.
+- `power`: shut down or restart (the taskbar's Power button).
+
+Apps wait with `poll()` (on pipes, sockets, the console and the input
+device, with a timeout), so an idle desktop doesn't use the CPU.
 
 Keys and the mouse come from the `input` device: evdev-style events
 (input.h; `evtest` prints them) from qemu's virtio keyboard, tablet
@@ -191,10 +195,18 @@ tools/bdf2c.py). `tools/run.sh -m file` sends monitor commands
 
 Time comes from the RTC (PL031 on arm64, Goldfish on riscv64), read at
 boot, plus the system counter; `date` shows it and `date -s YYYY-MM-DD
-HH:MM` sets it (`clock_settime()`, UTC). The Raspberry Pi has no RTC:
-init starts its clock at the newest time a file in / was changed (when
-the file system was built, or last written), which `date -s` then
-corrects. Inodes are 128 bytes
+HH:MM` sets it (`clock_settime()`). The Raspberry Pi has no RTC: init
+starts its clock at the newest time a file in / was changed (when the
+file system was built, or last written), which `date -s` then
+corrects. The clock runs in UTC; `tz +HH:MM [name]` sets the time zone
+(in /timezone; `tz UTC` removes it), which `date` (`-u` for UTC), `ls`
+and the desktop show, through `localtime()`. There are no daylight
+saving rules: set the new offset when it changes.
+
+`halt` and `reboot` commit the file system and power off or restart:
+through PSCI on arm64 qemu, the SBI on riscv64, and the power
+management block's watchdog on the Pi (the firmware halts, as with
+Linux). Inodes are 128 bytes
 on disk and record atime (creation only: reads don't update it), mtime
 and ctime, which `stat` returns and `ls` shows.
 
