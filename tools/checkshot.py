@@ -53,7 +53,7 @@ if len(sys.argv) > 2 and sys.argv[2] == "desk":
         ("view's status line", at(700, 592), (0xe0, 0xe2, 0xe6)),
         ("the title bar", at(200, 26), (0x2f, 0x6f, 0xb8)),
         ("the terminal", at(300, 300), (0x10, 0x12, 0x14)),
-        ("the taskbar", at(w // 2, h - 4), (0x1c, 0x1f, 0x24)),
+        ("the taskbar", at(w // 2, h - 1), (0x1c, 0x1f, 0x24)),   # under its buttons
         ("the desktop", at(w - 4, 4), None),
     ]
     bad = 0
