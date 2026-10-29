@@ -18,6 +18,7 @@
 #include "syscall.h"
 #include "time.h"
 #include "win.h"
+#include "poll.h"
 #include "font.h"
 
 #define NWIN      8
@@ -883,8 +884,17 @@ main(void)
       redraw(dirty);
       dirty.w = 0;
     }
-    if(!busy)
-      pause(1);
+    if(!busy){
+      // wait for input, an app, or the next minute (the clock)
+      struct pollfd p[2 + NWIN];
+      int n = 0;
+      p[n++] = (struct pollfd){ in, POLLIN, 0 };
+      p[n++] = (struct pollfd){ ser, POLLIN, 0 };
+      for(int k = 0; k < NWIN; k++)
+        if(wins[k].used)
+          p[n++] = (struct pollfd){ wins[k].req, POLLIN, 0 };
+      poll(p, n, (60 - time() % 60) * 1000);
+    }
   }
 
   for(int k = 0; k < NWIN; k++)
