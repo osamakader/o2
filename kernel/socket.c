@@ -17,6 +17,7 @@
 #include "file.h"
 #include "timer.h"
 #include "socket.h"
+#include "poll.h"
 #include "net.h"
 
 #define NSOCK 32
@@ -104,6 +105,7 @@ void sock_deliver(int proto, uint16 port, uint32 src, uint16 sport, const char *
         s->tail = p;
         s->qlen++;
         wakeup(s);
+        pollwakeup();
     }
     release(&s->lock);
 }
@@ -379,4 +381,13 @@ uint64 sys_setsockopt(void)
     s->timeout = t;
     release(&s->lock);
     return 0;
+}
+
+// poll(): what is so of s. Sends never wait.
+int sockpoll(struct sock *s)
+{
+    acquire(&s->lock);
+    int r = POLLOUT | (s->qlen > 0 ? POLLIN : 0);
+    release(&s->lock);
+    return r;
 }

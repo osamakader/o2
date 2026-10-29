@@ -28,6 +28,7 @@ void clockintr(void)
         wakeup(&ticks);
         release(&tickslock);
         sock_tick();
+        poll_tick();
     }
 }
 

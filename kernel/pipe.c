@@ -10,6 +10,7 @@
 #include "vm.h"
 #include "fs.h"
 #include "file.h"
+#include "poll.h"
 
 #define PIPESIZE 2048   // the struct fits in a page
 
@@ -62,9 +63,11 @@ void pipeclose(struct pipe *pi, int writable)
     if (writable) {
         pi->writeopen = 0;
         wakeup(&pi->nread);
+        pollwakeup();
     } else {
         pi->readopen = 0;
         wakeup(&pi->nwrite);
+        pollwakeup();
     }
     if (pi->readopen == 0 && pi->writeopen == 0) {
         release(&pi->lock);
@@ -107,6 +110,7 @@ int pipewrite(struct pipe *pi, uint64 addr, int n, int nonblock)
         }
     }
     wakeup(&pi->nread);
+    pollwakeup();
     release(&pi->lock);
 
     return i;
@@ -134,6 +138,28 @@ int piperead(struct pipe *pi, uint64 addr, int n, int nonblock)
             break;
     }
     wakeup(&pi->nwrite);  //DOC: piperead-wakeup
+    pollwakeup();
     release(&pi->lock);
     return i;
+}
+
+// poll(): what is so of the pipe's read end, or with writable its write
+// end. Writable when PIPESIZE/4 bytes fit, like Linux's PIPE_BUF.
+int pipepoll(struct pipe *pi, int writable)
+{
+    int r = 0;
+    acquire(&pi->lock);
+    if (writable) {
+        if (!pi->readopen)
+            r = POLLHUP | POLLOUT;   // a write fails at once
+        else if (pi->nwrite - pi->nread <= PIPESIZE - PIPESIZE / 4)
+            r = POLLOUT;
+    } else {
+        if (pi->nread != pi->nwrite)
+            r = POLLIN;
+        if (!pi->writeopen)
+            r |= POLLIN | POLLHUP;   // read() returns 0
+    }
+    release(&pi->lock);
+    return r;
 }

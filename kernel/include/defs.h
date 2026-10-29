@@ -51,6 +51,10 @@ int filestat(struct file *f, uint64 addr);
 int filewrite(struct file *f, uint64 addr, int n);
 int fdalloc(struct file *f);
 
+// poll.c
+void pollwakeup(void);
+void poll_tick(void);
+
 // shm.c
 struct shm;
 uint64 shm_page(struct shm *s, uint64 n);
@@ -62,6 +66,7 @@ void sockinit(void);
 void sock_close(struct sock *s);
 int sockread(struct sock *s, uint64 dst, int n, int nonblock);
 int sockwrite(struct sock *s, uint64 src, int n);
+int sockpoll(struct sock *s);
 int fileseek(struct file *f, int off, int whence);
 
 // pipe.c
@@ -70,6 +75,7 @@ int pipealloc(struct file **f0, struct file **f1);
 void pipeclose(struct pipe *pi, int writable);
 int piperead(struct pipe *pi, uint64 addr, int n, int nonblock);
 int pipewrite(struct pipe *pi, uint64 addr, int n, int nonblock);
+int pipepoll(struct pipe *pi, int writable);
 
 // fs.c
 struct inode;

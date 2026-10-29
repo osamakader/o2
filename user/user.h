@@ -9,6 +9,7 @@
 struct stat;
 struct procinfo;
 struct timespec;
+struct pollfd;
 struct tm;
 struct lockstat;
 struct sockaddr_in;
@@ -62,6 +63,7 @@ int setsockopt(int, int, int, const void *, int);
 int fcntl(int, int, int);
 int memfd(uint64);
 int clock_settime(int, struct timespec *);
+int poll(struct pollfd *, int, int);
 
 // ulib.c
 char *strcpy(char *, const char *);

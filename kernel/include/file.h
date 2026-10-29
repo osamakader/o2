@@ -48,6 +48,8 @@ struct devsw {
     uint64 (*mmap)(uint64 pgoff);        // physical address of page pgoff
                                          // to map (or 0); may be 0
     int uncached;                        // map those uncached
+    int (*poll)(void);                   // POLLIN if a read wouldn't
+                                         // wait; 0: always
 };
 
 extern struct devsw devsw[];

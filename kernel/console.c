@@ -9,6 +9,7 @@
 #include "fs.h"
 #include "file.h"
 #include "fcntl.h"
+#include "poll.h"
 #include "backtrace.h"
 #include "defs.h"
 
@@ -299,6 +300,7 @@ void consoleintr(int c) {
             cons_in.buf[cons_in.e++ % INPUT_BUF_SIZE] = c;
             cons_in.w = cons_in.e;
             wakeup(&cons_in.r);
+            pollwakeup();
         }
         c = -1;   // done
     }
@@ -344,6 +346,7 @@ void consoleintr(int c) {
                 // has arrived.
                 cons_in.w = cons_in.e;
                 wakeup(&cons_in.r);
+                pollwakeup();
             }
         }
         break;
@@ -366,11 +369,20 @@ static int consoleioctl(int req, uint64 arg) {
     if (arg && !raw) {
         cons_in.w = cons_in.e;
         wakeup(&cons_in.r);
+        pollwakeup();
     }
     raw = arg != 0;
     int n = cons_in.w - cons_in.r;
     release(&cons_in.lock);
     return n;
+}
+
+// poll(): is there input that read() returns at once?
+static int consolepoll(void) {
+    acquire(&cons_in.lock);
+    int r = cons_in.r != cons_in.w ? POLLIN : 0;
+    release(&cons_in.lock);
+    return r;
 }
 
 // Read up to n bytes of input into dst, a user address if user_dst
@@ -433,4 +445,5 @@ void consoleinit(void) {
     devsw[CONSOLE].read = consoleread;
     devsw[CONSOLE].write = consolewrite;
     devsw[CONSOLE].ioctl = consoleioctl;
+    devsw[CONSOLE].poll = consolepoll;
 }

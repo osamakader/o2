@@ -11,6 +11,7 @@
 #include "fs.h"
 #include "file.h"
 #include "input.h"
+#include "poll.h"
 
 #define NEVENT 256   // a power of two
 
@@ -29,8 +30,17 @@ void input_report(int type, int code, int value)
         q.ev[q.w % NEVENT] = (struct input_event){ type, code, value };
         q.w++;
         wakeup(&q.r);
+        pollwakeup();
     }
     release(&q.lock);
+}
+
+static int inputpoll(void)
+{
+    acquire(&q.lock);
+    int r = q.r != q.w ? POLLIN : 0;
+    release(&q.lock);
+    return r;
 }
 
 // read(): whole events into dst, up to n bytes; waits for at least one
@@ -64,4 +74,5 @@ static int inputread(int user_dst, uint64 dst, int n, int nonblock)
 void inputinit(void)
 {
     devsw[INPUT].read = inputread;
+    devsw[INPUT].poll = inputpoll;
 }
