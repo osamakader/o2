@@ -1200,6 +1200,27 @@ static void test_time(void)
       fail("time", "timegm");
   }
 
+  // the time zone, from /timezone
+  struct { char *file; long off; char *name; } zones[] = {
+    { "+05:30 IST\n", 19800, "IST" },
+    { "-01:00\n", -3600, "UTC-1" },
+    { "+10:30", 37800, "UTC+10:30" },
+  };
+  char name[12];
+  for(int i = 0; i < sizeof(zones) / sizeof(zones[0]); i++){
+    int fd = open("/timezone", O_WRONLY | O_CREATE | O_TRUNC);
+    write(fd, zones[i].file, strlen(zones[i].file));
+    close(fd);
+    struct tm a, b;
+    uint64 t = 1792314711;
+    if(tzoffset(name) != zones[i].off || strcmp(name, zones[i].name) != 0 ||
+       localtime(t, &a)->tm_hour != gmtime(t + zones[i].off, &b)->tm_hour)
+      fail("time", "time zone");
+  }
+  unlink("/timezone");
+  if(tzoffset(name) != 0 || strcmp(name, "UTC") != 0)
+    fail("time", "no time zone");
+
   // setting the clock: a day ahead, and back
   struct timespec ts;
   clock_gettime(CLOCK_REALTIME, &ts);
