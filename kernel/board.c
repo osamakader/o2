@@ -80,6 +80,7 @@ static void find_devices(void) {
     // the other controller (on the Pi, for Wi-Fi)
     find_device("brcm,bcm2711-emmc2", 0, &board.sdhci[0], 0);
     find_device("brcm,bcm2835-mbox", 0, &board.mbox, 0);
+    find_device("brcm,bcm2835-pm-wdt", 0, &board.pm, 0);
     find_device("brcm,bcm2835-sdhci", 0, &board.sdhci[1], 0);
 
     board.nvirtio = 0;
@@ -112,6 +113,8 @@ void board_map(pagetable_t pagetable) {
             map_range(pagetable, board.sdhci[i], PGSIZE);
     if (board.mbox)
         map_range(pagetable, board.mbox, 0x40);
+    if (board.pm)
+        map_range(pagetable, board.pm, 0x114);
     map_range(pagetable, board.intc, board.intc_size);
     if (board.intc2_size)
         map_range(pagetable, board.intc2, board.intc2_size);

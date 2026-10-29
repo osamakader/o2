@@ -13,7 +13,9 @@
 #include "board.h"
 #include "cpu.h"
 
-#define PSCI_CPU_ON_64 0xC4000003
+#define PSCI_CPU_ON_64   0xC4000003
+#define PSCI_SYSTEM_OFF   0x84000008
+#define PSCI_SYSTEM_RESET 0x84000009
 
 // SMCCC: function id and arguments in x0-x3, result in x0;
 // x4-x17 may be clobbered.
@@ -89,4 +91,10 @@ void start_cpus(void)
         if (r != PSCI_SUCCESS)
             printf("cpu %p: psci_cpu_on failed: %ld\n", (void *)mpidr, r);
     }
+}
+
+// Power off, or restart; returns only if PSCI can't.
+void arch_power(int reboot)
+{
+    psci_call(reboot ? PSCI_SYSTEM_RESET : PSCI_SYSTEM_OFF, 0, 0, 0);
 }

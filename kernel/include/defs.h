@@ -51,6 +51,9 @@ int filestat(struct file *f, uint64 addr);
 int filewrite(struct file *f, uint64 addr, int n);
 int fdalloc(struct file *f);
 
+// power.c, and the arch's
+void arch_power(int reboot);
+
 // poll.c
 void pollwakeup(void);
 void poll_tick(void);

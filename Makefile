@@ -65,6 +65,7 @@ KOBJS = \
   kernel/mmap.o \
   kernel/shm.o \
   kernel/poll.o \
+  kernel/power.o \
   kernel/fdt.o \
   kernel/board.o \
   kernel/virtio_net.o \

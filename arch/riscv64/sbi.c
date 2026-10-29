@@ -13,6 +13,7 @@
 #define SBI_EXT_TIME 0x54494D45   // "TIME"
 #define SBI_EXT_HSM  0x48534D     // "HSM"
 #define SBI_EXT_RFNC 0x52464E43   // "RFNC"
+#define SBI_EXT_SRST 0x53525354   // "SRST"
 
 struct sbiret {
     long error;
@@ -96,4 +97,10 @@ void start_cpus(void)
 long sbi_remote_sfence_vma_asid_all(uint64 asid)
 {
     return sbi_call5(SBI_EXT_RFNC, 2, 0, -1UL, 0, -1UL, asid).error;
+}
+
+// Power off, or restart (cold); returns only if the SBI can't.
+void arch_power(int reboot)
+{
+    sbi_call(SBI_EXT_SRST, 0, reboot ? 1 : 0, 0, 0);
 }

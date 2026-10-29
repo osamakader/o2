@@ -27,6 +27,7 @@ struct board {
     uint64 intc, intc_size;     // GIC distributor, or the PLIC
     uint64 intc2, intc2_size;   // GICv3 redistributors, GICv2 CPU interface
     uint64 mbox;                // Raspberry Pi firmware mailbox, or 0
+    uint64 pm;                  // Raspberry Pi power management, or 0
     uint64 sdhci[2];            // SD host controllers that may have the
                                 // card, in order; 0: none
     int nvirtio;                // virtio-mmio transports

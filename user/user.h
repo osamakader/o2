@@ -64,6 +64,7 @@ int fcntl(int, int, int);
 int memfd(uint64);
 int clock_settime(int, struct timespec *);
 int poll(struct pollfd *, int, int);
+int reboot(int);
 
 // ulib.c
 char *strcpy(char *, const char *);
