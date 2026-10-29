@@ -321,6 +321,8 @@ UPROGS = \
   $(B)/user/xv6/_grind \
   $(B)/user/xv6/_stressfs \
   $(B)/user/_wc \
+  $(B)/user/_halt \
+  $(B)/user/_reboot \
 
 ifeq ($(GPU), 1)
 UPROGS += $(B)/user/_gfx $(B)/user/_splash $(B)/user/_evtest $(B)/user/_desk $(WINAPPS)
