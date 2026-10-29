@@ -12,6 +12,7 @@
 #include "lockstat.h"
 #include "socket.h"
 #include "fb.h"
+#include "poll.h"
 
 #define PGSIZE 4096
 
@@ -2010,6 +2011,56 @@ static void test_memfd(void)
     fail("memfd", "bad sizes worked");
 }
 
+// poll(): readiness of pipes, timeouts, waking up, closed ends.
+static void test_poll(void)
+{
+  int fds[2];
+  pipe(fds);
+  struct pollfd p[3] = { { fds[0], POLLIN, 0 }, { fds[1], POLLOUT, 0 }, { -1, POLLIN, 0 } };
+  if(poll(p, 3, 0) != 1 || p[0].revents != 0 || p[1].revents != POLLOUT || p[2].revents != 0)
+    fail("poll", "an empty pipe");
+  write(fds[1], "x", 1);
+  if(poll(p, 1, 0) != 1 || p[0].revents != POLLIN)
+    fail("poll", "a pipe with data");
+  char c;
+  read(fds[0], &c, 1);
+
+  // a timeout: about 100 ms
+  int t0 = uptime();
+  if(poll(p, 1, 100) != 0 || uptime() - t0 < 9 || uptime() - t0 > 100)
+    fail("poll", "timeout");
+
+  // woken by a write from another process
+  int pid = fork();
+  if(pid == 0){
+    pause(5);
+    write(fds[1], "y", 1);
+    exit(0);
+  }
+  t0 = uptime();
+  if(poll(p, 1, -1) != 1 || p[0].revents != POLLIN || uptime() - t0 > 100)
+    fail("poll", "not woken by a write");
+  wait(0);
+  read(fds[0], &c, 1);
+
+  // the ends closing
+  close(fds[1]);
+  if(poll(p, 1, -1) != 1 || p[0].revents != (POLLIN | POLLHUP) || read(fds[0], &c, 1) != 0)
+    fail("poll", "write end closed");
+  close(fds[0]);
+  pipe(fds);
+  close(fds[0]);
+  p[0] = (struct pollfd){ fds[1], POLLOUT, 0 };
+  if(poll(p, 1, 0) != 1 || p[0].revents != (POLLOUT | POLLHUP))
+    fail("poll", "read end closed");
+  close(fds[1]);
+  p[0] = (struct pollfd){ 25, POLLIN, 0 };
+  if(poll(p, 1, 0) != 1 || p[0].revents != POLLNVAL)
+    fail("poll", "a closed fd");
+  if(poll((void *)0x7000000000UL, 1, 0) != -1 || poll(p, 1000, 0) != -1)
+    fail("poll", "bad arguments worked");
+}
+
 static void o2tests(void)
 {
   struct { const char *name; void (*fn)(void); } tests[] = {
@@ -2036,6 +2087,7 @@ static void o2tests(void)
     { "fb", test_fb },
     { "nonblock", test_nonblock },
     { "memfd", test_memfd },
+    { "poll", test_poll },
     { "getppid", test_getppid },
     { "dup2", test_dup2 },
     { "lseek", test_lseek },
