@@ -6,7 +6,8 @@
 # rpi4 is arm64 built for the Raspberry Pi 4, run on qemu's raspi4b.
 # Boots the self-test build, then runs o2tests, xv6's usertests (-q with
 # quick), stressfs, ^C, line editing, network and graphics checks and a
-# timed grind in the shell; on arm64 also o2tests with ARM64_ASID=1.
+# timed grind in the shell, then reboot and halt; on arm64 also o2tests
+# with ARM64_ASID=1.
 # The network and graphics checks need python3 on the host. Exits non-zero if anything fails or the
 # kernel panics. Logs are kept in build/ci/<arch>-<step>.log.
 
@@ -265,6 +266,25 @@ elif ! has grind "[AB]{4}"; then
     fail grind "no progress"
 else
     pass grind
+fi
+
+# 13. reboot comes back to the shell; halt makes qemu exit (run.sh
+# stops it itself otherwise, and says so)
+run reboot 40 "zzz" -- reboot
+if panicked reboot; then
+    fail reboot "kernel panic"
+elif [ "$(grep -c "init: starting sh" "$LOGS/$NAME-reboot.log")" -lt 2 ]; then
+    fail reboot "it didn't come back"
+else
+    pass reboot
+fi
+run halt 20 "zzz" -- halt
+if panicked halt; then
+    fail halt "kernel panic"
+elif ! has halt "o2: powering off" || has halt "terminating on signal"; then
+    fail halt "qemu didn't power off"
+else
+    pass halt
 fi
 
 exit $failed
