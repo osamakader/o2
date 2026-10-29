@@ -217,6 +217,71 @@ timegm(struct tm *tm)
   return days * 86400 + tm->tm_hour * 3600 + tm->tm_min * 60 + tm->tm_sec;
 }
 
+// The time zone: /timezone holds the offset from UTC, "+HH:MM" or "-HH:MM",
+// and maybe a name ("+02:00 CEST"); without it, UTC. (No daylight
+// saving rules: tz sets a new offset.) Read each time, so a change
+// shows at once. Returns the offset in seconds; the name goes in name
+// (12 bytes), if not 0.
+long
+tzoffset(char *name)
+{
+  char buf[32];
+  long off = 0;
+  int fd = open("/timezone", O_RDONLY), n = 0;
+  if(fd >= 0){
+    n = read(fd, buf, sizeof(buf) - 1);
+    close(fd);
+  }
+  buf[n > 0 ? n : 0] = 0;
+  char *s = buf;
+  int sign = *s == '-' ? -1 : 1;
+  if(*s == '+' || *s == '-'){
+    s++;
+    int h = 0, m = 0;
+    while(*s >= '0' && *s <= '9')
+      h = h * 10 + *s++ - '0';
+    if(*s == ':')
+      s++;
+    while(*s >= '0' && *s <= '9')
+      m = m * 10 + *s++ - '0';
+    off = sign * (h * 3600L + m * 60L);
+  }
+  if(name){
+    while(*s == ' ')
+      s++;
+    int i = 0;
+    while(i < 11 && *s > ' ')
+      name[i++] = *s++;
+    name[i] = 0;
+    if(i == 0){
+      // "UTC", "UTC+2", "UTC-05:30"
+      strcpy(name, "UTC");
+      if(off){
+        long a = off < 0 ? -off : off;
+        char *e = name + 3;
+        *e++ = off < 0 ? '-' : '+';
+        if(a / 3600 >= 10)
+          *e++ = '0' + a / 36000;
+        *e++ = '0' + a / 3600 % 10;
+        if(a % 3600){
+          *e++ = ':';
+          *e++ = '0' + a % 3600 / 600;
+          *e++ = '0' + a % 600 / 60;
+        }
+        *e = 0;
+      }
+    }
+  }
+  return off;
+}
+
+// Break t into local date and time (see tzoffset()).
+struct tm *
+localtime(uint64 t, struct tm *tm)
+{
+  return gmtime(t + tzoffset(0), tm);
+}
+
 // Parse a dotted IPv4 address "a.b.c.d" into *a (network byte order).
 // Returns 1, or 0 if s isn't one.
 int

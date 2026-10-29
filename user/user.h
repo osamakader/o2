@@ -84,6 +84,8 @@ int atoi(const char *);
 uint64 time(void);
 struct tm *gmtime(uint64, struct tm *);
 uint64 timegm(struct tm *);
+long tzoffset(char *);
+struct tm *localtime(uint64, struct tm *);
 int inet_aton(const char *, struct in_addr *);
 
 // umalloc.c
