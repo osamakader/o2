@@ -164,7 +164,8 @@ draw(void)
     *e++ = ':';
     *e++ = '0' + now.tm_min / 10;
     *e++ = '0' + now.tm_min % 10;
-    cat(e, " UTC");
+    *e++ = ' ';
+    tzoffset(e);
   }
   win_text(PAD, fy + 4, s, C_TEXT);
   win_update(0, 0, win_w, win_h);
@@ -222,7 +223,7 @@ main(void)
 {
   int w, h;
   win_screen(&w, &h);
-  gmtime(time(), &now);
+  localtime(time(), &now);
   today();
   if(win_open(7 * CELL_W + 2 * PAD, HEAD_H + WDAY_H + 6 * CELL_H + PAD + FOOT_H, "Calendar") < 0)
     exit(1);
@@ -254,7 +255,7 @@ main(void)
     if(r < 0)
       exit(0);
     struct tm t;
-    gmtime(time(), &t);
+    localtime(time(), &t);
     if(t.tm_min != now.tm_min || t.tm_mday != now.tm_mday){
       now = t;
       changed = 1;
