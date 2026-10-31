@@ -117,3 +117,7 @@ void asid_flush(int asid) {
     if (asids && sbi_remote_sfence_vma_asid_all(asid) != SBI_SUCCESS)
         panic("asid_flush: SBI remote sfence failed");
 }
+
+// The DMA alias is the linear map (see DMA_OFFSET): nothing to map.
+void dma_map(uint64 pa) {
+}

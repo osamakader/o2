@@ -40,6 +40,10 @@
 #define PTE_KERN_DATA   (PTE_R | PTE_W)
 #define PTE_KERN_DEVICE (PTE_R | PTE_W)
 
+// DMA memory (dma.c): the linear map; qemu's memory is coherent.
+#define DMA_OFFSET 0xFFFFFFC000000000UL
+#define dma_wmb() asm volatile("fence iorw, iorw" ::: "memory")
+
 // user mappings: readable; writable/executable per PERM_W/PERM_X.
 #define PTE_USER(perm) (PTE_U | PTE_R | \
                         (((perm) & PERM_W) ? PTE_W : 0) | \

@@ -138,3 +138,8 @@ void asid_flush(int asid) {
 }
 
 _Static_assert(NPROC < 256, "ASIDs are slot + 1 and arm64 has 8 bits");
+
+// Map the DMA alias of the page at pa (see DMA_OFFSET), uncached.
+void dma_map(uint64 pa) {
+    kvmmap(kernel_pagetable, pa + DMA_OFFSET, pa, PGSIZE, PTE_KERN_NC);
+}

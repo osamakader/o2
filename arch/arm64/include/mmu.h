@@ -102,6 +102,14 @@ void uvmswitch(uint64 *pagetable, int asid);
 #define PTE_KERN_RODATA (PTE_ATTRIDX(MT_NORMAL) | PTE_SH_INNER | PTE_AP_RO | PTE_PXN | PTE_UXN | PTE_NG)
 #define PTE_KERN_DATA   (PTE_ATTRIDX(MT_NORMAL) | PTE_SH_INNER | PTE_AP_RW | PTE_PXN | PTE_UXN | PTE_NG)
 #define PTE_KERN_DEVICE (PTE_ATTRIDX(MT_DEVICE_nGnRE) | PTE_AP_RW | PTE_PXN | PTE_UXN | PTE_NG)
+#define PTE_KERN_NC     (PTE_ATTRIDX(MT_NORMAL_NC) | PTE_AP_RW | PTE_PXN | PTE_UXN | PTE_NG)
+
+// DMA memory (dma.c): an uncached alias of its pages at physical +
+// DMA_OFFSET, in the TTBR1 half below the linear map: a device behind
+// the Raspberry Pi's PCIe doesn't see the CPU's caches.
+#define DMA_OFFSET 0xFFFFFF8000000000UL
+// order memory writes before a device register write that starts DMA
+#define dma_wmb() asm volatile("dsb sy" ::: "memory")
 
 // user mappings: never executable at EL1; read-only unless PERM_W,
 // not executable at EL0 unless PERM_X.

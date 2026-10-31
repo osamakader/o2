@@ -54,6 +54,11 @@ int fdalloc(struct file *f);
 // power.c, and the arch's
 void arch_power(int reboot);
 
+// dma.c, and the arch's
+void *dma_alloc(void);
+uint64 dma_pa(void *va);
+void dma_map(uint64 pa);
+
 // poll.c
 void pollwakeup(void);
 void poll_tick(void);
