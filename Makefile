@@ -144,14 +144,15 @@ IMAGE = $(B)/kernel8.img
 SDIMG = $(B)/sd.img
 else
 KERNEL_LOAD = 0x40200000
-QEMUOPTS = -machine virt,gic-version=3 -cpu cortex-a57
+# the PCIe ECAM low, where the kernel's linear map reaches it
+QEMUOPTS = -machine virt,gic-version=3,highmem-ecam=off -cpu cortex-a57
 endif
 endif
 
 ifeq ($(GPU), 1)
 KOBJS += kernel/fb.o kernel/virtio_gpu.o kernel/rpi_fb.o
 KOBJS += kernel/input.o kernel/virtio_input.o
-KOBJS += kernel/dma.o
+KOBJS += kernel/dma.o kernel/pci.o
 CFLAGS += -DCONFIG_GPU
 endif
 
@@ -367,6 +368,11 @@ endif
 # monitor's screendump does
 ifeq ($(GPU), 1)
 QEMUOPTS += -device virtio-gpu-device,bus=virtio-mmio-bus.2
+ifeq ($(USB), 1)
+# USB=1: a USB controller with a keyboard and a mouse, as on the
+# Raspberry Pi, instead of the virtio ones
+QEMUOPTS += -device qemu-xhci -device usb-kbd -device usb-mouse
+else
 # and a keyboard and a tablet (an absolute pointer: the host's mouse)
 QEMUOPTS += -device virtio-keyboard-device,bus=virtio-mmio-bus.3
 QEMUOPTS += -device virtio-tablet-device,bus=virtio-mmio-bus.4
@@ -375,6 +381,7 @@ QEMUOPTS += -device virtio-tablet-device,bus=virtio-mmio-bus.4
 # and send it the window's pointer, relative, so the guest's pointer
 # couldn't follow the host's to the edges.
 QEMUMOUSE = -device virtio-mouse-device,bus=virtio-mmio-bus.5
+endif
 endif
 QEMUOPTS += -global virtio-mmio.force-legacy=false
 QEMUOPTS += -drive file=$(FSIMG),if=none,format=raw,id=x0

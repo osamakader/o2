@@ -5,6 +5,7 @@
 #include "intc.h"
 #include "timer.h"
 #include "defs.h"
+#include "pci.h"
 #include "vm.h"
 #include "param.h"
 #include "cpu.h"
@@ -54,6 +55,7 @@ int main(int boot, uint64 dtb) {
         virtio_gpu_init();
         rpi_fb_init();
         virtio_input_init();
+        pci_init();
 #endif
         binit();
         iinit();

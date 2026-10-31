@@ -197,7 +197,7 @@ static uint64 cells(const char *p, uint32 n) {
 // through the "ranges" of node and its ancestors (a bus's addresses
 // often differ from the CPU's, as on the Raspberry Pi: 0x7e000000 for
 // 0xfe000000). Returns -1 if some range doesn't cover it.
-static uint64 translate(int node, uint64 addr) {
+uint64 fdt_translate(int node, uint64 addr) {
     for (; node >= 0; node = fdt_parent(node)) {
         int len, parent = fdt_parent(node);
         if (parent < 0)
@@ -239,7 +239,7 @@ int fdt_reg(int node, int i, uint64 *addr, uint64 *size) {
     uint32 entry = 4 * (ac + sc);
     if (reg == 0 || ac > 2 || sc > 2 || entry * (i + 1) > len)
         return -1;
-    uint64 a = translate(parent, cells(reg + entry * i, ac));
+    uint64 a = fdt_translate(parent, cells(reg + entry * i, ac));
     if (a == (uint64)-1)
         return -1;
     *addr = a;
