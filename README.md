@@ -12,6 +12,7 @@ Minimal xv6-like kernel for arm64 and riscv64.
     make ARM64_ASID=1 qemu  # arm64: per-process ASIDs (see Isolation)
     make GPU=1 qemu      # with graphics: the framebuffer, splash, gfx, desk
     make GPU=1 qemu-gui  # ... and a window showing it
+    make GPU=1 USB=1 qemu-gui  # ... with a USB keyboard and mouse
 
 The kernel boots into xv6's shell; programs live in `/` (`ls`, `cat`,
 `echo`, `grep`, `wc`, `mkdir`, `rm`, `ln`, `kill [-sig]`, `ps`, `pwd`, `dmesg`, `date`), plus
@@ -45,7 +46,7 @@ which is how it is tested (`tools/ci.sh rpi4`).
 What differs from qemu virt: RAM from 0, entry in EL2, a GIC-400
 (GICv2), the CPUs started from the firmware's spin table, the SD card
 (SDHCI) for storage, the firmware's framebuffer (mailbox) for the
-screen, and no RTC (the time starts at 1970), network, or keyboard.
+screen, USB through the PCIe bridge (GPU=1), and no RTC or network.
 
 On a real Pi 4 (tried on a Pi 4 Model B Rev 1.5: the shell, gfx and
 the boot animation on HDMI work):
@@ -186,8 +187,18 @@ device, with a timeout), so an idle desktop doesn't use the CPU.
 
 Keys and the mouse come from the `input` device: evdev-style events
 (input.h; `evtest` prints them) from qemu's virtio keyboard, tablet
-(the GUI's pointer) and mouse. Without a keyboard, as on the Pi for
-now, lines typed on the serial console go to the top window.
+(the GUI's pointer) and mouse, or from USB keyboards and mice. Without
+a keyboard, lines typed on the serial console go to the top window.
+
+USB (with GPU=1): the PCI bus is scanned (qemu virt's ECAM host, or
+the Pi 4's PCIe bridge, set up as Linux does) and an xHCI controller
+on it started: qemu's `qemu-xhci` (`make GPU=1 USB=1`), the Pi 4's
+VL805, whose firmware the Pi's firmware loads. A kernel thread, `usb`,
+polls it every tick. Keyboards and mice plugged into its ports, also
+later, are used in the HID boot protocol: no hubs (a keyboard with a
+hub in it may not work), no key repeat. Rings and buffers are DMA
+pages (dma.c), uncached on arm64 since the Pi's PCIe doesn't see the
+CPU caches.
 Ctrl-Alt-Backspace, or a line `~.` on the serial console, quits. The
 font is Spleen 8x16 (BSD-2-Clause, user/font.h, made by
 tools/bdf2c.py). `tools/run.sh -m file` sends monitor commands
