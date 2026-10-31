@@ -152,7 +152,7 @@ endif
 ifeq ($(GPU), 1)
 KOBJS += kernel/fb.o kernel/virtio_gpu.o kernel/rpi_fb.o
 KOBJS += kernel/input.o kernel/virtio_input.o
-KOBJS += kernel/dma.o kernel/pci.o
+KOBJS += kernel/dma.o kernel/pci.o kernel/xhci.o kernel/usbhid.o
 CFLAGS += -DCONFIG_GPU
 endif
 

@@ -6,6 +6,7 @@
 #include "timer.h"
 #include "defs.h"
 #include "pci.h"
+#include "usb.h"
 #include "vm.h"
 #include "param.h"
 #include "cpu.h"
@@ -56,6 +57,7 @@ int main(int boot, uint64 dtb) {
         rpi_fb_init();
         virtio_input_init();
         pci_init();
+        xhci_init();
 #endif
         binit();
         iinit();
