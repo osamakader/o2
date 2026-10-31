@@ -24,6 +24,7 @@ struct pci_host {
     uint64 mem_pci, mem_cpu, mem_size;   // the window, as PCI and CPU see it
     uint64 next;                         // PCI address free from here
     int onlydev0;                        // only device 0 on each bus
+    void (*after_scan)(void);            // may be 0
 };
 
 #define NPCIDEV 16
@@ -40,6 +41,7 @@ extern struct pci_host pcihost;
 
 void pci_init(void);
 int pci_window(int node);
+int pcie_brcm_init(void);
 struct pci_dev *pci_find(uint32 class);
 void pci_enable(struct pci_dev *d);
 uint32 pci_read(struct pci_dev *d, int off);

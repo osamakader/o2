@@ -130,8 +130,8 @@ static void found(int bus, int dev, int fn) {
 
     if (type == 1) {
         // a bridge: number the bus behind it, scan that, and open a
-        // window for what is there (1MB granules)
-        assign_bars(d, 2);
+        // window for what is there (1MB granules). Its own BARs stay
+        // unused.
         int sec = ++lastbus;
         pci_write(d, PCI_BUSES, (pci_read(d, PCI_BUSES) & 0xff000000) | 0xff << 16 | sec << 8 | bus);
         pcihost.next = (pcihost.next + 0xfffff) & ~0xfffffUL;
@@ -180,10 +180,12 @@ void pci_init(void) {
         kvmmap(kernel_pagetable, P2V(ecam), ecam, size < 0x400000 ? size : 0x400000, PTE_KERN_DEVICE);
         pcihost.read = ecam_read;
         pcihost.write = ecam_write;
-    } else {
+    } else if (pcie_brcm_init() < 0) {
         return;
     }
     scan_bus(0);
+    if (pcihost.after_scan)
+        pcihost.after_scan();
 }
 
 // The first device of the class (base class, subclass, interface), or 0.
