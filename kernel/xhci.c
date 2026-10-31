@@ -1,7 +1,8 @@
 // xHCI, the USB host controller on PCI: qemu's qemu-xhci, the Raspberry
-// Pi 4's VL805. Enough of it for keyboards and mice plugged into its
-// ports (no hubs): the devices are addressed and configured, and their
-// HID boot interfaces' interrupt endpoints polled (usbhid.c).
+// Pi 4's VL805. Enough of it for keyboards and mice, on its ports or
+// behind hubs (the Pi 4's USB 2 ports are behind one): the devices are
+// addressed and configured, and their HID boot interfaces' interrupt
+// endpoints polled (usbhid.c). Hubs' ports are polled too.
 //
 // A kernel thread ("usb") does it all, polling the event ring every
 // tick instead of taking interrupts, which PCI delivers differently on
@@ -93,10 +94,18 @@ struct ring {
 
 #define NSLOT 16
 
-// a device: a slot, on a root port
+#define NHUBPORT 15
+
+// a device: a slot, on a root port or a hub's
 static struct usbdev {
     int used;
-    int port, speed;
+    int port, speed;      // the root port it is behind
+    int route, depth;     // the hubs' ports down to it, 4 bits each
+    int parent, pport;    // the hub it is on (slot) and its port; 0: none
+    int ttslot, ttport;   // low/full speed behind a high-speed hub: its TT
+    char where[16];       // "2", "1.3": the ports, for messages
+    int nports;           // a hub: its ports, and the devices on them
+    int child[NHUBPORT + 1];
     uint64 *ctx;          // output device context
     uint32 *in;           // input context
     struct ring ep0;
@@ -391,8 +400,9 @@ static int configure(struct usbdev *d, int slot) {
             maxdci = dci;
     }
     uint32 *s = in_slot(d);
-    s[0] = d->speed << 20 | maxdci << 27;
+    s[0] = d->route | d->speed << 20 | maxdci << 27;
     s[1] = d->port << 16;
+    s[2] = d->ttslot | d->ttport << 8;
     int cc = command(dma_pa(d->in), TRB_TYPE(TRB_CONFIG_EP) | slot << 24, 0);
     if (cc != CC_SUCCESS) {
         printf("usb: configure endpoints: completion code %d\n", cc);
@@ -400,63 +410,78 @@ static int configure(struct usbdev *d, int slot) {
     }
     d->nep = nfound;
     for (int i = 0; i < nfound; i++) {
-        printf("usb: port %d: %s\n", d->port, found[i].proto == HID_KEYBOARD ? "keyboard" : "mouse");
+        printf("usb: port %s: %s\n", d->where, found[i].proto == HID_KEYBOARD ? "keyboard" : "mouse");
         queue_report(d, slot, i);
     }
     return 0;
 }
 
-// A device was plugged into port: give it a slot and an address, and
-// configure it.
-static void attach(int port) {
-    uint32 sc = rd(op, PORTSC(port));
-    int speed = PORT_SPEED(sc);
-    if (!(sc & PORT_PED)) {
-        // reset the port (USB 2), which enables it
-        wr(op, PORTSC(port), (sc & PORT_KEEP) | PORT_PR);
-        if (waitreg(op, PORTSC(port), PORT_PRC, PORT_PRC) < 0)
-            return;
-        sc = rd(op, PORTSC(port));
-        wr(op, PORTSC(port), (sc & PORT_KEEP) | PORT_PRC);
-        if (!(sc & PORT_PED))
-            return;
-        speed = PORT_SPEED(sc);
-    }
+static int hub_init(struct usbdev *d, int slot);
+
+// Give a device a slot and an address, and configure it: on root port
+// port, or on hub parent's port pport (route is the path to it).
+// Returns its slot, or 0.
+static int enumerate(int port, int speed, struct usbdev *parent, int pport) {
     int slot;
     if (command(0, TRB_TYPE(TRB_ENABLE_SLOT), &slot) != CC_SUCCESS || slotdev(slot) == 0) {
-        printf("usb: port %d: no slot\n", port);
-        return;
+        printf("usb: no slot for a device\n");
+        return 0;
     }
     struct usbdev *d = slotdev(slot);
     if (d->ctx == 0 && ((d->ctx = dma_alloc()) == 0 || (d->in = dma_alloc()) == 0 ||
                         (d->buf = dma_alloc()) == 0))
-        return;
+        return 0;
     memset(d->ctx, 0, PGSIZE);
     if (ring_init(&d->ep0) < 0)
-        return;
+        return 0;
     d->used = 1;
     d->port = port;
     d->speed = speed;
     d->nep = 0;
+    d->nports = 0;
+    memset(d->child, 0, sizeof(d->child));
+    d->parent = parent ? parent - devs : 0;
+    d->pport = pport;
+    d->route = parent ? parent->route | pport << (4 * parent->depth) : 0;
+    d->depth = parent ? parent->depth + 1 : 0;
+    d->ttslot = d->ttport = 0;
+    if (parent && speed < 3) {
+        // low or full speed: through the nearest high-speed hub's
+        // transaction translator
+        d->ttslot = parent->speed == 3 ? d->parent : parent->ttslot;
+        d->ttport = parent->speed == 3 ? pport : parent->ttport;
+    }
+    // "port", or the parent's, "." and pport
+    int n = 0;
+    if (parent) {
+        for (char *c = parent->where; *c && n < sizeof(d->where) - 5; c++)
+            d->where[n++] = *c;
+        d->where[n++] = '.';
+    }
+    int v = parent ? pport : port;
+    if (v >= 10)
+        d->where[n++] = '0' + v / 10;
+    d->where[n++] = '0' + v % 10;
+    d->where[n] = 0;
     dcbaa[slot] = dma_pa(d->ctx);
-    portdev[port] = slot;
 
     // address it, endpoint 0 at the speed's packet size
     int mps = speed == 4 ? 512 : speed == 3 ? 64 : 8;
     memset(d->in, 0, PGSIZE);
     in_ctl(d)[1] = 0x3;   // the slot and endpoint 0
-    in_slot(d)[0] = speed << 20 | 1 << 27;
+    in_slot(d)[0] = d->route | speed << 20 | 1 << 27;
     in_slot(d)[1] = port << 16;
+    in_slot(d)[2] = d->ttslot | d->ttport << 8;
     ep_ctx(in_ep(d, 1), 4, mps, &d->ep0, 0);
     int cc = command(dma_pa(d->in), TRB_TYPE(TRB_ADDRESS_DEV) | slot << 24, 0);
     if (cc != CC_SUCCESS) {
-        printf("usb: port %d: address device: completion code %d\n", port, cc);
-        return;
+        printf("usb: port %s: address device: completion code %d\n", d->where, cc);
+        return slot;
     }
     // the real packet size of endpoint 0 (full speed: 8 to 64)
     if (control(d, slot, 0x80, USB_GET_DESCRIPTOR, USB_DESC_DEVICE << 8, 0, 8) < 0) {
-        printf("usb: port %d: no device descriptor\n", port);
-        return;
+        printf("usb: port %s: no device descriptor\n", d->where);
+        return slot;
     }
     if (speed < 3 && d->buf[7] != mps) {
         mps = d->buf[7];
@@ -466,26 +491,47 @@ static void attach(int port) {
         command(dma_pa(d->in), TRB_TYPE(TRB_EVAL_CTX) | slot << 24, 0);
     }
     if (control(d, slot, 0x80, USB_GET_DESCRIPTOR, USB_DESC_DEVICE << 8, 0, 18) < 0)
-        return;
-    printf("usb: port %d: %x:%x, class %d\n", port, d->buf[8] | d->buf[9] << 8,
-           d->buf[10] | d->buf[11] << 8, d->buf[4]);
-    if (d->buf[4] == USB_CLASS_HUB)
-        printf("usb: port %d: hubs aren't supported; plug the device in directly\n", port);
-    else if (configure(d, slot) < 0)
-        printf("usb: port %d: configuring failed\n", port);
+        return slot;
+    int class = d->buf[4];
+    printf("usb: port %s: %x:%x, class %d\n", d->where, d->buf[8] | d->buf[9] << 8,
+           d->buf[10] | d->buf[11] << 8, class);
+    if (configure(d, slot) < 0)
+        printf("usb: port %s: configuring failed\n", d->where);
+    else if (class == USB_CLASS_HUB && hub_init(d, slot) < 0)
+        printf("usb: port %s: the hub didn't start\n", d->where);
+    return slot;
 }
 
-static void detach(int port) {
-    int slot = portdev[port];
+// The device at slot is gone, and what was behind it if a hub.
+static void detach(int slot) {
     struct usbdev *d = slotdev(slot);
-    portdev[port] = 0;
     if (d == 0 || !d->used)
         return;
+    for (int p = 1; p <= d->nports; p++)
+        if (d->child[p])
+            detach(d->child[p]);
     d->used = 0;
     d->nep = 0;
+    d->nports = 0;
     command(0, TRB_TYPE(TRB_DISABLE_SLOT) | slot << 24, 0);
     dcbaa[slot] = 0;
-    printf("usb: port %d: unplugged\n", port);
+    printf("usb: port %s: unplugged\n", d->where);
+}
+
+// A device was plugged into root port port: reset the port (USB 2),
+// which enables it, and enumerate the device.
+static void attach(int port) {
+    uint32 sc = rd(op, PORTSC(port));
+    if (!(sc & PORT_PED)) {
+        wr(op, PORTSC(port), (sc & PORT_KEEP) | PORT_PR);
+        if (waitreg(op, PORTSC(port), PORT_PRC, PORT_PRC) < 0)
+            return;
+        sc = rd(op, PORTSC(port));
+        wr(op, PORTSC(port), (sc & PORT_KEEP) | PORT_PRC);
+        if (!(sc & PORT_PED))
+            return;
+    }
+    portdev[port] = enumerate(port, PORT_SPEED(sc), 0, 0);
 }
 
 static int pending[256];   // ports with a status change
@@ -499,10 +545,89 @@ static void port_event(int port) {
 static void port_check(int port) {
     uint32 sc = rd(op, PORTSC(port));
     wr(op, PORTSC(port), (sc & PORT_KEEP) | (sc & PORT_CHANGES));   // clear them
-    if ((sc & PORT_CCS) && portdev[port] == 0)
+    if ((sc & PORT_CCS) && portdev[port] == 0) {
         attach(port);
-    else if (!(sc & PORT_CCS) && portdev[port])
-        detach(port);
+    } else if (!(sc & PORT_CCS) && portdev[port]) {
+        detach(portdev[port]);
+        portdev[port] = 0;
+    }
+}
+
+// hubs (USB 2): class requests on their ports
+#define HUB_GET_STATUS    0
+#define HUB_CLEAR_FEATURE 1
+#define HUB_SET_FEATURE   3
+#define HUB_DESC          0x29
+#define PORT_RESET        4
+#define PORT_POWER        8
+#define C_PORT_CONNECTION 16
+#define C_PORT_RESET      20
+#define HUB_CONNECTED     (1 << 0)
+#define HUB_ENABLED       (1 << 1)
+#define HUB_LOWSPEED      (1 << 9)
+#define HUB_HIGHSPEED     (1 << 10)
+
+// A hub's port's status, and its changes in *change; -1 on failure.
+static int hub_status(struct usbdev *d, int slot, int p, int *change) {
+    if (control(d, slot, 0xa3, HUB_GET_STATUS, 0, p, 4) < 0)
+        return -1;
+    *change = d->buf[2] | d->buf[3] << 8;
+    return d->buf[0] | d->buf[1] << 8;
+}
+
+// A new hub: tell the controller it is one, and power its ports.
+static int hub_init(struct usbdev *d, int slot) {
+    if (control(d, slot, 0xa0, USB_GET_DESCRIPTOR, HUB_DESC << 8, 0, 8) < 0)
+        return -1;
+    int nports = d->buf[2] < NHUBPORT ? d->buf[2] : NHUBPORT;
+    int ttt = (d->buf[3] >> 5) & 3, settle = d->buf[5] * 2;
+    memset(d->in, 0, PGSIZE);
+    in_ctl(d)[1] = 1;   // the slot context
+    in_slot(d)[0] = d->route | d->speed << 20 | 1 << 26 | 1 << 27;   // a hub
+    in_slot(d)[1] = d->port << 16 | nports << 24;
+    in_slot(d)[2] = d->ttslot | d->ttport << 8 | ttt << 16;
+    int cc = command(dma_pa(d->in), TRB_TYPE(TRB_CONFIG_EP) | slot << 24, 0);
+    if (cc != CC_SUCCESS) {
+        printf("usb: port %s: hub context: completion code %d\n", d->where, cc);
+        return -1;
+    }
+    for (int p = 1; p <= nports; p++)
+        control(d, slot, 0x23, HUB_SET_FEATURE, PORT_POWER, p, 0);
+    sleep_ticks(settle / 10 + 2);
+    d->nports = nports;
+    printf("usb: port %s: hub, %d ports\n", d->where, nports);
+    return 0;
+}
+
+// Look at a hub's ports: devices plugged in or unplugged.
+static void hub_poll(struct usbdev *d, int slot) {
+    for (int p = 1; p <= d->nports; p++) {
+        int change, st = hub_status(d, slot, p, &change);
+        if (st < 0)
+            return;
+        if (change & 1)
+            control(d, slot, 0x23, HUB_CLEAR_FEATURE, C_PORT_CONNECTION, p, 0);
+        if ((st & HUB_CONNECTED) && d->child[p] == 0) {
+            // reset the port, which enables it
+            control(d, slot, 0x23, HUB_SET_FEATURE, PORT_RESET, p, 0);
+            int t;
+            for (t = 0; t < 50; t++) {
+                sleep_ticks(1);
+                st = hub_status(d, slot, p, &change);
+                if (st < 0 || (change & (1 << 4)))
+                    break;
+            }
+            control(d, slot, 0x23, HUB_CLEAR_FEATURE, C_PORT_RESET, p, 0);
+            if (st < 0 || !(st & HUB_ENABLED))
+                continue;
+            sleep_ticks(2);   // reset recovery
+            int speed = st & HUB_LOWSPEED ? 2 : st & HUB_HIGHSPEED ? 3 : 1;
+            d->child[p] = enumerate(d->port, speed, d, p);
+        } else if (!(st & HUB_CONNECTED) && d->child[p]) {
+            detach(d->child[p]);
+            d->child[p] = 0;
+        }
+    }
 }
 
 static int start(struct pci_dev *pd) {
@@ -575,7 +700,7 @@ static void usb_thread(void *arg) {
     sleep_ticks(10);   // links coming up
     for (int p = 1; p <= maxports; p++)
         port_check(p);
-    for (;;) {
+    for (int t = 0; ; t++) {
         struct trb e;
         while (next_event(&e))
             dispatch(&e);
@@ -584,6 +709,10 @@ static void usb_thread(void *arg) {
                 pending[p] = 0;
                 port_check(p);
             }
+        if (t % 25 == 0)   // the hubs' ports, 4 times a second
+            for (int slot = 1; slot <= NSLOT; slot++)
+                if (devs[slot].used && devs[slot].nports)
+                    hub_poll(&devs[slot], slot);
         sleep_ticks(1);
     }
 }
