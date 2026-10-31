@@ -28,6 +28,7 @@ pte_t *walk(pagetable_t pagetable, uint64 va, int alloc);
 int mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, uint64 attrs);
 void kvminit(void);
 void kvmmap(pagetable_t pagetable, uint64 va, uint64 pa, uint64 size, uint64 attrs);
+void kvmsync(void);   // arch: new kernel mappings visible to this CPU
 void kvmmap_devices(pagetable_t pagetable);   // arch: map device registers
 
 uint64 walkaddr(pagetable_t pagetable, uint64 va);

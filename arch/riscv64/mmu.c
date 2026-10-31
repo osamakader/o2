@@ -121,3 +121,9 @@ void asid_flush(int asid) {
 // The DMA alias is the linear map (see DMA_OFFSET): nothing to map.
 void dma_map(uint64 pa) {
 }
+
+// New kernel page-table entries: the hart may have cached their
+// absence, so fence.
+void kvmsync(void) {
+    asm volatile("sfence.vma zero, zero");
+}

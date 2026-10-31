@@ -143,3 +143,9 @@ _Static_assert(NPROC < 256, "ASIDs are slot + 1 and arm64 has 8 bits");
 void dma_map(uint64 pa) {
     kvmmap(kernel_pagetable, pa + DMA_OFFSET, pa, PGSIZE, PTE_KERN_NC);
 }
+
+// New kernel page-table entries: visible to the walker. (Entries that
+// were invalid aren't in the TLB: no invalidation.)
+void kvmsync(void) {
+    asm volatile("dsb ishst; isb" ::: "memory");
+}

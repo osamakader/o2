@@ -59,9 +59,12 @@ int mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, uint64 at
     return 0;
 }
 
+// Map kernel addresses; also after boot (drivers), so the page-table
+// walker is made to see the new entries.
 void kvmmap(pagetable_t pagetable, uint64 va, uint64 pa, uint64 size, uint64 attrs) {
     if (mappages(pagetable, va, size, pa, attrs) != 0)
         panic("kvmmap");
+    kvmsync();
 }
 
 static pagetable_t kvmmake(void) {
