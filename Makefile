@@ -369,9 +369,10 @@ endif
 ifeq ($(GPU), 1)
 QEMUOPTS += -device virtio-gpu-device,bus=virtio-mmio-bus.2
 ifeq ($(USB), 1)
-# USB=1: a USB controller with a keyboard and a mouse, as on the
-# Raspberry Pi, instead of the virtio ones
-QEMUOPTS += -device qemu-xhci -device usb-kbd -device usb-mouse
+# USB=1: a USB controller with a keyboard and a mouse behind a hub, as
+# on the Raspberry Pi 4, instead of the virtio ones
+QEMUOPTS += -device qemu-xhci,id=xhci -device usb-hub,bus=xhci.0,port=1
+QEMUOPTS += -device usb-kbd,bus=xhci.0,port=1.1 -device usb-mouse,bus=xhci.0,port=1.2
 else
 # and a keyboard and a tablet (an absolute pointer: the host's mouse)
 QEMUOPTS += -device virtio-keyboard-device,bus=virtio-mmio-bus.3
