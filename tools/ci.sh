@@ -217,6 +217,20 @@ if [ "$NAME" != rpi4 ]; then
         fail input "the events didn't arrive"
     fi
 
+    # and the same through USB (USB=1: qemu's xHCI controller with a
+    # USB keyboard and mouse, as on the Raspberry Pi)
+    export USB=1
+    run usb 60 "code 272 value 0" -m "$PWD/$LOGS/$NAME-input.mon" -- "evtest 12"
+    unset USB
+    if panicked usb; then
+        fail usb "kernel panic"
+    elif has usb "type 1 code 30 value 1" && has usb "type 2 code 0 value 100" &&
+         has usb "code 272 value 0"; then
+        pass usb
+    else
+        fail usb "the events didn't arrive"
+    fi
+
     # 11. the desktop: Files opens README in view; a command typed into
     # the terminal runs; the screen shows them and the taskbar. The
     # pointer starts in the middle of the 1280x800 screen.
