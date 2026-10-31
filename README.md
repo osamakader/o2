@@ -194,9 +194,10 @@ USB (with GPU=1): the PCI bus is scanned (qemu virt's ECAM host, or
 the Pi 4's PCIe bridge, set up as Linux does) and an xHCI controller
 on it started: qemu's `qemu-xhci` (`make GPU=1 USB=1`), the Pi 4's
 VL805, whose firmware the Pi's firmware loads. A kernel thread, `usb`,
-polls it every tick. Keyboards and mice plugged into its ports, also
-later, are used in the HID boot protocol: no hubs (a keyboard with a
-hub in it may not work), no key repeat. Rings and buffers are DMA
+polls it every tick. Keyboards and mice plugged into its ports or
+behind USB 2 hubs (the Pi 4's USB 2 ports are behind one; qemu's USB=1
+puts its keyboard and mouse behind one too), also later, are used in
+the HID boot protocol; no key repeat. Rings and buffers are DMA
 pages (dma.c), uncached on arm64 since the Pi's PCIe doesn't see the
 CPU caches.
 Ctrl-Alt-Backspace, or a line `~.` on the serial console, quits. The
