@@ -196,6 +196,9 @@ void board_init(uint64 dtb) {
 
     find_devices();
 
+    // the device tree itself, which drivers read after boot too
+    reserve(board.fdt, fdt_size());
+
     // memory the firmware keeps for itself
     uint64 addr, size;
     for (int i = 0; fdt_memreserve(i, &addr, &size) == 0; i++)
