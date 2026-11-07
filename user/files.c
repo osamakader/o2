@@ -1,6 +1,6 @@
 // files [dir]: a file explorer on the desktop. Lists a directory,
 // folders first; click to select, double-click (or Enter) to open: a
-// folder goes in, a text file opens in view, a program runs (desktop
+// folder goes in, a text file opens in edit, a program runs (desktop
 // apps by themselves, others in a terminal). Up, or Backspace, goes to
 // the parent folder; the wheel, arrows and Page Up/Down scroll.
 
@@ -42,7 +42,7 @@ static int rows;              // entries that fit
 static int lastclick = -100, lastsel = -1;
 
 // desktop apps run by themselves; other programs in a terminal
-static char *apps[] = { "term", "files", "view", "cal", "power" };
+static char *apps[] = { "term", "files", "view", "cal", "power", "edit" };
 
 static void
 join(char *buf, char *dir, char *name)
@@ -243,7 +243,7 @@ open_(int i)
         app = 1;
     strcpy(cmd, app ? "" : "term ");
   } else
-    strcpy(cmd, "view ");
+    strcpy(cmd, "edit ");
   strcpy(cmd + strlen(cmd), path);
   win_launch(cmd);
 }
