@@ -47,6 +47,7 @@ static struct {
 } launchers[] = {
   { "Terminal", "term" },
   { "Files", "files" },
+  { "Editor", "edit" },
   { "Calendar", "cal" },
   { "Power", "power" },
 };
