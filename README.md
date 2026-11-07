@@ -175,9 +175,14 @@ them. The apps:
   the line itself: ^U, ^C (interrupts what its shell runs), ^D (ends
   the shell).
 - `files [dir]`: a file explorer. Double-click or Enter opens: a folder
-  goes in, a text file opens in `view`, a program runs (in a terminal,
+  goes in, a text file opens in `edit`, a program runs (in a terminal,
   unless it is an app). Up or Backspace goes to the parent.
 - `view file`: a text viewer; the wheel, arrows and Page Up/Down scroll.
+- `edit [file]`: a text editor (the taskbar's Editor button). Type to
+  insert; the arrows, Home/End, Page Up/Down and a click move. ^S saves
+  (asking for a name if there is none), ^Q quits (asking first if there
+  are changes), ^F finds, ^G goes to a line, ^K cuts the line and ^U
+  pastes it.
 - `cal`: a calendar, a month at a time with today marked; the
   taskbar's clock opens it too.
 - `power`: shut down or restart (the taskbar's Power button).
