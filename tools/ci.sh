@@ -231,7 +231,7 @@ if [ "$NAME" != rpi4 ]; then
         fail usb "the events didn't arrive"
     fi
 
-    # 11. the desktop: Files opens README in view; a command typed into
+    # 11. the desktop: Files opens README in edit; a command typed into
     # the terminal runs; the screen shows them and the taskbar. The
     # pointer starts in the middle of the 1280x800 screen.
     {
@@ -267,10 +267,36 @@ if [ "$NAME" != rpi4 ]; then
     else
         fail desk "the screen doesn't show the desktop"
     fi
+
+    # 12. the editor: from its taskbar button, a line typed, corrected,
+    # saved under a name; then the terminal shows the file
+    {
+        echo "mouse_move -600 -400"
+        echo "mouse_move 140 787"      # the Editor button
+        echo "mouse_button 1"
+        echo "mouse_button 0"
+        echo "mouse_move 0 0"
+        echo "mouse_move 0 0"
+        echo "mouse_move 0 0"
+        for k in e d i t o k x backspace ctrl-s n o t e ret ctrl-q; do
+            echo "sendkey $k"
+        done
+        for k in c a t spc n o t e spc shift-dot spc c o n s o l e ret; do
+            echo "sendkey $k"
+        done
+    } > "$LOGS/$NAME-edit.mon"
+    run edit 60 "^editok" -m "$PWD/$LOGS/$NAME-edit.mon" -- desk
+    if panicked edit; then
+        fail edit "kernel panic"
+    elif has edit "^editok"; then
+        pass edit
+    else
+        fail edit "the file wasn't saved"
+    fi
 fi
 unset GPU
 
-# 12. grind runs until stopped: no errors or panic within the time limit
+# 13. grind runs until stopped: no errors or panic within the time limit
 run grind $((GRIND + DELAY)) "^grind:" -- grind
 if panicked grind; then
     fail grind "kernel panic"
@@ -282,7 +308,7 @@ else
     pass grind
 fi
 
-# 13. reboot comes back to the shell; halt makes qemu exit (run.sh
+# 14. reboot comes back to the shell; halt makes qemu exit (run.sh
 # stops it itself otherwise, and says so)
 run reboot 40 "zzz" -- reboot
 if panicked reboot; then
