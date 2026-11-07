@@ -331,6 +331,15 @@ dosave(void)
     strcpy(msg, "cannot write the file");
 }
 
+// Show the cursor's line in the middle (after a jump).
+static void
+center(void)
+{
+  top = linestart(cur);
+  for(int n = rows / 2; n > 0 && top > 0; n--)
+    top = linestart(top - 1);
+}
+
 // From after the cursor, around: the next found.
 static void
 findnext(void)
@@ -344,6 +353,7 @@ findnext(void)
       ;
     if(j == n){
       cur = i;
+      center();
       return;
     }
   }
@@ -372,6 +382,7 @@ gotoline(void)
     if(at(i) == '\n')
       l++;
   cur = i;
+  center();
 }
 
 // A key while a question is asked.
