@@ -1875,10 +1875,17 @@ static void test_net(void)
     fail("net", "ping 10.0.2.2");
   close(fd);
 
-  if(socket(AF_INET, 1, 0) != -1 || socket(1, SOCK_DGRAM, 0) != -1 ||
-     socket(AF_INET, SOCK_DGRAM, 6) != -1 || bind(0, &a, sizeof(a)) != -1 ||
+  if(socket(AF_INET, 3, 0) != -1 || socket(1, SOCK_DGRAM, 0) != -1 ||
+     socket(AF_INET, SOCK_DGRAM, IPPROTO_TCP) != -1 ||
+     socket(AF_INET, SOCK_STREAM, IPPROTO_UDP) != -1 || bind(0, &a, sizeof(a)) != -1 ||
      sendto(1, msg, 1, 0, &gw, sizeof(gw)) != -1)
     fail("net", "bad arguments accepted");
+
+  // a TCP socket not connected: nothing to read or write
+  fd = socket(AF_INET, SOCK_STREAM, 0);
+  if(fd < 0 || read(fd, buf, 1) != -1 || write(fd, "x", 1) != -1)
+    fail("net", "an unconnected TCP socket");
+  close(fd);
 }
 
 // The framebuffer device (skipped without a GPU).
