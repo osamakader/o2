@@ -160,22 +160,28 @@ else
     fail lineedit "history, editing or completion didn't work"
 fi
 
-# 8. the network: UDP to an echo server on the host (10.0.2.2 in qemu's
-# user-mode network is the host's loopback), and ping. Not on the Pi:
-# raspi4b has no network card o2 drives.
+# 8. the network: UDP and TCP to echo servers on the host (10.0.2.2 in
+# qemu's user-mode network is the host's loopback), and ping. Not on the
+# Pi: raspi4b has no network card o2 drives.
 if [ "$NAME" != rpi4 ]; then
     python3 tools/udpecho.py > "$LOGS/$NAME-udpecho.port" &
     echopid=$!
+    python3 tools/tcpecho.py > "$LOGS/$NAME-tcpecho.port" &
+    tcppid=$!
     sleep 1
     port=$(cat "$LOGS/$NAME-udpecho.port")
-    run net 120 "received$" -- "nettest 10.0.2.2 $port 50" "ping -c 3 10.0.2.2"
-    kill $echopid 2>/dev/null
+    tport=$(cat "$LOGS/$NAME-tcpecho.port")
+    run net 120 "port 1 " -- "nettest 10.0.2.2 $port 50" "ping -c 3 10.0.2.2" \
+        "tcptest 10.0.2.2 $tport 1000000"
+    kill $echopid $tcppid 2>/dev/null
     if panicked net; then
         fail net "kernel panic"
-    elif has net "nettest: 50 of 50 echoed" && has net "3 sent, 3 received"; then
-        pass net
-    else
+    elif ! has net "nettest: 50 of 50 echoed" || ! has net "3 sent, 3 received"; then
         fail net "datagrams or pings lost"
+    elif ! has net "tcptest: 1000000 bytes echoed, 0 wrong" || ! has net "port 1 refused"; then
+        fail net "TCP"
+    else
+        pass net
     fi
 fi
 
