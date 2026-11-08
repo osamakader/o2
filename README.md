@@ -146,12 +146,15 @@ The log commits in groups: finished system calls collect until the log
 is full, a second has passed, or `sync` is called.
 
 Networking: a virtio-net driver and a small IPv4 stack (ARP, IPv4,
-ICMP, UDP) on qemu's user-mode network, where o2 is 10.0.2.15, the host
-10.0.2.2 and its DNS server 10.0.2.3 (`make NET=0` leaves the card
-out). Datagram sockets are files: `socket`, `bind`, `connect`,
-`sendto`, `recvfrom`, `setsockopt(SO_RCVTIMEO)`; ICMP sockets do
-pings. `ping`, `nettest` (against `tools/udpecho.py` on the host) and
-`nslookup` use them. No TCP yet.
+ICMP, UDP, TCP) on qemu's user-mode network, where o2 is 10.0.2.15, the
+host 10.0.2.2 and its DNS server 10.0.2.3 (`make NET=0` leaves the card
+out). Sockets are files: `socket`, `bind`, `connect`, `sendto`,
+`recvfrom`, `setsockopt(SO_RCVTIMEO)`, `read`, `write`, `poll`. ICMP
+sockets do pings. TCP sockets connect out (no `listen` yet), with
+16KB windows, retransmission timed from the round trip, fast
+retransmit, and segments that come out of order kept (kernel/tcp.c).
+`ping`, `nettest` and `tcptest` (against `tools/udpecho.py` and
+`tools/tcpecho.py` on the host) and `nslookup` use them.
 
 Graphics, with `make GPU=1` (off by default, to keep o2 small; it
 builds into build/<arch>-gpu): a framebuffer, virtio-gpu on qemu virt
