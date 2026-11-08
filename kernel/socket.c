@@ -1,6 +1,7 @@
-// Datagram sockets: UDP, and ICMP echo ("ping sockets", as on Linux:
+// Sockets. Datagrams: UDP, and ICMP echo ("ping sockets", as on Linux:
 // the process sends echo requests, the kernel sets their id and
 // checksum, and the replies with that id come back to the socket).
+// Streams: TCP connections (tcp.c), made by connect().
 //
 // A socket is a file (FD_SOCK). Received datagrams wait in a queue of
 // up to QMAX, each in a page; more are dropped, as networks do.
@@ -34,7 +35,7 @@ struct pkt {
 
 struct sock {
     struct spinlock lock;
-    int proto;            // IPPROTO_UDP or IPPROTO_ICMP; 0: free
+    int proto;            // IPPROTO_UDP, _ICMP or _TCP; 0: free
     uint16 port;          // UDP: local port; ICMP: echo id; 0: none yet
     uint32 peer;          // connect(): where send()/write() go
     uint16 peerport;
@@ -42,6 +43,7 @@ struct sock {
     int qlen;
     uint64 timeout;       // receive timeout in ticks; 0: none
     int waiting;          // a receiver sleeps (with a timeout)
+    struct tcb *tcb;      // TCP: the connection, once connected
 };
 
 static struct sock socks[NSOCK];
@@ -52,6 +54,7 @@ void sockinit(void)
 {
     for (int i = 0; i < NSOCK; i++)
         initlock(&socks[i].lock, "sock");
+    tcp_init();
 }
 
 // Is port free for proto? socklock held.
@@ -124,6 +127,9 @@ void sock_tick(void)
 
 void sock_close(struct sock *s)
 {
+    if (s->tcb)
+        tcp_close(s->tcb);
+    s->tcb = 0;
     acquire(&socklock);
     acquire(&s->lock);
     struct pkt *p = s->head;
@@ -199,6 +205,8 @@ static int sock_send(struct sock *s, uint64 src, int n, uint32 dst, uint16 dport
 
 int sockread(struct sock *s, uint64 dst, int n, int nonblock)
 {
+    if (s->proto == IPPROTO_TCP)
+        return s->tcb ? tcp_read(s->tcb, dst, n, nonblock) : -1;
     uint32 src;
     uint16 sport;
     return sock_recv(s, dst, n, nonblock, &src, &sport);
@@ -206,6 +214,8 @@ int sockread(struct sock *s, uint64 dst, int n, int nonblock)
 
 int sockwrite(struct sock *s, uint64 src, int n)
 {
+    if (s->proto == IPPROTO_TCP)
+        return s->tcb ? tcp_write(s->tcb, src, n) : -1;
     if (s->peer == 0)
         return -1;   // not connected
     return sock_send(s, src, n, s->peer, s->peerport);
@@ -238,11 +248,12 @@ uint64 sys_socket(void)
     argint(0, &domain);
     argint(1, &type);
     argint(2, &protocol);
-    if (domain != AF_INET || type != SOCK_DGRAM)
+    if (domain != AF_INET || (type != SOCK_DGRAM && type != SOCK_STREAM))
         return -1;
     if (protocol == 0)
-        protocol = IPPROTO_UDP;
-    if (protocol != IPPROTO_UDP && protocol != IPPROTO_ICMP)
+        protocol = type == SOCK_STREAM ? IPPROTO_TCP : IPPROTO_UDP;
+    if (type == SOCK_STREAM ? protocol != IPPROTO_TCP
+                            : protocol != IPPROTO_UDP && protocol != IPPROTO_ICMP)
         return -1;
     if (!virtio_net_present())
         return -1;
@@ -294,7 +305,8 @@ uint64 sys_bind(void)
     return ok ? 0 : -1;
 }
 
-// connect(fd, addr, len): where send()/write() go.
+// connect(fd, addr, len): where send()/write() go; for TCP, waits
+// until the connection is made (or refused, or timed out).
 uint64 sys_connect(void)
 {
     struct sock *s = argsock(0);
@@ -305,6 +317,13 @@ uint64 sys_connect(void)
     argint(2, &len);
     if (s == 0 || argaddr_in(addr, len, &sa) < 0 || sock_autobind(s) < 0)
         return -1;
+    if (s->proto == IPPROTO_TCP) {
+        if (s->tcb)
+            return -1;   // connected already
+        s->tcb = tcp_connect(s->port, ntohl(sa.sin_addr.s_addr), ntohs(sa.sin_port));
+        if (s->tcb == 0)
+            return -1;
+    }
     s->peer = ntohl(sa.sin_addr.s_addr);
     s->peerport = ntohs(sa.sin_port);
     return 0;
@@ -324,6 +343,8 @@ uint64 sys_sendto(void)
     argint(5, &len);
     if (s == 0)
         return -1;
+    if (s->proto == IPPROTO_TCP)
+        return s->tcb && n >= 0 ? tcp_write(s->tcb, buf, n) : -1;
     if (addr == 0)
         return s->peer ? sock_send(s, buf, n, s->peer, s->peerport) : -1;
     if (argaddr_in(addr, len, &sa) < 0)
@@ -345,6 +366,8 @@ uint64 sys_recvfrom(void)
     argaddr(5, &lenp);
     if (s == 0 || n < 0)
         return -1;
+    if (s->proto == IPPROTO_TCP)
+        return s->tcb ? tcp_read(s->tcb, buf, n, flags & MSG_DONTWAIT) : -1;
     uint32 src;
     uint16 sport;
     int r = sock_recv(s, buf, n, flags & MSG_DONTWAIT, &src, &sport);
@@ -386,6 +409,8 @@ uint64 sys_setsockopt(void)
 // poll(): what is so of s. Sends never wait.
 int sockpoll(struct sock *s)
 {
+    if (s->proto == IPPROTO_TCP)
+        return s->tcb ? tcp_poll(s->tcb) : POLLHUP;
     acquire(&s->lock);
     int r = POLLOUT | (s->qlen > 0 ? POLLIN : 0);
     release(&s->lock);

@@ -1,5 +1,5 @@
-// The network stack: Ethernet, ARP, IPv4, ICMP and UDP, enough for
-// datagram sockets (socket.c) on qemu's user-mode network. Received
+// The network stack: Ethernet, ARP, IPv4, ICMP, UDP, and TCP's segments
+// (tcp.c), enough for sockets (socket.c) on qemu's user-mode network. Received
 // frames come from the network driver's interrupt (net_rx()); sending
 // happens in system calls, and for replies (ARP, ICMP echo) in the
 // interrupt. No IP options, fragments or routing beyond a gateway.
@@ -224,6 +224,28 @@ int net_send_udp(uint32 dst, uint16 sport, uint16 dport, const char *data, int l
     return r;
 }
 
+// Wait (up to a second) until the MAC to send to dst is known. Process
+// context. Returns 0, or -1.
+int net_arp_wait(uint32 dst)
+{
+    uchar mac[6];
+    return resolve(dst, mac, 1);
+}
+
+// Send a TCP segment (len bytes, its header first) to dst, filling in
+// its checksum. Never waits: from interrupts and under locks too.
+// Returns 0, or -1.
+int net_send_tcp(uint32 dst, char *seg, int len)
+{
+    uint32 pseudo = (NET_IP >> 16) + (NET_IP & 0xffff) + (dst >> 16) + (dst & 0xffff) +
+                    IPPROTO_TCP + len;
+    seg[16] = seg[17] = 0;
+    uint16 sum = cksum(seg, len, pseudo);
+    seg[16] = sum >> 8;
+    seg[17] = sum;
+    return ip_send(dst, IPPROTO_TCP, seg, len, 0);
+}
+
 // Send an ICMP message (msg, len bytes, starting with its header) to
 // dst, filling in its checksum. Process context. Returns 0, or -1.
 int net_send_icmp(uint32 dst, char *msg, int len)
@@ -287,6 +309,11 @@ static void ip_rx(struct eth *eth, struct ip *ip, int len)
             return;
         sock_deliver(IPPROTO_UDP, ntohs(u->dport), src, ntohs(u->sport),
                      (char *)(u + 1), ulen - sizeof(*u));
+    } else if (ip->proto == IPPROTO_TCP && dst == NET_IP) {
+        uint32 pseudo = (src >> 16) + (src & 0xffff) + (dst >> 16) + (dst & 0xffff) +
+                        IPPROTO_TCP + n;
+        if (cksum(payload, n, pseudo) == 0)
+            tcp_rx(src, payload, n);
     }
 }
 

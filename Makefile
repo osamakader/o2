@@ -71,6 +71,7 @@ KOBJS = \
   kernel/virtio_net.o \
   kernel/net.o \
   kernel/socket.o \
+  kernel/tcp.o \
   kernel/rpi_mbox.o \
   kernel/sdhci.o \
   kernel/disk.o \

@@ -3,12 +3,15 @@
 
 #include "types.h"
 
-// Sockets (socket.c), shared with user space: IPv4 datagrams only,
-// UDP or ICMP echo ("ping sockets", as on Linux). Linux's values.
+// Sockets (socket.c), shared with user space: IPv4 only; streams (TCP,
+// connecting out) and datagrams (UDP, or ICMP echo: "ping sockets", as
+// on Linux). Linux's values.
 
 #define AF_INET      2
+#define SOCK_STREAM  1
 #define SOCK_DGRAM   2
 #define IPPROTO_ICMP 1
+#define IPPROTO_TCP  6
 #define IPPROTO_UDP  17
 
 #define SOL_SOCKET   1
