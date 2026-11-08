@@ -5,13 +5,16 @@
 //
 // Segments arrive from the network interrupt (tcp_rx()); system calls
 // and the timer (tcp_tick(), every tick) send, under the TCB's lock,
-// so never waiting for ARP (connect() does that first). Lost segments
-// are sent again from the first unacknowledged byte on (go-back-N),
-// each time after twice as long, up to TCP_TRIES times. Segments out
-// of order are dropped (and acknowledged, so the peer sends again);
-// no window scaling, no delayed ACKs, no Nagle. A closed socket's
-// connection lives on until both FINs are acknowledged, then 2
-// seconds of TIME_WAIT.
+// so never waiting for ARP (connect() does that first).
+//
+// Lost segments: three duplicate ACKs send the first unacknowledged
+// one again at once (fast retransmit); the timer, from the round trip
+// time measured (RFC 6298, Karn), everything from it on (go-back-N),
+// each time after twice as long, up to TCP_TRIES times. Segments that
+// arrive out of order are kept in the ring, in up to NOOO pieces,
+// until what is missing before them comes. No window scaling, no
+// delayed ACKs, no Nagle. A closed socket's connection lives on until
+// both FINs are acknowledged, then 2 seconds of TIME_WAIT.
 
 #include "types.h"
 #include "param.h"
@@ -30,8 +33,9 @@
 #define BUFSIZE   (BUFPAGES * PGSIZE)   // each ring
 #define TCP_MSS   1460                  // a 1500-byte packet's worth
 #define TCP_TRIES 8
-#define RTO_MIN   (HZ / 2)
-#define RTO_MAX   (8 * HZ)
+#define RTO_MIN   (HZ / 5)
+#define RTO_MAX   (16 * HZ)
+#define NOOO      8                     // pieces received out of order
 #define TIMEWAIT  (2 * HZ)
 
 #define FIN 0x01
@@ -68,7 +72,15 @@ struct tcb {
     uint16 lport, rport;
     uint32 rip;
     uint32 iss, snd_una, snd_nxt, snd_wnd;   // snd_una is snd.head's byte
+    uint32 snd_max;     // the highest sent (snd_nxt goes back to resend)
     uint32 rcv_nxt;
+    struct { uint32 start, end; } ooo[NOOO];  // out of order, in rcv past len
+    int nooo;
+    int dupacks;
+    int timing;         // a segment's round trip is being timed: up to rtseq
+    uint32 rtseq;
+    uint64 rtstart;
+    int srtt8, rttvar4; // smoothed round trip time x8, its variation x4 (ticks)
     int mss;            // the peer's
     int adv;            // the window we advertised last
     struct ring snd, rcv;
@@ -178,6 +190,27 @@ static void arm(struct tcb *t)
         t->deadline = ticks + t->rto;
 }
 
+// A round trip took r ticks: the timeout from it (RFC 6298).
+static void rtt_sample(struct tcb *t, int r)
+{
+    if (t->srtt8 == 0) {
+        t->srtt8 = r * 8 + 1;
+        t->rttvar4 = r * 2;
+    } else {
+        int err = r - t->srtt8 / 8;
+        t->srtt8 += err;
+        t->rttvar4 += (err < 0 ? -err : err) - t->rttvar4 / 4;
+    }
+}
+
+static int rto(struct tcb *t)
+{
+    if (t->srtt8 == 0)
+        return HZ;   // nothing measured yet: 1s
+    int r = t->srtt8 / 8 + t->rttvar4;
+    return r < RTO_MIN ? RTO_MIN : r > RTO_MAX ? RTO_MAX : r;
+}
+
 // Send what may be sent: new data up to the peer's window, then our
 // FIN once the data is out. t->lock held.
 static void output(struct tcb *t)
@@ -196,7 +229,15 @@ static void output(struct tcb *t)
         if (n > room)
             n = room;
         send_seg(t, t->snd_nxt, ACK | (n == unsent ? PSH : 0), sent, n);
+        if (!t->timing && t->snd_nxt == t->snd_max) {
+            // new data (not sent before): time it
+            t->timing = 1;
+            t->rtseq = t->snd_nxt + n;
+            t->rtstart = ticks;
+        }
         t->snd_nxt += n;
+        if (SEQ_LT(t->snd_max, t->snd_nxt))
+            t->snd_max = t->snd_nxt;
         arm(t);
     }
     if (t->snd_wnd == 0 && t->snd_nxt == t->snd_una && t->snd.len > 0)
@@ -205,6 +246,8 @@ static void output(struct tcb *t)
         send_seg(t, t->snd_nxt, FIN | ACK, 0, 0);
         t->finsent = 1;
         t->finseq = t->snd_nxt++;
+        if (SEQ_LT(t->snd_max, t->snd_nxt))
+            t->snd_max = t->snd_nxt;
         if (t->state == ESTABLISHED)
             t->state = FIN_WAIT_1;
         else if (t->state == CLOSE_WAIT)
@@ -317,7 +360,12 @@ void tcp_rx(uint32 src, char *seg, int len)
             t->state = ESTABLISHED;
             t->deadline = 0;
             t->tries = 0;
-            t->rto = RTO_MIN * 2;
+            t->snd_max = t->snd_nxt;
+            if (t->timing) {
+                t->timing = 0;
+                rtt_sample(t, ticks - t->rtstart);
+            }
+            t->rto = rto(t);
             send_seg(t, t->snd_nxt, ACK, 0, 0);
             wake(t);
             output(t);
@@ -342,13 +390,20 @@ void tcp_rx(uint32 src, char *seg, int len)
     }
 
     // what it acknowledges
-    if ((flags & ACK) && SEQ_LT(t->snd_una, ack) && SEQ_LEQ(ack, t->snd_nxt)) {
+    if ((flags & ACK) && SEQ_LT(t->snd_una, ack) && SEQ_LEQ(ack, t->snd_max)) {
         int n = ack - t->snd_una;
         int data = n < t->snd.len ? n : t->snd.len;
         ring_drop(&t->snd, data);
         t->snd_una = ack;
+        if (SEQ_LT(t->snd_nxt, ack))
+            t->snd_nxt = ack;   // past what a go-back sent again
+        if (t->timing && SEQ_LEQ(t->rtseq, ack)) {
+            t->timing = 0;
+            rtt_sample(t, ticks - t->rtstart);
+        }
+        t->dupacks = 0;
         t->tries = 0;
-        t->rto = RTO_MIN * 2;
+        t->rto = rto(t);
         t->deadline = 0;
         if (t->snd_una != t->snd_nxt)
             arm(t);
@@ -362,6 +417,12 @@ void tcp_rx(uint32 src, char *seg, int len)
                 t->state = CLOSED;
         }
         wake(t);   // room to write
+    } else if ((flags & ACK) && ack == t->snd_una && dlen == 0 && !(flags & FIN) &&
+               t->snd_una != t->snd_max && ++t->dupacks == 3 && t->snd.len > 0) {
+        // the third duplicate ACK: the first segment got lost
+        int n = t->snd.len < t->mss ? t->snd.len : t->mss;
+        send_seg(t, t->snd_una, ACK, 0, n);
+        t->timing = 0;
     }
     if ((flags & ACK) && SEQ_LEQ(t->snd_una, ack))
         t->snd_wnd = ntohs(h->win);
@@ -384,7 +445,24 @@ void tcp_rx(uint32 src, char *seg, int len)
                 *ringat(&t->rcv, t->rcv.len + i) = data[i];
             t->rcv.len += n;
             t->rcv_nxt += n;
-            if ((flags & FIN) && n == dlen) {
+            // pieces that came early, and now follow on
+            int grew = 0;
+            for (int again = 1; again; ) {
+                again = 0;
+                for (int i = 0; i < t->nooo; i++) {
+                    if (SEQ_LT(t->rcv_nxt, t->ooo[i].start))
+                        continue;
+                    if (SEQ_LT(t->rcv_nxt, t->ooo[i].end)) {
+                        t->rcv.len += t->ooo[i].end - t->rcv_nxt;
+                        t->rcv_nxt = t->ooo[i].end;
+                        grew = 1;
+                    }
+                    t->ooo[i] = t->ooo[--t->nooo];
+                    again = 1;
+                    break;
+                }
+            }
+            if ((flags & FIN) && n == dlen && t->nooo == 0) {
                 t->rcv_nxt++;
                 t->finrcvd = 1;
                 if (t->state == ESTABLISHED)
@@ -394,8 +472,21 @@ void tcp_rx(uint32 src, char *seg, int len)
                 else if (t->state == FIN_WAIT_1)
                     t->state = CLOSING;
             }
-            if (n > 0 || t->finrcvd)
+            if (n > 0 || grew || t->finrcvd)
                 wake(t);
+        } else if (SEQ_LT(t->rcv_nxt, seq) && dlen > 0 && t->nooo < NOOO &&
+                   (t->state == ESTABLISHED || t->state == FIN_WAIT_1 ||
+                    t->state == FIN_WAIT_2)) {
+            // early: keep it where it goes, if it fits
+            int off = seq - t->rcv_nxt, room = BUFSIZE - t->rcv.len;
+            if (off < room) {
+                int n = dlen < room - off ? dlen : room - off;
+                for (int i = 0; i < n; i++)
+                    *ringat(&t->rcv, t->rcv.len + off + i) = data[i];
+                t->ooo[t->nooo].start = seq;
+                t->ooo[t->nooo].end = seq + n;
+                t->nooo++;
+            }
         }
     }
     if (t->state == TIME_WAIT && (flags & FIN))
@@ -429,10 +520,12 @@ void tcp_tick(void)
             t->rto = t->rto * 2 < RTO_MAX ? t->rto * 2 : RTO_MAX;
             if (t->state == SYN_SENT) {
                 send_seg(t, t->iss, SYN, 0, 0);
+                t->timing = 0;
                 arm(t);
             } else {
                 // from the first unacknowledged byte on, FIN too
                 t->snd_nxt = t->snd_una;
+                t->timing = 0;
                 t->finsent = 0;
                 if (t->state == FIN_WAIT_1)
                     t->state = ESTABLISHED;
@@ -485,11 +578,15 @@ struct tcb *tcp_connect(uint16 lport, uint32 rip, uint16 rport)
     t->rcv_nxt = 0;
     t->mss = 536;
     t->closing = t->finsent = t->finrcvd = t->err = 0;
+    t->nooo = t->dupacks = t->srtt8 = t->rttvar4 = 0;
     t->tries = 0;
-    t->rto = 2 * HZ;   // RFC 6298 asks 1s; for SYNs, a little patience
+    t->rto = HZ;   // RFC 6298's first timeout
     t->deadline = 0;
     t->state = SYN_SENT;
     send_seg(t, t->iss, SYN, 0, 0);
+    t->snd_max = t->snd_nxt;
+    t->timing = 1;   // the handshake's round trip, too
+    t->rtstart = ticks;
     arm(t);
     while (t->state == SYN_SENT && !interrupted(myproc()))
         sleep(t, &t->lock);
