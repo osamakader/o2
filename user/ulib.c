@@ -32,6 +32,25 @@ int strcmp(const char *p, const char *q)
   return (uchar)*p - (uchar)*q;
 }
 
+int strncmp(const char *p, const char *q, uint n)
+{
+  while(n > 0 && *p && *p == *q)
+    n--, p++, q++;
+  if(n == 0)
+    return 0;
+  return (uchar)*p - (uchar)*q;
+}
+
+// The first q in p, or 0.
+char *strstr(const char *p, const char *q)
+{
+  int n = strlen(q);
+  for(; *p; p++)
+    if(strncmp(p, q, n) == 0)
+      return (char *)p;
+  return n == 0 ? (char *)p : 0;
+}
+
 uint strlen(const char *s)
 {
   int n;

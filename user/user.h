@@ -69,6 +69,8 @@ int reboot(int);
 // ulib.c
 char *strcpy(char *, const char *);
 int strcmp(const char *, const char *);
+int strncmp(const char *, const char *, uint);
+char *strstr(const char *, const char *);
 uint strlen(const char *);
 void *memset(void *, int, uint);
 void *memmove(void *, const void *, int);
