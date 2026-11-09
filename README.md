@@ -154,7 +154,11 @@ sockets do pings. TCP sockets connect out (no `listen` yet), with
 16KB windows, retransmission timed from the round trip, fast
 retransmit, and segments that come out of order kept (kernel/tcp.c).
 `ping`, `nettest` and `tcptest` (against `tools/udpecho.py` and
-`tools/tcpecho.py` on the host) and `nslookup` use them.
+`tools/tcpecho.py` on the host) and `nslookup` use them, and `fetch
+[-i] [-o file] url`, which gets a web page or file over HTTP/1.0,
+following redirects: http:// only, as there is no TLS. Plain-HTTP
+sites work, e.g. `fetch http://info.cern.ch/`. user/libnet.c has the
+DNS lookups, connecting by name and HTTP GET.
 
 Graphics, with `make GPU=1` (off by default, to keep o2 small; it
 builds into build/<arch>-gpu): a framebuffer, virtio-gpu on qemu virt
