@@ -264,6 +264,12 @@ $(B)/user/_%: $(B)/user/%.o $(ULIB) user/$(ARCH)/user.ld
 	$(LD) $(LDFLAGS) -T user/$(ARCH)/user.ld -o $@ $< $(ULIB)
 	$(OBJDUMP) -S $@ > $(B)/user/$*.asm
 
+# programs that use names and the web (libnet: DNS, HTTP)
+NETAPPS = $(B)/user/_nslookup $(B)/user/_fetch
+$(NETAPPS): $(B)/user/_%: $(B)/user/%.o $(B)/user/libnet.o $(ULIB) user/$(ARCH)/user.ld
+	$(LD) $(LDFLAGS) -T user/$(ARCH)/user.ld -o $@ $< $(B)/user/libnet.o $(ULIB)
+	$(OBJDUMP) -S $@ > $(B)/user/$*.asm
+
 # desktop apps (GPU=1) draw their windows with libwin
 WINAPPS = $(B)/user/_term $(B)/user/_files $(B)/user/_view $(B)/user/_cal $(B)/user/_power $(B)/user/_edit
 $(WINAPPS): $(B)/user/_%: $(B)/user/%.o $(B)/user/libwin.o $(ULIB) user/$(ARCH)/user.ld
@@ -328,6 +334,7 @@ UPROGS = \
   $(B)/user/_reboot \
   $(B)/user/_tz \
   $(B)/user/_tcptest \
+  $(B)/user/_fetch \
 
 ifeq ($(GPU), 1)
 UPROGS += $(B)/user/_gfx $(B)/user/_splash $(B)/user/_evtest $(B)/user/_desk $(WINAPPS)
