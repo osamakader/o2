@@ -161,25 +161,37 @@ else
 fi
 
 # 8. the network: UDP and TCP to echo servers on the host (10.0.2.2 in
-# qemu's user-mode network is the host's loopback), and ping. Not on the
-# Pi: raspi4b has no network card o2 drives.
+# qemu's user-mode network is the host's loopback), ping, and fetch from
+# a web server there (a redirect, then a file). Not on the Pi: raspi4b
+# has no network card o2 drives.
 if [ "$NAME" != rpi4 ]; then
     python3 tools/udpecho.py > "$LOGS/$NAME-udpecho.port" &
     echopid=$!
     python3 tools/tcpecho.py > "$LOGS/$NAME-tcpecho.port" &
     tcppid=$!
+    www=$LOGS/$NAME-www
+    rm -rf "$www"
+    mkdir -p "$www/sub"
+    echo "fetched the sub dir" > "$www/sub/index.html"
+    head -c 200000 /dev/zero | tr '\0' x > "$www/file"
+    hport=$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')
+    python3 -m http.server --bind 127.0.0.1 --directory "$www" "$hport" > /dev/null 2>&1 &
+    httppid=$!
     sleep 1
     port=$(cat "$LOGS/$NAME-udpecho.port")
     tport=$(cat "$LOGS/$NAME-tcpecho.port")
-    run net 120 "port 1 " -- "nettest 10.0.2.2 $port 50" "ping -c 3 10.0.2.2" \
-        "tcptest 10.0.2.2 $tport 1000000"
-    kill $echopid $tcppid 2>/dev/null
+    run net 120 "/file: " -- "nettest 10.0.2.2 $port 50" "ping -c 3 10.0.2.2" \
+        "tcptest 10.0.2.2 $tport 1000000" "fetch http://10.0.2.2:$hport/sub" \
+        "fetch -o f http://10.0.2.2:$hport/file"
+    kill $echopid $tcppid $httppid 2>/dev/null
     if panicked net; then
         fail net "kernel panic"
     elif ! has net "nettest: 50 of 50 echoed" || ! has net "3 sent, 3 received"; then
         fail net "datagrams or pings lost"
     elif ! has net "tcptest: 1000000 bytes echoed, 0 wrong" || ! has net "port 1 refused"; then
         fail net "TCP"
+    elif ! has net "^fetched the sub dir" || ! has net "/file: 200, 200000 bytes"; then
+        fail net "fetch"
     else
         pass net
     fi
