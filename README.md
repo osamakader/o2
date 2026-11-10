@@ -190,6 +190,13 @@ them. The apps:
   (asking for a name if there is none), ^Q quits (asking first if there
   are changes), ^F finds, ^G goes to a line, ^K cuts the line and ^U
   pastes it.
+- `web [url]`: a web browser for plain HTTP (the taskbar's Web
+  button). It shows HTML's text: headings, paragraphs, lists,
+  preformatted text, tables as lines, links, and GET forms' text fields
+  and buttons; no CSS, scripts, images or TLS. Click links and fields;
+  Backspace goes back, ^L to the address bar. The start page is the URL
+  in /homepage, or FrogFind (frogfind.com), a search engine for old
+  computers that serves any web page as simple HTML over plain HTTP.
 - `cal`: a calendar, a month at a time with today marked; the
   taskbar's clock opens it too.
 - `power`: shut down or restart (the taskbar's Power button).
