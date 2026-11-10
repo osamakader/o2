@@ -48,6 +48,7 @@ static struct {
   { "Terminal", "term" },
   { "Files", "files" },
   { "Editor", "edit" },
+  { "Web", "web" },
   { "Calendar", "cal" },
   { "Power", "power" },
 };
