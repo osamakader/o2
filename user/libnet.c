@@ -234,12 +234,13 @@ http_field(struct http *h, const char *name, char *val, int max)
 int
 http_get(const char *url, struct http *h)
 {
-  char cur[sizeof(h->url)];
+  // big for a stack: static (programs have one thread)
+  static char cur[sizeof(h->url)], req[600], loc[sizeof(h->url)];
   if(strlen(url) >= sizeof(cur))
     return HTTP_BADURL;
   strcpy(cur, url);
   for(int hops = 0; hops < 6; hops++){
-    struct url u;
+    static struct url u;
     int r = url_parse(cur, &u);
     if(r < 0)
       return r == HTTP_HTTPS ? HTTP_HTTPS : HTTP_BADURL;
@@ -254,7 +255,6 @@ http_get(const char *url, struct http *h)
       return HTTP_NOCONN;
     }
     // the request
-    char req[600];
     char *e = req;
     e += strlen(strcpy(e, "GET "));
     e += strlen(strcpy(e, u.path));
@@ -288,7 +288,6 @@ http_get(const char *url, struct http *h)
     }
     h->status = atoi(sp + 1);
     strcpy(h->url, cur);
-    char loc[sizeof(cur)];
     if(h->status / 100 != 3 || !http_field(h, "location:", loc, sizeof(loc)))
       return 0;
     // a redirect: to a URL, or a path on the same host
