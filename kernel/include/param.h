@@ -4,7 +4,7 @@
 #define NCPU  8   // maximum number of CPUs
 #define NPROC 64  // maximum number of processes and kernel threads
 #define MAXARG 32 // max exec arguments
-#define USERSTACK 1 // user stack pages
+#define USERSTACK 4 // user stack pages
 #define ROOTDEV       1  // device number of file system root disk
 #define MAXOPBLOCKS  20  // max # of blocks any FS op writes (deleting a
                          // MAXFILE file frees blocks in ~10 bitmap blocks)
