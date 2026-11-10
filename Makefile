@@ -276,6 +276,11 @@ $(WINAPPS): $(B)/user/_%: $(B)/user/%.o $(B)/user/libwin.o $(ULIB) user/$(ARCH)/
 	$(LD) $(LDFLAGS) -T user/$(ARCH)/user.ld -o $@ $< $(B)/user/libwin.o $(ULIB)
 	$(OBJDUMP) -S $@ > $(B)/user/$*.asm
 
+# the web browser: both
+$(B)/user/_web: $(B)/user/web.o $(B)/user/libwin.o $(B)/user/libnet.o $(ULIB) user/$(ARCH)/user.ld
+	$(LD) $(LDFLAGS) -T user/$(ARCH)/user.ld -o $@ $< $(B)/user/libwin.o $(B)/user/libnet.o $(ULIB)
+	$(OBJDUMP) -S $@ > $(B)/user/web.asm
+
 # xv6's own user programs (user/xv6), built unmodified: their
 # kernel/*.h and user/user.h includes resolve through user/xv6/include.
 $(B)/user/xv6/%.o: CFLAGS += -iquote user/xv6/include
@@ -337,7 +342,7 @@ UPROGS = \
   $(B)/user/_fetch \
 
 ifeq ($(GPU), 1)
-UPROGS += $(B)/user/_gfx $(B)/user/_splash $(B)/user/_evtest $(B)/user/_desk $(WINAPPS)
+UPROGS += $(B)/user/_gfx $(B)/user/_splash $(B)/user/_evtest $(B)/user/_desk $(WINAPPS) $(B)/user/_web
 endif
 
 # README.md goes into the file system as README (xv6 tests read it)
