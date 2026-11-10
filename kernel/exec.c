@@ -114,7 +114,9 @@ int exec(struct proc *p, const char *name, struct elfsrc *src, char **argv) {
     sz = sz1;
     uvmclear(pagetable, sz - (USERSTACK + 1) * PGSIZE);
     sp = sz;
-    stackbase = sp - USERSTACK * PGSIZE;
+    // the arguments must fit in the stack's top page, as in xv6
+    // (usertests' bigargtest), though the stack is bigger
+    stackbase = sp - PGSIZE;
 
     // Push argument strings, prepare rest of stack in ustack.
     for (argc = 0; argv[argc]; argc++) {
