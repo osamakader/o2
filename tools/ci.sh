@@ -311,6 +311,46 @@ if [ "$NAME" != rpi4 ]; then
     else
         fail edit "the file wasn't saved"
     fi
+
+    # 13. the browser: its home page (set from the terminal) is a page
+    # on a web server on the host with a form first; a search typed
+    # into it reaches the server
+    www=$LOGS/$NAME-webpages
+    rm -rf "$www"
+    mkdir -p "$www"
+    printf '<html><head><title>o2 test</title></head><body><form action="/search">%s</form><h1>Hello</h1><p>A <a href="/x">link</a>.</p></body></html>\n' \
+        '<input name=q>' > "$www/t.html"
+    hport=$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')
+    python3 -m http.server --bind 127.0.0.1 --directory "$www" "$hport" \
+        > "$LOGS/$NAME-httpd.log" 2>&1 &
+    httppid=$!
+    {
+        for k in e c h o spc h t t p shift-semicolon slash slash 1 0 dot 0 dot 2 dot 2 \
+                 shift-semicolon $(echo "$hport" | sed 's/./& /g') slash t dot h t m l \
+                 spc shift-dot spc h o m e p a g e ret; do
+            echo "sendkey $k"
+        done
+        echo "mouse_move -600 -400"
+        echo "mouse_move 200 787"      # the Web button
+        echo "mouse_button 1"
+        echo "mouse_button 0"
+        for i in 1 2 3 4 5 6 7 8 9 10; do echo "mouse_move 0 0"; done
+        echo "mouse_move -176 -677"    # its form's field
+        echo "mouse_button 1"
+        echo "mouse_button 0"
+        for k in o 2 ret; do echo "sendkey $k"; done
+        for i in 1 2 3 4 5 6; do echo "mouse_move 0 0"; done
+        echo "screendump $PWD/$LOGS/$NAME-web.ppm"
+    } > "$LOGS/$NAME-web.mon"
+    run web 60 "zzz" -m "$PWD/$LOGS/$NAME-web.mon" -- desk
+    kill $httppid 2>/dev/null
+    if panicked web; then
+        fail web "kernel panic"
+    elif grep -q "GET /search?q=o2 " "$LOGS/$NAME-httpd.log"; then
+        pass web
+    else
+        fail web "the form's search didn't reach the server"
+    fi
 fi
 unset GPU
 
