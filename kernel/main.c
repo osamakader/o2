@@ -52,15 +52,11 @@ int main(int boot, uint64 dtb) {
         virtio_disk_init();
         sockinit();
         virtio_net_init();
-        if (netif.send)
-            dhcp_start();
-        genet_init();   // the Raspberry Pi 4's; starts DHCP once the link is up
 #ifdef CONFIG_GPU
         virtio_gpu_init();
         rpi_fb_init();
         virtio_input_init();
         pci_init();
-        xhci_init();
 #endif
         binit();
         iinit();
@@ -69,6 +65,14 @@ int main(int boot, uint64 dtb) {
         timeinit();
 
         userinit();   // first, so init is pid 1
+
+        // kernel threads, after it
+        if (netif.send)
+            dhcp_start();
+        genet_init();   // the Raspberry Pi 4's; starts DHCP once the link is up
+#ifdef CONFIG_GPU
+        xhci_init();
+#endif
 #ifdef SELFTEST
         selftest();   // before any CPU schedules: init hasn't run yet
 #endif
