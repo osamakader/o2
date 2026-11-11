@@ -129,10 +129,11 @@ fi
 run stressfs 300 "^STRESSFS DONE$" -- stressfs "echo STRESSFS DONE"
 if panicked stressfs; then
     fail stressfs "kernel panic"
-# (the five print at once: a "read" may be split over lines)
+# (the five print at once, a character at a time, so their "read"s mix:
+# count their d's, which nothing else there has)
 elif has stressfs "^STRESSFS DONE$" &&
      [ "$(sed -n '/stressfs starting/,/STRESSFS DONE/p' "$LOGS/$NAME-stressfs.log" |
-          tr -d '\r\n' | grep -o read | wc -l)" -eq 5 ]; then
+          sed 1d | tr -cd d | wc -c)" -eq 5 ]; then
     pass stressfs
 else
     fail stressfs "didn't finish with five readers"
