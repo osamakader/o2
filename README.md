@@ -46,7 +46,8 @@ which is how it is tested (`tools/ci.sh rpi4`).
 What differs from qemu virt: RAM from 0, entry in EL2, a GIC-400
 (GICv2), the CPUs started from the firmware's spin table, the SD card
 (SDHCI) for storage, the firmware's framebuffer (mailbox) for the
-screen, USB through the PCIe bridge (GPU=1), and no RTC or network.
+screen, USB through the PCIe bridge (GPU=1), Ethernet (GENET, with DHCP;
+qemu's raspi4b doesn't model it), and no RTC.
 
 On a real Pi 4 (tried on a Pi 4 Model B Rev 1.5: the shell, gfx and
 the boot animation on HDMI work):
@@ -145,10 +146,12 @@ file system; symbolic links (`ln -s`, `symlink`, `readlink`, `lstat`,
 The log commits in groups: finished system calls collect until the log
 is full, a second has passed, or `sync` is called.
 
-Networking: a virtio-net driver and a small IPv4 stack (ARP, IPv4,
-ICMP, UDP, TCP) on qemu's user-mode network, where o2 is 10.0.2.15, the
-host 10.0.2.2 and its DNS server 10.0.2.3 (`make NET=0` leaves the card
-out). Sockets are files: `socket`, `bind`, `connect`, `sendto`,
+Networking: a virtio-net driver, the Pi 4's Ethernet (GENET, polled by
+a kernel thread like USB), and a small IPv4 stack (ARP, IPv4, ICMP, UDP,
+TCP, DHCP). On qemu's user-mode network o2 is 10.0.2.15, the host
+10.0.2.2 and its DNS server 10.0.2.3 (`make NET=0` leaves the card
+out); on the Pi, DHCP gets the addresses once the link is up.
+`ifconfig` shows them. Sockets are files: `socket`, `bind`, `connect`, `sendto`,
 `recvfrom`, `setsockopt(SO_RCVTIMEO)`, `read`, `write`, `poll`. ICMP
 sockets do pings. TCP sockets connect out (no `listen` yet), with
 16KB windows, retransmission timed from the round trip, fast
