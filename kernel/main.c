@@ -54,6 +54,7 @@ int main(int boot, uint64 dtb) {
         virtio_net_init();
         if (netif.send)
             dhcp_start();
+        genet_init();   // the Raspberry Pi 4's; starts DHCP once the link is up
 #ifdef CONFIG_GPU
         virtio_gpu_init();
         rpi_fb_init();

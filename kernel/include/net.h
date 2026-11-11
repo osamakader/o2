@@ -22,8 +22,9 @@ void netif_register(const char *name, const uchar *mac, int (*send)(const void *
 
 #define UDP_MAXDATA 1472   // payload in one 1500-byte IP packet
 
-// virtio_net.c
+// virtio_net.c, genet.c
 void virtio_net_init(void);
+void genet_init(void);
 
 // net.c
 void net_rx(char *frame, int len);

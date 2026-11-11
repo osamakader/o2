@@ -73,6 +73,8 @@ KOBJS = \
   kernel/socket.o \
   kernel/tcp.o \
   kernel/dhcp.o \
+  kernel/genet.o \
+  kernel/dma.o \
   kernel/rpi_mbox.o \
   kernel/sdhci.o \
   kernel/disk.o \
@@ -154,7 +156,7 @@ endif
 ifeq ($(GPU), 1)
 KOBJS += kernel/fb.o kernel/virtio_gpu.o kernel/rpi_fb.o
 KOBJS += kernel/input.o kernel/virtio_input.o
-KOBJS += kernel/dma.o kernel/pci.o kernel/pcie_brcm.o kernel/xhci.o kernel/usbhid.o
+KOBJS += kernel/pci.o kernel/pcie_brcm.o kernel/xhci.o kernel/usbhid.o
 CFLAGS += -DCONFIG_GPU
 endif
 
