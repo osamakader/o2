@@ -255,7 +255,7 @@ uint64 sys_socket(void)
     if (type == SOCK_STREAM ? protocol != IPPROTO_TCP
                             : protocol != IPPROTO_UDP && protocol != IPPROTO_ICMP)
         return -1;
-    if (!virtio_net_present())
+    if (netif.send == 0)
         return -1;
 
     struct sock *s = 0;

@@ -59,7 +59,6 @@ static struct {
     struct queue q[2];
 } net;
 
-uchar net_mac[6];
 
 static void *alloc_page(void)
 {
@@ -126,6 +125,7 @@ static int probe(void)
 }
 
 void virtio_net_intr(void);
+static int virtio_net_send(const void *frame, int len);
 
 void virtio_net_init(void)
 {
@@ -164,8 +164,9 @@ void virtio_net_init(void)
     queue_init(TXQ);
 
     volatile uchar *config = (volatile uchar *)(net.base + VIRTIO_MMIO_CONFIG);
+    uchar mac[6];
     for (int i = 0; i < 6; i++)
-        net_mac[i] = lo ? config[i] : (i == 0 ? 0x52 : i);   // else a made-up local one
+        mac[i] = lo ? config[i] : (i == 0 ? 0x52 : i);   // else a made-up local one
 
     acquire(&net.lock);
     for (int i = 0; i < NUM; i++)
@@ -178,13 +179,9 @@ void virtio_net_init(void)
 
     net.irq = board.virtio[slot].irq;
     printf("virtio_net: slot %d, irq %d, mac %x:%x:%x:%x:%x:%x\n", slot, net.irq,
-           net_mac[0], net_mac[1], net_mac[2], net_mac[3], net_mac[4], net_mac[5]);
+           mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    netif_register("virtio", mac, virtio_net_send);
     irq_register(net.irq, virtio_net_intr, cpuid());
-}
-
-int virtio_net_present(void)
-{
-    return net.base != 0;
 }
 
 // Take back transmit descriptors the device is done with. net.lock held.
@@ -201,7 +198,7 @@ static void tx_reclaim(void)
 // Send an Ethernet frame (destination, source, type, payload) of len
 // bytes. Doesn't wait: returns 0, or -1 (dropped) if there is no
 // network or every transmit buffer is in use.
-int virtio_net_send(const void *frame, int len)
+static int virtio_net_send(const void *frame, int len)
 {
     struct queue *q = &net.q[TXQ];
 

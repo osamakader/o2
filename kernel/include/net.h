@@ -6,19 +6,24 @@
 // The network stack (net.c): Ethernet, ARP, IPv4, ICMP, UDP and TCP
 // (tcp.c) over virtio_net.c. Addresses are in host byte order here.
 
-// qemu's user-mode network: we are 10.0.2.15, the host 10.0.2.2
-#define NET_IP      IPADDR(10, 0, 2, 15)
-#define NET_GATEWAY IPADDR(10, 0, 2, 2)
-#define NET_MASK    IPADDR(255, 255, 255, 0)
+// the addresses (host order): qemu's user-mode network's, where we are
+// 10.0.2.15, the host (the gateway) 10.0.2.2 and its DNS server
+// 10.0.2.3, until DHCP says otherwise; 0 before that on a real one
+extern uint32 net_ip, net_mask, net_gateway, net_dns;
+
+// the network interface: one, its driver's
+struct netif {
+    char name[8];
+    uchar mac[6];
+    int (*send)(const void *frame, int len);   // doesn't wait; 0, or -1
+};
+extern struct netif netif;
+void netif_register(const char *name, const uchar *mac, int (*send)(const void *, int));
 
 #define UDP_MAXDATA 1472   // payload in one 1500-byte IP packet
 
-extern uchar net_mac[6];
-
 // virtio_net.c
 void virtio_net_init(void);
-int virtio_net_present(void);
-int virtio_net_send(const void *frame, int len);
 
 // net.c
 void net_rx(char *frame, int len);

@@ -63,6 +63,20 @@ struct icmp {
 
 static const uchar broadcast[6] = { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff };
 
+uint32 net_ip = IPADDR(10, 0, 2, 15);
+uint32 net_mask = IPADDR(255, 255, 255, 0);
+uint32 net_gateway = IPADDR(10, 0, 2, 2);
+uint32 net_dns = IPADDR(10, 0, 2, 3);
+struct netif netif;
+
+// A driver's interface: frames go out through send.
+void netif_register(const char *name, const uchar *mac, int (*send)(const void *, int))
+{
+    safestrcpy(netif.name, name, sizeof(netif.name));
+    memmove(netif.mac, mac, 6);
+    netif.send = send;
+}
+
 // The Internet checksum of n bytes at p, plus sum (host order).
 static uint16 cksum(const void *p, int n, uint32 sum)
 {
@@ -125,23 +139,23 @@ static void arp_send(int op, const uchar *dstmac, const uchar *tha, uint32 tip)
     } __attribute__((packed)) f;
 
     memmove(f.eth.dst, dstmac, 6);
-    memmove(f.eth.src, net_mac, 6);
+    memmove(f.eth.src, netif.mac, 6);
     f.eth.type = htons(ETH_TYPE_ARP);
     f.arp.htype = htons(1);
     f.arp.ptype = htons(ETH_TYPE_IP);
     f.arp.hlen = 6;
     f.arp.plen = 4;
     f.arp.op = htons(op);
-    memmove(f.arp.sha, net_mac, 6);
-    f.arp.sip = htonl(NET_IP);
+    memmove(f.arp.sha, netif.mac, 6);
+    f.arp.sip = htonl(net_ip);
     memmove(f.arp.tha, tha, 6);
     f.arp.tip = htonl(tip);
-    virtio_net_send(&f, sizeof(f));
+    netif.send(&f, sizeof(f));
 }
 
 static int on_net(uint32 ip)
 {
-    return (ip & NET_MASK) == (NET_IP & NET_MASK);
+    return (ip & net_mask) == (net_ip & net_mask);
 }
 
 // The MAC to send a packet for dst to: dst's own on our network, the
@@ -153,7 +167,7 @@ static int resolve(uint32 dst, uchar *mac, int wait)
         memmove(mac, broadcast, 6);
         return 0;
     }
-    uint32 hop = on_net(dst) ? dst : NET_GATEWAY;
+    uint32 hop = on_net(dst) ? dst : net_gateway;
     for (int t = 0; ; t++) {
         if (arp_lookup(hop, mac))
             return 0;
@@ -180,7 +194,7 @@ static int ip_send(uint32 dst, int proto, const char *payload, int len, int wait
     struct eth *eth = (struct eth *)f;
     struct ip *ip = (struct ip *)(eth + 1);
     memmove(eth->dst, mac, 6);
-    memmove(eth->src, net_mac, 6);
+    memmove(eth->src, netif.mac, 6);
     eth->type = htons(ETH_TYPE_IP);
     ip->vhl = 0x45;
     ip->tos = 0;
@@ -190,11 +204,11 @@ static int ip_send(uint32 dst, int proto, const char *payload, int len, int wait
     ip->ttl = 64;
     ip->proto = proto;
     ip->sum = 0;
-    ip->src = htonl(NET_IP);
+    ip->src = htonl(net_ip);
     ip->dst = htonl(dst);
     ip->sum = htons(cksum(ip, sizeof(*ip), 0));
     memmove(ip + 1, payload, len);
-    int r = virtio_net_send(f, sizeof(*eth) + sizeof(*ip) + len);
+    int r = netif.send(f, sizeof(*eth) + sizeof(*ip) + len);
     kfree(f);
     return r;
 }
@@ -215,7 +229,7 @@ int net_send_udp(uint32 dst, uint16 sport, uint16 dport, const char *data, int l
     u->sum = 0;
     memmove(u + 1, data, len);
     // checksum over a pseudo-header (addresses, protocol, length), too
-    uint32 pseudo = (NET_IP >> 16) + (NET_IP & 0xffff) + (dst >> 16) + (dst & 0xffff) +
+    uint32 pseudo = (net_ip >> 16) + (net_ip & 0xffff) + (dst >> 16) + (dst & 0xffff) +
                     IPPROTO_UDP + sizeof(*u) + len;
     uint16 sum = cksum(u, sizeof(*u) + len, pseudo);
     u->sum = htons(sum ? sum : 0xffff);
@@ -237,7 +251,7 @@ int net_arp_wait(uint32 dst)
 // Returns 0, or -1.
 int net_send_tcp(uint32 dst, char *seg, int len)
 {
-    uint32 pseudo = (NET_IP >> 16) + (NET_IP & 0xffff) + (dst >> 16) + (dst & 0xffff) +
+    uint32 pseudo = (net_ip >> 16) + (net_ip & 0xffff) + (dst >> 16) + (dst & 0xffff) +
                     IPPROTO_TCP + len;
     seg[16] = seg[17] = 0;
     uint16 sum = cksum(seg, len, pseudo);
@@ -265,7 +279,7 @@ static void arp_rx(struct arp *a, int len)
     uint32 sip = ntohl(a->sip);
     if (sip != 0 && on_net(sip))
         arp_update(sip, a->sha);
-    if (ntohs(a->op) == 1 && ntohl(a->tip) == NET_IP)
+    if (ntohs(a->op) == 1 && ntohl(a->tip) == net_ip)
         arp_send(2, a->sha, a->sha, sip);   // that's us
 }
 
@@ -292,7 +306,7 @@ static void ip_rx(struct eth *eth, struct ip *ip, int len)
         return;   // not IPv4, has options, or damaged
     int tot = ntohs(ip->len);
     uint32 src = ntohl(ip->src), dst = ntohl(ip->dst);
-    if (tot > len || tot < sizeof(*ip) || (dst != NET_IP && dst != 0xffffffff))
+    if (tot > len || tot < sizeof(*ip) || (dst != net_ip && dst != 0xffffffff))
         return;
     if (ntohs(ip->off) & 0x3fff)
         return;   // a fragment
@@ -309,7 +323,7 @@ static void ip_rx(struct eth *eth, struct ip *ip, int len)
             return;
         sock_deliver(IPPROTO_UDP, ntohs(u->dport), src, ntohs(u->sport),
                      (char *)(u + 1), ulen - sizeof(*u));
-    } else if (ip->proto == IPPROTO_TCP && dst == NET_IP) {
+    } else if (ip->proto == IPPROTO_TCP && dst == net_ip) {
         uint32 pseudo = (src >> 16) + (src & 0xffff) + (dst >> 16) + (dst & 0xffff) +
                         IPPROTO_TCP + n;
         if (cksum(payload, n, pseudo) == 0)
