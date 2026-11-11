@@ -72,6 +72,7 @@ KOBJS = \
   kernel/net.o \
   kernel/socket.o \
   kernel/tcp.o \
+  kernel/dhcp.o \
   kernel/rpi_mbox.o \
   kernel/sdhci.o \
   kernel/disk.o \

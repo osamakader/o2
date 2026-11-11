@@ -32,6 +32,10 @@ int net_send_icmp(uint32 dst, char *msg, int len);
 int net_send_tcp(uint32 dst, char *seg, int len);
 int net_arp_wait(uint32 dst);
 
+// dhcp.c
+void dhcp_start(void);
+void dhcp_rx(const char *data, int len);
+
 // tcp.c
 struct tcb;
 void tcp_init(void);

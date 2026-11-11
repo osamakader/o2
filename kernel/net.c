@@ -306,7 +306,8 @@ static void ip_rx(struct eth *eth, struct ip *ip, int len)
         return;   // not IPv4, has options, or damaged
     int tot = ntohs(ip->len);
     uint32 src = ntohl(ip->src), dst = ntohl(ip->dst);
-    if (tot > len || tot < sizeof(*ip) || (dst != net_ip && dst != 0xffffffff))
+    // (no address yet: DHCP's answers may come to the one offered)
+    if (tot > len || tot < sizeof(*ip) || (dst != net_ip && dst != 0xffffffff && net_ip != 0))
         return;
     if (ntohs(ip->off) & 0x3fff)
         return;   // a fragment
@@ -321,6 +322,10 @@ static void ip_rx(struct eth *eth, struct ip *ip, int len)
         int ulen = ntohs(u->len);
         if (ulen < sizeof(*u) || ulen > n)
             return;
+        if (ntohs(u->dport) == 68) {
+            dhcp_rx((char *)(u + 1), ulen - sizeof(*u));   // DHCP's answers
+            return;
+        }
         sock_deliver(IPPROTO_UDP, ntohs(u->dport), src, ntohs(u->sport),
                      (char *)(u + 1), ulen - sizeof(*u));
     } else if (ip->proto == IPPROTO_TCP && dst == net_ip) {
