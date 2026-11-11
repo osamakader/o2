@@ -340,6 +340,7 @@ UPROGS = \
   $(B)/user/_tz \
   $(B)/user/_tcptest \
   $(B)/user/_fetch \
+  $(B)/user/_ifconfig \
 
 ifeq ($(GPU), 1)
 UPROGS += $(B)/user/_gfx $(B)/user/_splash $(B)/user/_evtest $(B)/user/_desk $(WINAPPS) $(B)/user/_web
