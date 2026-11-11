@@ -101,6 +101,7 @@ extern uint64 sys_memfd(void);
 extern uint64 sys_clock_settime(void);
 extern uint64 sys_poll(void);
 extern uint64 sys_reboot(void);
+extern uint64 sys_netinfo(void);
 
 // An array mapping syscall numbers from syscall.h to the function that
 // handles the system call.
@@ -154,6 +155,7 @@ static uint64 (*syscalls[])(void) = {
     [SYS_clock_settime] sys_clock_settime,
     [SYS_poll]     sys_poll,
     [SYS_reboot]   sys_reboot,
+    [SYS_netinfo]  sys_netinfo,
 };
 
 void syscall(void) {

@@ -342,3 +342,21 @@ void net_rx(char *frame, int len)
     else if (ntohs(eth->type) == ETH_TYPE_IP)
         ip_rx(eth, (struct ip *)(eth + 1), len - sizeof(*eth));
 }
+
+// netinfo(info): the interface and its addresses.
+uint64 sys_netinfo(void)
+{
+    uint64 addr;
+    argaddr(0, &addr);
+    struct netinfo ni;
+    memset(&ni, 0, sizeof(ni));
+    if (netif.send) {
+        memmove(ni.name, netif.name, sizeof(ni.name));
+        memmove(ni.mac, netif.mac, 6);
+        ni.ip = net_ip;
+        ni.mask = net_mask;
+        ni.gateway = net_gateway;
+        ni.dns = net_dns;
+    }
+    return copyout(myproc()->pagetable, addr, (char *)&ni, sizeof(ni));
+}

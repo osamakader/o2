@@ -10,6 +10,7 @@ struct stat;
 struct procinfo;
 struct timespec;
 struct pollfd;
+struct netinfo;
 struct tm;
 struct lockstat;
 struct sockaddr_in;
@@ -65,6 +66,7 @@ int memfd(uint64);
 int clock_settime(int, struct timespec *);
 int poll(struct pollfd *, int, int);
 int reboot(int);
+int netinfo(struct netinfo *);
 
 // ulib.c
 char *strcpy(char *, const char *);

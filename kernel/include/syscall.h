@@ -53,6 +53,7 @@
 #define SYS_clock_settime 47
 #define SYS_poll    48
 #define SYS_reboot  49
+#define SYS_netinfo 50
 
 // sbrk(n, type): allocate now, or only on first touch (page fault)
 #define SBRK_EAGER 1

@@ -30,6 +30,13 @@ struct sockaddr_in {
     char sin_zero[8];
 };
 
+// netinfo(): the network interface and its addresses (host order)
+struct netinfo {
+    char name[8];        // the driver: "virtio", "genet"; "" if none
+    uchar mac[6];
+    uint32 ip, mask, gateway, dns;   // 0: not known (yet)
+};
+
 struct timeval {
     uint64 tv_sec;
     uint64 tv_usec;
