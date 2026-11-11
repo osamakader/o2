@@ -1,4 +1,4 @@
-// nslookup name [server]: ask a DNS server (default qemu's, 10.0.2.3)
+// nslookup name [server]: ask a DNS server (default the network's)
 // for name's IPv4 addresses.
 
 #include "types.h"

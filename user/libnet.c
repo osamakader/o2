@@ -7,7 +7,6 @@
 #include "socket.h"
 #include "libnet.h"
 
-#define DNS_SERVER "10.0.2.3"
 
 // Append name in DNS form (length-prefixed labels) at p; returns the
 // end, or 0 if it doesn't fit.
@@ -42,14 +41,19 @@ skip_name(uchar *p, uchar *end)
   return 0;
 }
 
-// Ask the DNS server (0: qemu's) for name's IPv4 addresses, up to max
+// Ask the DNS server (0: the network's) for name's IPv4 addresses, up to max
 // of them into a. Returns how many, or DNS_NONAME, DNS_NOANSWER,
 // DNS_FAIL (bad name, no network, server failure).
 int
 dns_lookup(const char *name, const char *server, struct in_addr *a, int max)
 {
   struct sockaddr_in to = { .sin_family = AF_INET, .sin_port = htons(53) };
-  if(!inet_aton(server ? server : DNS_SERVER, &to.sin_addr))
+  struct netinfo ni;
+  if(server == 0){
+    if(netinfo(&ni) < 0 || ni.dns == 0)
+      return DNS_FAIL;
+    to.sin_addr.s_addr = htonl(ni.dns);
+  } else if(!inet_aton(server, &to.sin_addr))
     return DNS_FAIL;
 
   uchar q[512], r[512];
